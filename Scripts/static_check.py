@@ -12,8 +12,18 @@ TESTS = ROOT / "Tests" / "DuplexVoiceKitTests"
 REQUIRED = [
     "Package.swift",
     "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "CHANGELOG.md",
     ".gitignore",
+    ".github/workflows/ci.yml",
     "Examples/README.md",
+    "docs/architecture.md",
+    "docs/provider-integration.md",
+    "docs/security-and-privacy.md",
+    "docs/live2d-boundary.md",
     "Sources/DuplexVoiceKit/DVKModels.swift",
     "Sources/DuplexVoiceKit/DVKProtocolCore.swift",
     "Sources/DuplexVoiceKit/DVKAudioConfiguration.swift",
@@ -50,6 +60,23 @@ FORBIDDEN_SOURCE_TERMS = (
     "wss://",
     "systemd",
     "cloudflared",
+)
+
+FORBIDDEN_REPOSITORY_TERMS = (
+    "/srv/yusuan",
+    "memory-v2.db",
+    "wechat-52-ledger",
+    "Xiaomao",
+    "xiaomao",
+    "VOLC_",
+    "SpeakerID=",
+    "api.openai",
+    "wss://",
+)
+
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|authorization)"
+    r"\s*[:=]\s*[\"'][^\"']{8,}[\"']"
 )
 
 REQUIRED_PUBLIC_SYMBOLS = (
@@ -90,6 +117,23 @@ def main() -> None:
             failures.append("sensitive file path: " + str(relative))
         if path.is_symlink():
             failures.append("symlink is not allowed: " + str(relative))
+        scans_as_text = (
+            path.suffix.lower() in {".md", ".py", ".swift", ".yml", ".yaml"}
+            or path.name in {"LICENSE", "Package.swift"}
+        )
+        if scans_as_text and relative.as_posix() != "Scripts/static_check.py":
+            text = path.read_text(encoding="utf-8")
+            for forbidden in FORBIDDEN_REPOSITORY_TERMS:
+                if forbidden in text:
+                    failures.append(
+                        f"forbidden private/provider term {forbidden!r}: {relative}"
+                    )
+            is_negative_test_fixture = TESTS in path.parents
+            if (
+                not is_negative_test_fixture
+                and (SECRET_ASSIGNMENT_PATTERN.search(text) or "-----BEGIN PRIVATE KEY-----" in text)
+            ):
+                failures.append("possible embedded secret: " + str(relative))
 
     package_text = (ROOT / "Package.swift").read_text(encoding="utf-8")
     for expected in (
@@ -101,6 +145,39 @@ def main() -> None:
     ):
         if expected not in package_text:
             failures.append("Package.swift missing: " + expected)
+
+    readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+    for expected in (
+        "# DuplexVoiceKit",
+        "A provider-neutral realtime voice framework for iOS.",
+        "面向 iOS 的实时双向语音交互核心。",
+        "https://github.com/xiang4185/duplex-voice-kit.git",
+        "iOS 17+",
+        "Swift 5.10+",
+    ):
+        if expected not in readme_text:
+            failures.append("README.md missing: " + expected)
+
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    if "Apache License" not in license_text or "Version 2.0, January 2004" not in license_text:
+        failures.append("LICENSE is not Apache-2.0 text")
+
+    workflow_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    for expected in (
+        "runs-on: macos-latest",
+        "xcrun simctl list devices available -j",
+        "platform=iOS Simulator",
+        "xcodebuild",
+        "swift test -c release",
+    ):
+        if expected not in workflow_text:
+            failures.append("CI workflow missing: " + expected)
+
+    test_method_count = 0
+    for test_path in TESTS.glob("*.swift"):
+        test_method_count += len(re.findall(r"\bfunc\s+test[A-Za-z0-9_]+\s*\(", test_path.read_text(encoding="utf-8")))
+    if test_method_count < 13:
+        failures.append(f"expected at least 13 test methods, found {test_method_count}")
 
     source_texts: dict[Path, str] = {}
     for path in SOURCES.glob("*.swift"):
@@ -166,6 +243,7 @@ def main() -> None:
         "status": "failed" if failures else "ok",
         "swift_files": len(swift_files),
         "test_files": len(test_files),
+        "test_methods": test_method_count,
         "check_type": "static",
         "failures": sorted(set(failures)),
     }

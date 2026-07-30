@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a Provider-neutral core capability
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Reusable problem
+      description: Describe the cross-provider iOS realtime voice problem.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: Explain the smallest neutral API or behavior change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Explain why a downstream Provider adapter or host application cannot solve it cleanly.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Boundary checks
+      options:
+        - label: The request does not require a specific Provider SDK, credential, endpoint, UI framework, or character asset.
+          required: true
+        - label: The request does not include production or user data.
+          required: true
