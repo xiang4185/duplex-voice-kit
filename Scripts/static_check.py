@@ -22,6 +22,7 @@ REQUIRED = [
     "Examples/README.md",
     "docs/architecture.md",
     "docs/provider-integration.md",
+    "docs/backend-requirements.md",
     "docs/security-and-privacy.md",
     "docs/live2d-boundary.md",
     "Sources/DuplexVoiceKit/DVKModels.swift",
@@ -30,8 +31,10 @@ REQUIRED = [
     "Sources/DuplexVoiceKit/DVKAudioSession.swift",
     "Sources/DuplexVoiceKit/DVKRealtimeAudioIO.swift",
     "Sources/DuplexVoiceKit/DVKAudioUploadActor.swift",
+    "Sources/DuplexVoiceKit/DVKAudioUploadPipeline.swift",
     "Sources/DuplexVoiceKit/DVKDiagnostics.swift",
     "Tests/DuplexVoiceKitTests/DVKAudioUploadActorTests.swift",
+    "Tests/DuplexVoiceKitTests/DVKAudioUploadPipelinePublicTests.swift",
     "Tests/DuplexVoiceKitTests/DVKVoiceActivityDetectorTests.swift",
     "Tests/DuplexVoiceKitTests/DVKProtocolTests.swift",
     "Tests/DuplexVoiceKitTests/DVKReconnectPolicyTests.swift",
@@ -84,8 +87,21 @@ REQUIRED_PUBLIC_SYMBOLS = (
     "DVKAudioConfiguration",
     "DVKInboundEvent",
     "DVKOutboundMessage",
+    "DVKOutboundTransport",
     "DVKTransport",
     "DVKTransportFactory",
+    "DVKAudioUploadPipeline",
+    "DVKAudioUploadIntent",
+    "DVKAudioUploadNotification",
+    "DVKAudioUploadError",
+    "DVKAudioUploadDiagnosticsSnapshot",
+    "DVKVoiceActivityMode",
+    "DVKVoiceActivityState",
+    "DVKVoiceActivityCommitReason",
+    "DVKVoiceActivityConfiguration",
+    "DVKVoiceActivityAction",
+    "DVKVoiceActivityAnalysis",
+    "DVKVoiceActivityDetector",
     "DVKDiagnosticsSnapshot",
     "DVKAudioCaptureSink",
     "DVKPlaybackAmplitudeSink",
@@ -176,8 +192,8 @@ def main() -> None:
     test_method_count = 0
     for test_path in TESTS.glob("*.swift"):
         test_method_count += len(re.findall(r"\bfunc\s+test[A-Za-z0-9_]+\s*\(", test_path.read_text(encoding="utf-8")))
-    if test_method_count < 13:
-        failures.append(f"expected at least 13 test methods, found {test_method_count}")
+    if test_method_count < 22:
+        failures.append(f"expected at least 22 test methods, found {test_method_count}")
 
     source_texts: dict[Path, str] = {}
     for path in SOURCES.glob("*.swift"):
@@ -198,6 +214,19 @@ def main() -> None:
 
     uploader_path = SOURCES / "DVKAudioUploadActor.swift"
     uploader = source_texts.get(uploader_path, "")
+    pipeline = source_texts.get(SOURCES / "DVKAudioUploadPipeline.swift", "")
+    models = source_texts.get(SOURCES / "DVKModels.swift", "")
+    if "public protocol DVKTransport: DVKOutboundTransport" not in models:
+        failures.append("DVKTransport must inherit the send-only transport boundary")
+    if "private let transport: any DVKOutboundTransport" not in uploader:
+        failures.append("upload actor must depend only on DVKOutboundTransport")
+    if re.search(r"public\s+actor\s+DVKAudioUploadActor\b", uploader):
+        failures.append("internal upload actor must not be public")
+    if "public final class DVKAudioUploadPipeline" not in pipeline:
+        failures.append("public upload pipeline facade is missing")
+    for forbidden in ("DispatchSemaphore", "CheckedContinuation", "drainTask", "NSLock"):
+        if forbidden in pipeline:
+            failures.append("public upload facade exposes internal mechanism: " + forbidden)
     if uploader.count("drainTask = Task") != 1:
         failures.append("upload actor must own exactly one long-running drain task")
     if "DispatchSemaphore" not in uploader or ".wait(timeout: .now())" not in uploader:
@@ -233,6 +262,19 @@ def main() -> None:
                 failures.append("realtime capture tap contains prohibited work: " + forbidden)
         if "copyCapturedPacket" not in realtime_tap_path or "sink?.offer" not in realtime_tap_path:
             failures.append("realtime capture tap must copy owned data and offer to a sink")
+
+    backend_text = (ROOT / "docs/backend-requirements.md").read_text(encoding="utf-8")
+    for expected in (
+        "iOS App",
+        "Compatible Voice Gateway",
+        "Provider realtime API",
+        "duplex-voice-gateway",
+        "has not been created or published",
+    ):
+        if expected not in backend_text:
+            failures.append("backend requirements missing: " + expected)
+    if "docs/backend-requirements.md" not in readme_text:
+        failures.append("README must link backend requirements")
 
     diagnostics = source_texts.get(SOURCES / "DVKDiagnostics.swift", "").lower()
     for forbidden in ("authorization=", "speaker_id=", "transcript=", "audio_base64="):

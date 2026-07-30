@@ -73,12 +73,15 @@ import DuplexVoiceKit
 
 ## Provider 接入边界
 
-宿主应用通过 `DVKTransport` 提供连接、发送、事件流和断开能力：
+宿主应用可以通过 `DVKTransport` 提供完整连接生命周期，也可以在保留现有 WebSocket 生命周期时仅实现 `DVKOutboundTransport`：
 
 ```swift
-public protocol DVKTransport: Sendable {
-    func connect() async throws
+public protocol DVKOutboundTransport: Sendable {
     func send(_ message: DVKOutboundMessage) async throws
+}
+
+public protocol DVKTransport: DVKOutboundTransport {
+    func connect() async throws
     func events() -> AsyncStream<DVKInboundEvent>
     func disconnect() async
 }
@@ -95,6 +98,22 @@ Provider adapter 应在宿主项目中完成：
 DVK 本身不保存 Provider Token、不包含生产域名，也不依赖任何 Provider SDK。
 
 详见 [Provider integration](docs/provider-integration.md)。
+
+## Backend requirements
+
+DuplexVoiceKit 是 iOS 客户端实时语音核心，本仓库**不包含可直接运行的语音后端**。宿主应用需要提供兼容的 `DVKTransport`，或使用 `DVKOutboundTransport` 把上传管线接入现有连接，也可以连接兼容的 Voice Gateway。
+
+兼容 Gateway 通常负责：
+
+- 客户端鉴权与授权；
+- Provider 连接与凭据保管；
+- Provider 事件和协议字段映射；
+- server-push 音频下发；
+- Provider 特有协议转换、限流和错误分类。
+
+Provider Key 不应下发到 iOS App。未来计划提供独立关联项目 `duplex-voice-gateway`；该仓库尚未创建，因此当前不添加链接。
+
+详见 [Backend requirements](docs/backend-requirements.md)。
 
 ## 架构概览
 

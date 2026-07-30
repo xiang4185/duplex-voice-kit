@@ -2,16 +2,21 @@
 
 ## Boundary
 
-DuplexVoiceKit does not connect to a specific realtime voice service by itself. A host application or separate adapter package implements `DVKTransport` and, when useful, `DVKTransportFactory`.
+DuplexVoiceKit does not connect to a specific realtime voice service by itself. A host application or separate adapter package implements `DVKTransport` and, when useful, `DVKTransportFactory`. An application that already owns its WebSocket lifecycle can implement only `DVKOutboundTransport` for `DVKAudioUploadPipeline`.
 
 ```swift
-public protocol DVKTransport: Sendable {
-    func connect() async throws
+public protocol DVKOutboundTransport: Sendable {
     func send(_ message: DVKOutboundMessage) async throws
+}
+
+public protocol DVKTransport: DVKOutboundTransport {
+    func connect() async throws
     func events() -> AsyncStream<DVKInboundEvent>
     func disconnect() async
 }
 ```
+
+The repository does not include a runnable backend. See [Backend requirements](backend-requirements.md) for the compatible Gateway boundary and the planned `duplex-voice-gateway` project.
 
 ## Adapter responsibilities
 
