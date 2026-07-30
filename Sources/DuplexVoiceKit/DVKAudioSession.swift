@@ -2,12 +2,14 @@
 import AVFoundation
 import Foundation
 
+/// Normalized microphone permission states exposed to a host application.
 public enum DVKMicrophonePermissionState: String, Sendable {
     case notDetermined
     case granted
     case denied
 }
 
+/// Configures and monitors the shared iOS audio session for full-duplex voice.
 @MainActor
 public final class DVKAudioSessionController {
     public private(set) var isActive = false

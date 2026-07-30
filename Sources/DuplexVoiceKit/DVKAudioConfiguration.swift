@@ -1,5 +1,6 @@
 import Foundation
 
+/// Configures capture, playback, buffering, and upload queue defaults for realtime voice.
 public struct DVKAudioConfiguration: Sendable, Equatable {
     public let captureSampleRate: Double
     public let playbackSampleRate: Double
@@ -30,36 +31,41 @@ public struct DVKAudioConfiguration: Sendable, Equatable {
     }
 }
 
-enum DVKVoiceActivityMode: Sendable, Equatable {
+/// Selects normal listening or higher-threshold barge-in detection.
+public enum DVKVoiceActivityMode: Sendable, Equatable {
     case listening
     case bargeIn
 }
 
-enum DVKVoiceActivityState: String, Sendable, Equatable {
+/// Describes the current state of the deterministic voice activity detector.
+public enum DVKVoiceActivityState: String, Sendable, Equatable {
     case idleListening = "idle_listening"
     case speechDetected = "speech_detected"
     case sendingSpeech = "sending_speech"
     case endpointing
 }
 
-enum DVKVoiceActivityCommitReason: String, Sendable, Equatable {
+/// Identifies why an utterance was automatically committed.
+public enum DVKVoiceActivityCommitReason: String, Sendable, Equatable {
     case endSilence = "end_silence"
     case maximumDuration = "maximum_duration"
 }
 
-struct DVKVoiceActivityConfiguration: Sendable, Equatable {
-    let sampleRate: Int
-    let bytesPerSample: Int
-    let preRollMilliseconds: Int
-    let minimumSpeechMilliseconds: Int
-    let bargeInMinimumSpeechMilliseconds: Int
-    let candidateAbortSilenceMilliseconds: Int
-    let endSilenceMilliseconds: Int
-    let maximumUtteranceMilliseconds: Int
-    let speechRMSThreshold: Double
-    let bargeInRMSThreshold: Double
+/// Immutable voice activity thresholds and timing windows.
+public struct DVKVoiceActivityConfiguration: Sendable, Equatable {
+    public let sampleRate: Int
+    public let bytesPerSample: Int
+    public let preRollMilliseconds: Int
+    public let minimumSpeechMilliseconds: Int
+    public let bargeInMinimumSpeechMilliseconds: Int
+    public let candidateAbortSilenceMilliseconds: Int
+    public let endSilenceMilliseconds: Int
+    public let maximumUtteranceMilliseconds: Int
+    public let speechRMSThreshold: Double
+    public let bargeInRMSThreshold: Double
 
-    static let realtimeDefault = DVKVoiceActivityConfiguration(
+    /// The production-proven realtime voice defaults extracted without parameter changes.
+    public static let realtimeDefault = DVKVoiceActivityConfiguration(
         sampleRate: 16_000,
         bytesPerSample: 2,
         preRollMilliseconds: 240,
@@ -71,9 +77,35 @@ struct DVKVoiceActivityConfiguration: Sendable, Equatable {
         speechRMSThreshold: 0.025,
         bargeInRMSThreshold: 0.075
     )
+
+    /// Creates a custom voice activity configuration.
+    public init(
+        sampleRate: Int,
+        bytesPerSample: Int,
+        preRollMilliseconds: Int,
+        minimumSpeechMilliseconds: Int,
+        bargeInMinimumSpeechMilliseconds: Int,
+        candidateAbortSilenceMilliseconds: Int,
+        endSilenceMilliseconds: Int,
+        maximumUtteranceMilliseconds: Int,
+        speechRMSThreshold: Double,
+        bargeInRMSThreshold: Double
+    ) {
+        self.sampleRate = sampleRate
+        self.bytesPerSample = bytesPerSample
+        self.preRollMilliseconds = preRollMilliseconds
+        self.minimumSpeechMilliseconds = minimumSpeechMilliseconds
+        self.bargeInMinimumSpeechMilliseconds = bargeInMinimumSpeechMilliseconds
+        self.candidateAbortSilenceMilliseconds = candidateAbortSilenceMilliseconds
+        self.endSilenceMilliseconds = endSilenceMilliseconds
+        self.maximumUtteranceMilliseconds = maximumUtteranceMilliseconds
+        self.speechRMSThreshold = speechRMSThreshold
+        self.bargeInRMSThreshold = bargeInRMSThreshold
+    }
 }
 
-enum DVKVoiceActivityAction: Sendable {
+/// An action emitted by the voice activity detector for the host upload pipeline.
+public enum DVKVoiceActivityAction: Sendable {
     case speechStarted(frames: [Data], bargeIn: Bool)
     case audio(Data)
     case commit(
@@ -84,15 +116,17 @@ enum DVKVoiceActivityAction: Sendable {
     case rejectedNoise
 }
 
-struct DVKVoiceActivityAnalysis: Sendable {
-    let state: DVKVoiceActivityState
-    let normalizedRMS: Double
-    let energyBand: String
-    let actions: [DVKVoiceActivityAction]
+/// The immutable result of processing one PCM16 frame.
+public struct DVKVoiceActivityAnalysis: Sendable {
+    public let state: DVKVoiceActivityState
+    public let normalizedRMS: Double
+    public let energyBand: String
+    public let actions: [DVKVoiceActivityAction]
 }
 
-struct DVKVoiceActivityDetector: Sendable {
-    let configuration: DVKVoiceActivityConfiguration
+/// A deterministic PCM16 voice activity detector with pre-roll, endpointing, and barge-in support.
+public struct DVKVoiceActivityDetector: Sendable {
+    public let configuration: DVKVoiceActivityConfiguration
 
     private struct Frame: Sendable {
         let data: Data
@@ -100,7 +134,7 @@ struct DVKVoiceActivityDetector: Sendable {
         let normalizedRMS: Double
     }
 
-    private(set) var state: DVKVoiceActivityState = .idleListening
+    public private(set) var state: DVKVoiceActivityState = .idleListening
     private var preRoll: [Frame] = []
     private var preRollDurationMilliseconds = 0
     private var candidate: [Frame] = []
@@ -110,11 +144,13 @@ struct DVKVoiceActivityDetector: Sendable {
     private var utteranceVoicedMilliseconds = 0
     private var endingSilenceMilliseconds = 0
 
-    init(configuration: DVKVoiceActivityConfiguration = .realtimeDefault) {
+    /// Creates a detector using the realtime defaults unless a custom configuration is supplied.
+    public init(configuration: DVKVoiceActivityConfiguration = .realtimeDefault) {
         self.configuration = configuration
     }
 
-    mutating func process(_ data: Data, mode: DVKVoiceActivityMode) -> DVKVoiceActivityAnalysis {
+    /// Processes one PCM16 frame and returns state plus generated actions.
+    public mutating func process(_ data: Data, mode: DVKVoiceActivityMode) -> DVKVoiceActivityAnalysis {
         let frame = Frame(
             data: data,
             durationMilliseconds: frameDurationMilliseconds(data),
@@ -216,11 +252,13 @@ struct DVKVoiceActivityDetector: Sendable {
         )
     }
 
-    mutating func resetForListening() {
+    /// Resets the detector to idle listening after an utterance completes.
+    public mutating func resetForListening() {
         resetAll(state: .idleListening)
     }
 
-    mutating func suspend() {
+    /// Clears all buffered audio and suspends the current candidate or utterance.
+    public mutating func suspend() {
         resetAll(state: .idleListening)
     }
 

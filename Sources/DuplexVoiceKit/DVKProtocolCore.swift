@@ -42,6 +42,7 @@ struct DVKProtocolCodec: Sendable {
     }
 }
 
+/// Filters server-push audio and completion events by response identity and server sequence.
 public struct DVKResponseFilter: Sendable, Equatable {
     public private(set) var responseID: String
     public private(set) var lastServerSequence: Int
@@ -75,6 +76,7 @@ public struct DVKResponseFilter: Sendable, Equatable {
     }
 }
 
+/// Defines bounded exponential reconnect delays for host-managed connection lifecycles.
 public struct DVKReconnectPolicy: Sendable, Equatable {
     public let maximumAttempts: Int
     public let baseDelay: Duration

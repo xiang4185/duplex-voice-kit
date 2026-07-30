@@ -1,5 +1,6 @@
 import Foundation
 
+/// Provider-neutral lifecycle states for a realtime voice session.
 public enum DVKSessionState: String, Codable, CaseIterable, Sendable {
     case idle
     case connecting
@@ -16,6 +17,7 @@ public enum DVKSessionState: String, Codable, CaseIterable, Sendable {
     case failed
 }
 
+/// A Sendable JSON value used by provider-neutral protocol payloads.
 public enum DVKJSONValue: Codable, Equatable, Sendable {
     case string(String)
     case int(Int)
@@ -50,6 +52,7 @@ public enum DVKJSONValue: Codable, Equatable, Sendable {
     }
 }
 
+/// A decoded server-to-client event with stable envelope metadata.
 public struct DVKInboundEvent: Codable, Identifiable, Equatable, Sendable {
     public let version: String
     public let eventID: String
@@ -90,6 +93,7 @@ public struct DVKInboundEvent: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// A client-to-server message whose sequence is allocated by the DVK upload boundary.
 public struct DVKOutboundMessage: Codable, Identifiable, Equatable, Sendable {
     public let version: String
     public let eventID: String
@@ -130,17 +134,31 @@ public struct DVKOutboundMessage: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-public protocol DVKTransport: Sendable {
-    func connect() async throws
+/// A minimal transport boundary for serial outbound voice protocol messages.
+///
+/// Implementations must use the host application's existing connection and must not
+/// create an additional WebSocket or sender.
+public protocol DVKOutboundTransport: Sendable {
+    /// Sends one already-sequenced outbound message.
     func send(_ message: DVKOutboundMessage) async throws
+}
+
+/// A complete provider-neutral realtime transport owned by a host application.
+public protocol DVKTransport: DVKOutboundTransport {
+    /// Establishes the transport connection.
+    func connect() async throws
+    /// Returns the stream of inbound protocol events.
     func events() -> AsyncStream<DVKInboundEvent>
+    /// Closes the transport connection.
     func disconnect() async
 }
 
+/// Creates complete realtime transports for host applications that delegate lifecycle ownership.
 public protocol DVKTransportFactory: Sendable {
     func makeTransport() -> any DVKTransport
 }
 
+/// Describes the memory layout of a captured audio packet.
 public enum DVKCapturedAudioSampleFormat: Sendable, Equatable {
     case float32Planar
     case float32Interleaved
@@ -148,6 +166,7 @@ public enum DVKCapturedAudioSampleFormat: Sendable, Equatable {
     case int16Interleaved
 }
 
+/// An owned captured-audio buffer tagged with its capture generation.
 public struct DVKCapturedAudioPacket: Sendable, Equatable {
     public let data: Data
     public let sampleRate: Int
@@ -192,11 +211,13 @@ public struct DVKCapturedAudioPacket: Sendable, Equatable {
     }
 }
 
+/// Accepts captured audio from the realtime input callback without blocking it.
 public protocol DVKAudioCaptureSink: Sendable {
     @discardableResult
     func offer(_ packet: DVKCapturedAudioPacket) -> Bool
 }
 
+/// Receives normalized assistant playback amplitude updates.
 public protocol DVKPlaybackAmplitudeSink: Sendable {
     func playbackAmplitudeDidChange(_ amplitude: Float)
 }

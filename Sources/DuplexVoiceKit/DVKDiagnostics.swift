@@ -3,6 +3,7 @@ import CryptoKit
 #endif
 import Foundation
 
+/// A redacted session-level diagnostic snapshot containing no transcript, token, or raw audio.
 public struct DVKDiagnosticsSnapshot: Sendable, Equatable {
     public let state: DVKSessionState
     public let transportState: String

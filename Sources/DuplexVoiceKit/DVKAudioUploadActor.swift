@@ -1,12 +1,14 @@
 import Foundation
 
-enum DVKAudioUploadIntent: Sendable {
+/// Describes how one processed PCM frame should affect the outbound voice stream.
+public enum DVKAudioUploadIntent: Sendable {
     case beginUtterance(interruptResponseID: String?)
     case audio(Data)
     case commit
 }
 
-enum DVKAudioUploadNotification: Sendable {
+/// Reports observable upload outcomes without exposing queue or synchronization internals.
+public enum DVKAudioUploadNotification: Sendable {
     case audioSent(bytes: Int, chunkIndex: Int)
     case commitSent
     case interruptSent(responseID: String)
@@ -14,33 +16,35 @@ enum DVKAudioUploadNotification: Sendable {
     case backpressure
 }
 
-enum DVKAudioUploadError: Error, Equatable, Sendable {
+/// Errors surfaced by the public audio upload pipeline.
+public enum DVKAudioUploadError: Error, Equatable, Sendable {
     case inactiveConnection
     case queueBackpressure
     case invalidAudioChunk
     case sendFailed
 }
 
-struct DVKAudioUploadDiagnosticsSnapshot: Sendable, Equatable {
-    var connectionGeneration = 0
-    var captureGeneration = 0
-    var nextChunkIndex = 0
-    var nextClientSequence = 0
-    var active = false
-    var acceptingAudio = false
-    var queueDepth = 0
-    var queueHighWater = 0
-    var sentAudioChunks = 0
-    var sentControlCommands = 0
-    var droppedStaleGenerationChunks = 0
-    var rejectedAfterCloseCommands = 0
-    var staleGenerationSendFailureCount = 0
-    var activeGenerationSendFailureCount = 0
-    var inputBackpressureCount = 0
-    var maxActiveDrainTasks = 0
-    var lastFiveSentChunkIndices: [Int] = []
-    var lastSendFailureCategory = ""
-    var generationStartedAt: Date?
+/// An immutable-to-clients snapshot of upload ordering, generation, queue, and failure health.
+public struct DVKAudioUploadDiagnosticsSnapshot: Sendable, Equatable {
+    public internal(set) var connectionGeneration = 0
+    public internal(set) var captureGeneration = 0
+    public internal(set) var nextChunkIndex = 0
+    public internal(set) var nextClientSequence = 0
+    public internal(set) var active = false
+    public internal(set) var acceptingAudio = false
+    public internal(set) var queueDepth = 0
+    public internal(set) var queueHighWater = 0
+    public internal(set) var sentAudioChunks = 0
+    public internal(set) var sentControlCommands = 0
+    public internal(set) var droppedStaleGenerationChunks = 0
+    public internal(set) var rejectedAfterCloseCommands = 0
+    public internal(set) var staleGenerationSendFailureCount = 0
+    public internal(set) var activeGenerationSendFailureCount = 0
+    public internal(set) var inputBackpressureCount = 0
+    public internal(set) var maxActiveDrainTasks = 0
+    public internal(set) var lastFiveSentChunkIndices: [Int] = []
+    public internal(set) var lastSendFailureCategory = ""
+    public internal(set) var generationStartedAt: Date?
 }
 
 final class DVKAudioUploadDiagnosticsStore: @unchecked Sendable {
@@ -245,7 +249,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
 
     nonisolated let diagnostics = DVKAudioUploadDiagnosticsStore()
     private nonisolated let ingress: DVKAudioUploadIngress
-    private let transport: any DVKTransport
+    private let transport: any DVKOutboundTransport
     private var processor: FrameProcessor?
     private var notificationHandler: NotificationHandler?
     private var drainTask: Task<Void, Never>?
@@ -265,7 +269,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
     private var failureNotifiedGeneration: Int?
     private var backpressureNotifiedGeneration: Int?
 
-    init(transport: any DVKTransport, queueCapacity: Int = 100) {
+    init(transport: any DVKOutboundTransport, queueCapacity: Int = 100) {
         self.transport = transport
         ingress = DVKAudioUploadIngress(capacity: queueCapacity)
     }

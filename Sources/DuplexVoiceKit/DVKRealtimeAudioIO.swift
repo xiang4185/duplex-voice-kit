@@ -2,6 +2,7 @@
 import AVFoundation
 import Foundation
 
+/// A privacy-safe snapshot of realtime audio engine capture, playback, and recovery health.
 public struct DVKRealtimeAudioIOHealthSnapshot: Sendable, Equatable {
     public let captureEngineRunning: Bool
     public let captureTapInstalled: Bool
