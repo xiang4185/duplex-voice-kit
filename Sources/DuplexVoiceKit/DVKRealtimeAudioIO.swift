@@ -85,6 +85,10 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
     private var currentResponseID = ""
     private var playbackPending: [Int: Data] = [:]
     private var nextPlaybackIndex = 0
+    private var playbackBufferedFramesBeforeStart: AVAudioFrameCount = 0
+    private var playbackHasStarted = false
+    private var playbackStartFallbackScheduled = false
+    private var playbackStartGeneration = 0
     private var observers: [NSObjectProtocol] = []
 
     private var callbackCount = 0
@@ -174,6 +178,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
                     self.playbackPending.removeAll(keepingCapacity: false)
                     self.currentResponseID = responseID
                     self.nextPlaybackIndex = 0
+                    self.resetPlaybackStartupState()
                 }
                 self.playbackPending[chunkIndex] = data
                 self.scheduleReadyPlaybackChunks()
@@ -191,6 +196,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
             self.playbackPending.removeAll(keepingCapacity: false)
             self.currentResponseID = ""
             self.nextPlaybackIndex = 0
+            self.resetPlaybackStartupState()
             self.publishPlaybackAmplitude(0)
         }
     }
@@ -211,6 +217,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
             playbackPending.removeAll(keepingCapacity: false)
             currentResponseID = ""
             nextPlaybackIndex = 0
+            resetPlaybackStartupState()
             if engine.isRunning {
                 engine.stop()
                 incrementEngineStopCount()
@@ -356,6 +363,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
     }
 
     private func scheduleReadyPlaybackChunks() {
+        var scheduledAnyChunk = false
         while let data = playbackPending.removeValue(forKey: nextPlaybackIndex) {
             let frameCount = AVAudioFrameCount(data.count / MemoryLayout<Int16>.size)
             guard let buffer = AVAudioPCMBuffer(
@@ -367,13 +375,56 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
                 to: UnsafeMutableBufferPointer(start: channel[0], count: Int(frameCount))
             )
             player.scheduleBuffer(buffer)
+            scheduledAnyChunk = true
             nextPlaybackIndex += 1
+            if !playbackHasStarted {
+                playbackBufferedFramesBeforeStart += frameCount
+            }
             publishPlaybackAmplitude(normalizedAmplitude(data))
         }
-        if !player.isPlaying, !currentResponseID.isEmpty {
-            player.play()
-            incrementPlaybackStartCount()
+        guard scheduledAnyChunk, !player.isPlaying, !currentResponseID.isEmpty else { return }
+
+        if playbackHasStarted || playbackBufferedFramesBeforeStart >= playbackStartupBufferFrames {
+            startPlaybackIfNeeded()
+        } else {
+            schedulePlaybackStartFallbackIfNeeded()
         }
+    }
+
+    private var playbackStartupBufferFrames: AVAudioFrameCount {
+        AVAudioFrameCount(
+            configuration.playbackSampleRate
+                * Double(configuration.playbackStartupBufferMilliseconds)
+                / 1_000
+        )
+    }
+
+    private func startPlaybackIfNeeded() {
+        guard !player.isPlaying, !currentResponseID.isEmpty else { return }
+        player.play()
+        playbackHasStarted = true
+        playbackStartFallbackScheduled = false
+        incrementPlaybackStartCount()
+    }
+
+    private func schedulePlaybackStartFallbackIfNeeded() {
+        guard !playbackStartFallbackScheduled else { return }
+        playbackStartFallbackScheduled = true
+        let generation = playbackStartGeneration
+        let delayMilliseconds = max(120, configuration.playbackStartupBufferMilliseconds)
+        graphQueue.asyncAfter(deadline: .now() + .milliseconds(delayMilliseconds)) { [weak self] in
+            guard let self,
+                  self.playbackStartGeneration == generation,
+                  !self.playbackHasStarted else { return }
+            self.startPlaybackIfNeeded()
+        }
+    }
+
+    private func resetPlaybackStartupState() {
+        playbackBufferedFramesBeforeStart = 0
+        playbackHasStarted = false
+        playbackStartFallbackScheduled = false
+        playbackStartGeneration &+= 1
     }
 
     private func restartGraph(startAfterRestart: Bool) throws {
@@ -384,6 +435,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
         removeInputTapIfNeeded()
         clearCapturePending()
         player.stop()
+        resetPlaybackStartupState()
         if engine.isRunning {
             engine.stop()
             incrementEngineStopCount()
@@ -406,6 +458,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
         removeInputTapIfNeeded()
         clearCapturePending()
         player.stop()
+        resetPlaybackStartupState()
         if engine.isRunning {
             engine.stop()
             incrementEngineStopCount()

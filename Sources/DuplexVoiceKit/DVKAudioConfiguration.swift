@@ -7,13 +7,15 @@ public struct DVKAudioConfiguration: Sendable, Equatable {
     public let channels: Int
     public let captureBufferFrames: Int
     public let uploadQueueCapacity: Int
+    public let playbackStartupBufferMilliseconds: Int
 
     public static let realtimeVoice = DVKAudioConfiguration(
         captureSampleRate: 48_000,
         playbackSampleRate: 24_000,
         channels: 1,
         captureBufferFrames: 960,
-        uploadQueueCapacity: 100
+        uploadQueueCapacity: 100,
+        playbackStartupBufferMilliseconds: 80
     )
 
     public init(
@@ -21,13 +23,15 @@ public struct DVKAudioConfiguration: Sendable, Equatable {
         playbackSampleRate: Double,
         channels: Int,
         captureBufferFrames: Int,
-        uploadQueueCapacity: Int
+        uploadQueueCapacity: Int,
+        playbackStartupBufferMilliseconds: Int = 80
     ) {
         self.captureSampleRate = captureSampleRate
         self.playbackSampleRate = playbackSampleRate
         self.channels = max(1, channels)
         self.captureBufferFrames = max(1, captureBufferFrames)
         self.uploadQueueCapacity = max(1, uploadQueueCapacity)
+        self.playbackStartupBufferMilliseconds = max(0, playbackStartupBufferMilliseconds)
     }
 }
 
