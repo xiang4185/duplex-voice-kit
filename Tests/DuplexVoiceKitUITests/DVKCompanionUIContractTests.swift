@@ -211,7 +211,7 @@ extension DVKCompanionUIContractTests {
     @MainActor
     func testIOS26GlassHelperIsConstructible() {
         let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
-        _ = AnyView(Button("Glass").dvkGlassControl(theme: theme))
+        _ = AnyView(Button("Glass") {}.dvkGlassControl(theme: theme))
         _ = AnyView(Color.clear.dvkGlassSurface(theme: theme))
         let policy = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: false, reduceMotion: false)
         XCTAssertFalse(policy.usesOpaqueFallback)
@@ -263,7 +263,7 @@ extension DVKCompanionUIContractTests {
         XCTAssertFalse(motion.usesOpaqueFallback)
         XCTAssertFalse(motion.allowsInteractiveGlass)
         let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[3], appearance: .followProfile)
-        _ = AnyView(Button("Fallback").dvkGlassControl(theme: theme, prominent: true))
+        _ = AnyView(Button("Fallback") {}.dvkGlassControl(theme: theme, prominent: true))
     }
 
     @MainActor
