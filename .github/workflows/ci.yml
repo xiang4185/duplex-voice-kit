@@ -91,8 +91,9 @@ jobs:
           NSUnbufferedIO: "YES"
         run: |
           set -euo pipefail
+          xcodebuild -list
           xcodebuild \
-            -scheme DuplexVoiceKit \
+            -scheme DuplexVoiceKit-Package \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/DuplexVoiceKitDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
