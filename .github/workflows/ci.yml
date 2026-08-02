@@ -19,29 +19,36 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.10-jammy
     timeout-minutes: 15
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-
       - name: Run static checks
         run: python3 Scripts/static_check.py
-
       - name: Run debug tests
         run: swift test
-
       - name: Run release tests
         run: swift test -c release
 
-  ios-simulator:
-    name: iOS Simulator tests
+  macos-package:
+    name: macOS Package tests
     runs-on: macos-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+      - name: Run package tests
+        run: |
+          set -euo pipefail
+          swift test
+          swift test -c release
 
+  ios-simulator:
+    name: iOS Simulator Showcase build
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
       - name: Show toolchain
         run: |
           set -euo pipefail
@@ -49,10 +56,8 @@ jobs:
           xcodebuild -version
           swift --version
           xcodebuild -showsdks
-
       - name: Run static checks
         run: python3 Scripts/static_check.py
-
       - name: Select an available iPhone Simulator
         id: simulator
         shell: bash
@@ -61,7 +66,6 @@ jobs:
           SIMULATOR_UDID="$({ xcrun simctl list devices available -j; } | python3 -c '
           import json
           import sys
-
           payload = json.load(sys.stdin)
           candidates = []
           for runtime, devices in payload.get("devices", {}).items():
@@ -70,30 +74,35 @@ jobs:
               for device in devices:
                   if device.get("isAvailable") and device.get("name", "").startswith("iPhone"):
                       candidates.append((runtime, device["name"], device["udid"]))
-
           if not candidates:
               raise SystemExit("No available iPhone Simulator found")
-
           candidates.sort(reverse=True)
           print(candidates[0][2])
           ')"
           echo "udid=${SIMULATOR_UDID}" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices | grep "$SIMULATOR_UDID"
-
       - name: Boot Simulator
         run: |
           set -euo pipefail
           xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
-
-      - name: Build and test on iOS Simulator
-        env:
-          NSUnbufferedIO: "YES"
+      - name: Build Swift Package products on iOS Simulator
         run: |
           set -euo pipefail
-          xcodebuild \
-            -scheme DuplexVoiceKit \
-            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
-            -derivedDataPath "$RUNNER_TEMP/DuplexVoiceKitDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            test
+          destination="platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}"
+          xcodebuild -scheme DuplexVoiceKit -destination "$destination" -derivedDataPath "$RUNNER_TEMP/DuplexVoiceKitCoreDerivedData" CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -scheme DuplexVoiceKitUI -destination "$destination" -derivedDataPath "$RUNNER_TEMP/DuplexVoiceKitUIDerivedData" CODE_SIGNING_ALLOWED=NO build
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+      - name: Generate Showcase Xcode project
+        working-directory: Examples/DVKCompanionShowcase
+        run: xcodegen generate
+      - name: Build Showcase on iOS Simulator
+        working-directory: Examples/DVKCompanionShowcase
+        run: |
+          set -euo pipefail
+          xcodebuild -project DVKCompanionShowcase.xcodeproj -scheme DVKCompanionShowcase -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" -derivedDataPath "$RUNNER_TEMP/DVKShowcaseDerivedData" CODE_SIGNING_ALLOWED=NO build
