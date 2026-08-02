@@ -43,3 +43,6 @@ Live2D integration must not:
 ## Future extension rule
 
 A future DVK API may expose a neutral presentation signal only when it is reusable without Live2D and does not introduce UI or asset dependencies. Concrete Live2D code should remain in a downstream adapter package or application target.
+## Showcase visual boundary
+
+The existing visual boundary above remains in force. The public Showcase uses SwiftUI, system shapes, gradients, materials, and deterministic procedural bars only. It contains no external image, font, character, or animation asset.

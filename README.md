@@ -9,7 +9,7 @@ A provider-neutral realtime voice framework for iOS.
 
 ## 项目定位
 
-DuplexVoiceKit（DVK）是面向 iOS 的实时双向语音交互核心，以 Swift Package 形式提供。它不是完整商业 App，也不包含界面、业务人格、认证服务或语音服务商实现。
+DuplexVoiceKit Core Target is the provider-neutral realtime voice core. Core contains no product UI; the optional DuplexVoiceKitUI Target provides public SwiftUI components and the Showcase.
 
 DVK 不绑定具体 Provider。宿主应用负责注入 Provider transport、认证材料和服务端协议映射，并决定如何把会话状态、音频振幅和诊断信息接入自己的产品层。
 
@@ -164,7 +164,7 @@ swift test -c release
 
 - 不包含任何具体语音 Provider 实现。
 - 不包含认证服务、Voice Gateway 或服务端部署方案。
-- 不包含 SwiftUI 页面、完整通话产品流程或后台通话承诺。
+- Core Target contains no product UI; the optional DuplexVoiceKitUI Target provides public components and the Showcase, but not a complete call product flow or background-call promise.
 - 不包含 Live2D 集成和人物资产。
 - 尚未发布稳定版本 Tag 或 Release。
 
@@ -175,3 +175,9 @@ swift test -c release
 ## License
 
 Apache License 2.0。详见 [LICENSE](LICENSE)。
+
+## Public Companion Showcase R2
+
+The public Companion layer is an optional, Foundation-only state and mock layer. The optional SwiftUI UI renders that Store without creating a second business state. The Showcase app is local-only: it does not include authentication, production provider adapters, a Voice Gateway, real chat, real audio, persistent reviews, private character assets, or credentials.
+
+The R2 public experience includes text success/failure/retry, deterministic voice state progression, allowed/limited privacy callbacks, five public cards, in-memory review generation/list/detail/delete, a deterministic assistant playback energy view, programmatic startup, Dynamic Type, VoiceOver identifiers, and Reduce Motion-safe rendering.

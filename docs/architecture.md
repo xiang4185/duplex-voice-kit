@@ -51,3 +51,13 @@ Queue internals, generation bookkeeping, VAD storage, codec sequence allocation,
 ## Deliberate exclusions
 
 DVK does not contain Provider implementations, authentication, production endpoints, backend services, SwiftUI screens, application coordination, signing configuration, Live2D rendering, user content, or deployment automation.
+## Public Companion Showcase addition
+
+The existing Core architecture above remains unchanged. The optional public layers are additive:
+
+Host App
+├── DuplexVoiceKitUI
+├── DuplexVoiceKitCompanion
+└── DuplexVoiceKit Core
+
+DuplexVoiceKitCompanion is Foundation-only and owns mode, draft, messages, mock delivery, privacy, voice state, cards, reviews, and deterministic playback amplitude. DuplexVoiceKitUI renders that Store; it does not keep a second business state. The Showcase app is a host and uses only local mock services.

@@ -20,3 +20,7 @@ The project follows Keep a Changelog conventions. Versioned release history will
 
 - Public diagnostics exclude credentials, transcripts, raw audio, and message bodies.
 - Static checks reject common secret, binary, Provider, product, and production-endpoint artifacts.
+## Unreleased public Showcase R2
+
+- Added a complete Store-driven public Companion experience with deterministic mock text and voice flows.
+- Added privacy states, five public cards, local reviews, playback energy visualization, accessibility contracts, and behavior tests.

@@ -1,0 +1,18 @@
+name: DVKCompanionShowcase
+options:
+  bundleIdPrefix: org.example
+packages:
+  DuplexVoiceKit:
+    path: ../..
+targets:
+  DVKCompanionShowcase:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [DVKCompanionShowcase]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: org.example.DVKCompanionShowcase
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: DuplexVoiceKit
+        product: DuplexVoiceKitUI
