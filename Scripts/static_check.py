@@ -185,6 +185,9 @@ def main() -> None:
         "platform=iOS Simulator",
         "xcodebuild",
         "swift test -c release",
+        "xcodegen generate",
+        "DVKCompanionShowcase.xcodeproj",
+        "scheme DVKCompanionShowcase",
     ):
         if expected not in workflow_text:
             failures.append("CI workflow missing: " + expected)
@@ -280,6 +283,50 @@ def main() -> None:
     for forbidden in ("authorization=", "speaker_id=", "transcript=", "audio_base64="):
         if forbidden in diagnostics:
             failures.append("diagnostics contains prohibited field: " + forbidden)
+
+    r2_required = (
+        "Sources/DuplexVoiceKitCompanion/DVKCompanionModels.swift",
+        "Sources/DuplexVoiceKitCompanion/DVKCompanionStore.swift",
+        "Sources/DuplexVoiceKitUI/DVKCompanionViews.swift",
+        "Sources/DuplexVoiceKitUI/DVKPlaybackAmplitudeView.swift",
+        "Tests/DuplexVoiceKitCompanionTests/DVKCompanionBehaviorTests.swift",
+        "Tests/DuplexVoiceKitUITests/DVKCompanionUIContractTests.swift",
+        "Examples/DVKCompanionShowcase/project.yml",
+        "Examples/DVKCompanionShowcase/DVKCompanionShowcase/App.swift",
+    )
+    for relative in r2_required:
+        if not (ROOT / relative).is_file():
+            failures.append("missing R2 required file: " + relative)
+
+    companion_root = ROOT / "Sources" / "DuplexVoiceKitCompanion"
+    ui_root = ROOT / "Sources" / "DuplexVoiceKitUI"
+    companion_text = "\n".join(p.read_text(encoding="utf-8") for p in companion_root.glob("*.swift"))
+    for forbidden in ("SwiftUI", "UIKit", "AppKit", "AVFoundation", "ActivityKit", "Combine"):
+        if forbidden in companion_text:
+            failures.append("Companion must remain Foundation-only: " + forbidden)
+    ui_text = "\n".join(p.read_text(encoding="utf-8") for p in ui_root.glob("*.swift"))
+    if "DVKCompanionStore" not in ui_text:
+        failures.append("UI must consume DVKCompanionStore")
+    if "@State private var draft" in ui_text or "@State private var messages" in ui_text:
+        failures.append("UI must not duplicate Store business state")
+    r2_tests = [
+        p for p in repository_files()
+        if p.suffix == ".swift"
+        and ("DuplexVoiceKitCompanionTests" in p.parts or "DuplexVoiceKitUITests" in p.parts)
+    ]
+    r2_test_text = "\n".join(p.read_text(encoding="utf-8") for p in r2_tests)
+    if "XCTAssertTrue(true)" in r2_test_text:
+        failures.append("恒真测试 is forbidden")
+    r2_test_methods = sum(
+        len(re.findall(r"\bfunc\s+test[A-Za-z0-9_]+\s*\(", p.read_text(encoding="utf-8")))
+        for p in r2_tests
+    )
+    if r2_test_methods < 24:
+        failures.append(f"expected at least 24 R2 test methods, found {r2_test_methods}")
+    for p in list(companion_root.glob("*.swift")) + list(ui_root.glob("*.swift")):
+        source = p.read_text(encoding="utf-8")
+        if source.count("{") != source.count("}"):
+            failures.append("R2 brace mismatch: " + str(p.relative_to(ROOT)))
 
     result = {
         "status": "failed" if failures else "ok",

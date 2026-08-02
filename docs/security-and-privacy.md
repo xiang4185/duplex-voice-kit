@@ -49,3 +49,6 @@ Never place sensitive details in a public issue or pull request. Follow `SECURIT
 ## Static enforcement
 
 `Scripts/static_check.py` checks required boundaries, common sensitive file extensions, product/Provider terms, production WebSocket literals, upload invariants, realtime callback constraints, and prohibited diagnostic fields. Static checks supplement review; they do not replace secret scanning or application-level privacy review.
+## Public Showcase boundary
+
+The existing security guidance above remains in force. The Showcase adds no credentials, production address, provider SDK, real audio, persistent database, or user identity. Limited privacy keeps the page browsable, blocks voice actions explicitly, and exposes a local re-authorization callback without presenting a system permission prompt.
