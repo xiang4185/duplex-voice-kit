@@ -650,7 +650,7 @@ extension DVKCompanionUIContractTests {
         XCTAssertFalse(DVKCompanionAccessibilityID.voiceStart.isEmpty)
         XCTAssertFalse(DVKCompanionAccessibilityID.voiceAdvance.isEmpty)
         XCTAssertFalse(DVKCompanionAccessibilityID.voiceEnd.isEmpty)
-        XCTAssertEqual(DVKCompanionAccessibilityID.voiceState, "companion.voice.state")
+        XCTAssertEqual(DVKCompanionAccessibilityID.voiceState, "companion.voiceState")
     }
 
     @MainActor
