@@ -181,3 +181,9 @@ Apache License 2.0。详见 [LICENSE](LICENSE)。
 The public Companion layer is an optional, Foundation-only state and mock layer. The optional SwiftUI UI renders that Store without creating a second business state. The Showcase app is local-only: it does not include authentication, production provider adapters, a Voice Gateway, real chat, real audio, persistent reviews, private character assets, or credentials.
 
 The R2 public experience includes text success/failure/retry, deterministic voice state progression, allowed/limited privacy callbacks, five public cards, in-memory review generation/list/detail/delete, a deterministic assistant playback energy view, programmatic startup, Dynamic Type, VoiceOver identifiers, and Reduce Motion-safe rendering.
+
+## Public Companion Showcase R3A
+
+The R3A Showcase expands the optional public layer into four fictional mock cats: Mellow, Sunny, Sage, and Luna. It provides Home, Cats, Conversation, Reviews, Settings, a deterministic Mock Lab, a horizontal snapping profile carousel, accessibility identifiers, Dynamic Type, dark mode, VoiceOver, and Reduce Motion paths.
+
+The public route boundary carries a selected public profile ID into an opaque host-resolved route token. The token is never shown or written to reviews. The public repository contains no real persona ID, private prompt, production address, credential, or character asset. XiaomaoApp may later replace the public theme, copy, catalog, resolver, and final character presentation in its private integration layer.

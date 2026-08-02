@@ -24,3 +24,10 @@ The project follows Keep a Changelog conventions. Versioned release history will
 
 - Added a complete Store-driven public Companion experience with deterministic mock text and voice flows.
 - Added privacy states, five public cards, local reviews, playback energy visualization, accessibility contracts, and behavior tests.
+
+## Unreleased public Showcase R3A
+
+- Added four fictional public mock cats, a Store-driven Home/Cats/Conversation/Reviews/Settings flow, and a snapping profile carousel.
+- Added neutral host-injected profile routing, review/profile snapshots, deterministic Mock Lab scenarios, procedural character states, and a Live2D adapter boundary.
+- Added explicit accessibility, Dynamic Type, dark-mode, and Reduce Motion contracts without third-party character, font, audio, or model assets.
+- Documented that XiaomaoApp is a future private host integration; no real persona ID or private prompt is included in this repository.

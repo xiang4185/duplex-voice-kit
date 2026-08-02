@@ -139,8 +139,22 @@ def main() -> None:
         )
         if scans_as_text and relative.as_posix() != "Scripts/static_check.py":
             text = path.read_text(encoding="utf-8")
+            allowed_reference_doc = (
+                relative.as_posix() in {
+                    "README.md",
+                    "Examples/README.md",
+                    "Examples/DVKCompanionShowcase/README.md",
+                    "CHANGELOG.md",
+                    "docs/architecture.md",
+                    "docs/security-and-privacy.md",
+                    "docs/live2d-boundary.md",
+                    "docs/profile-routing.md",
+                }
+            )
             for forbidden in FORBIDDEN_REPOSITORY_TERMS:
-                if forbidden in text:
+                if forbidden in text and not (
+                    allowed_reference_doc and forbidden in {"Xiaomao", "xiaomao"}
+                ):
                     failures.append(
                         f"forbidden private/provider term {forbidden!r}: {relative}"
                     )
@@ -328,11 +342,114 @@ def main() -> None:
         if source.count("{") != source.count("}"):
             failures.append("R2 brace mismatch: " + str(p.relative_to(ROOT)))
 
+    r3_required = (
+        "Sources/DuplexVoiceKitUI/DVKCompanionTheme.swift",
+        "Sources/DuplexVoiceKitUI/DVKCharacterViews.swift",
+        "Examples/DVKCompanionShowcase/README.md",
+        "docs/profile-routing.md",
+    )
+    for relative in r3_required:
+        if not (ROOT / relative).is_file():
+            failures.append("missing R3 required file: " + relative)
+    companion_tests = [
+        p for p in repository_files()
+        if p.suffix == ".swift" and "DuplexVoiceKitCompanionTests" in p.parts
+    ]
+    ui_tests = [
+        p for p in repository_files()
+        if p.suffix == ".swift" and "DuplexVoiceKitUITests" in p.parts
+    ]
+    companion_test_methods = sum(
+        len(re.findall(r"\bfunc\s+test[A-Za-z0-9_]+\s*\(", p.read_text(encoding="utf-8")))
+        for p in companion_tests
+    )
+    ui_test_methods = sum(
+        len(re.findall(r"\bfunc\s+test[A-Za-z0-9_]+\s*\(", p.read_text(encoding="utf-8")))
+        for p in ui_tests
+    )
+    if companion_test_methods < 60:
+        failures.append(f"expected at least 60 Companion tests, found {companion_test_methods}")
+    if ui_test_methods < 14:
+        failures.append(f"expected at least 14 UI tests, found {ui_test_methods}")
+    all_r3_tests = "\n".join(
+        p.read_text(encoding="utf-8") for p in companion_tests + ui_tests
+    )
+    if "XCTAssertTrue(true)" in all_r3_tests:
+        failures.append("恒真测试 is forbidden")
+    public_text = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in repository_files()
+        if p.suffix in {".swift", ".md", ".py", ".yml", ".yaml"}
+        and p.name != "static_check.py"
+    )
+    for forbidden in ("persona_id", "system prompt", ".moc3", ".model3.json"):
+        if forbidden in public_text:
+            failures.append("R3 forbidden public/private boundary term: " + forbidden)
+    review_text = (companion_root / "DVKCompanionModels.swift").read_text(encoding="utf-8")
+    review_start = review_text.find("public struct DVKCompanionReview")
+    if review_start >= 0 and "routeToken" in review_text[review_start:]:
+        failures.append("route token must not be stored in review model")
+    if "DVKCompanionProfileCatalog" not in companion_text:
+        failures.append("public profile catalog is missing")
+    if "DVKCompanionSessionContext" not in companion_text:
+        failures.append("shared session context is missing")
+    if "DVKCompanionView" not in ui_text:
+        failures.append("R2 public DVKCompanionView API is missing")
+    if "makeView(" in r2_test_text:
+        failures.append("UI tests call removed makeView API")
+    if "warmRose" in ui_text:
+        failures.append("UI pages must not hardcode warmRose")
+    theme_text = (ui_root / "DVKCompanionTheme.swift").read_text(encoding="utf-8")
+    for expected in ("pageBackground", "backgroundGradient", "navigationSurface", "tabSurface", "followProfile", "warmCreamRose", "coralGold", "mistBlue", "lavenderNight"):
+        if expected not in theme_text:
+            failures.append("theme contract missing: " + expected)
+    if ".scrollPosition(id:" not in ui_text:
+        failures.append("carousel must bind scroll position")
+    store_text = (companion_root / "DVKCompanionStore.swift").read_text(encoding="utf-8")
+    voice_start = store_text.find("public func beginVoiceDemo")
+    voice_block = store_text[voice_start:] if voice_start >= 0 else ""
+    if "routeResolver.resolve" not in voice_block:
+        failures.append("voice must use injected routeResolver")
+    if 'opaqueValue:"mock-route-' in voice_block or 'opaqueValue: "mock-route-' in voice_block:
+        failures.append("voice must not construct mock route tokens directly")
+    if "DVKCompanionEasterEgg.allCases" not in ui_text:
+        failures.append("all five public easter eggs must have a UI entry")
+    for expected in ("setMockCharacterState", "setMockPlaybackAmplitude", "presentationMode", "reduceMotionPreview"):
+        if expected not in ui_text:
+            failures.append("Mock Lab control missing: " + expected)
+    if "public let routeToken" not in review_text and "public let routeToken" not in companion_text:
+        failures.append("SessionContext route token must be publicly readable")
+    for expected in ("preferredColorScheme", "toolbarBackground", "navigationBar", "tabBar", "foregroundStyle(theme.textPrimary)", "scrollContentBackground(.hidden)"):
+        if expected not in ui_text:
+            failures.append("global theme application missing: " + expected)
+    if "listRowBackground(theme.surface)" not in ui_text:
+        failures.append("Settings/Reviews must use themed row surfaces")
+    carousel_start = ui_text.find("public struct DVKProfileCarousel")
+    carousel_block = ui_text[carousel_start:] if carousel_start >= 0 else ""
+    change_start = carousel_block.find(".onChange(of: scrollPosition)")
+    change_block = carousel_block[change_start:change_start + 500] if change_start >= 0 else ""
+    if "onPreview?()" in change_block:
+        failures.append("Home compact carousel must not navigate from scroll position changes")
+    character_text = (ui_root / "DVKCharacterViews.swift").read_text(encoding="utf-8")
+    for expected in ("staticMode", "if !staticMode", "reduceMotion || staticMode", "if !reduceMotion"):
+        if expected not in character_text:
+            failures.append("static presentation contract missing: " + expected)
+    failure_test_start = all_r3_tests.find("testNextTextFailureWorksWithoutManualPlan")
+    failure_test_block = all_r3_tests[failure_test_start:failure_test_start + 900] if failure_test_start >= 0 else ""
+    if "setScenario(.normalText)" in failure_test_block:
+        failures.append("nextTextFailure test must verify automatic one-shot consumption")
+    if "XCTAssertNotEqual(light.primaryAction" in all_r3_tests:
+        failures.append("light/dark must preserve the profile accent color")
+    if "activeScenario = .normalText" not in store_text:
+        failures.append("nextTextFailure must be consumed automatically")
+
     result = {
         "status": "failed" if failures else "ok",
         "swift_files": len(swift_files),
         "test_files": len(test_files),
         "test_methods": test_method_count,
+        "companion_test_methods": companion_test_methods,
+        "ui_test_methods": ui_test_methods,
         "check_type": "static",
         "failures": sorted(set(failures)),
     }

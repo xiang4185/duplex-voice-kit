@@ -46,3 +46,9 @@ A future DVK API may expose a neutral presentation signal only when it is reusab
 ## Showcase visual boundary
 
 The existing visual boundary above remains in force. The public Showcase uses SwiftUI, system shapes, gradients, materials, and deterministic procedural bars only. It contains no external image, font, character, or animation asset.
+
+## R3A public presentation boundary
+
+The public UI provides a character presentation state, a procedural SwiftUI cat, a static adapter, and a neutral Live2D hosting protocol. Speaking receives assistant playback amplitude clamped to 0...1; listening does not consume that signal. Reduce Motion selects a static path and avoids looping translation or scale effects.
+
+No Live2D SDK, model, external image, font, audio, or character asset is included. XiaomaoApp may later supply a private final presentation adapter while retaining the neutral public boundary.
