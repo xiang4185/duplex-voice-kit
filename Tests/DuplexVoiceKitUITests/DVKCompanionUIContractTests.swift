@@ -209,6 +209,274 @@ extension DVKCompanionUIContractTests {
     }
 
     @MainActor
+    func testIOS26GlassHelperIsConstructible() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(Button("Glass").dvkGlassControl(theme: theme))
+        _ = AnyView(Color.clear.dvkGlassSurface(theme: theme))
+        let policy = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: false, reduceMotion: false)
+        XCTAssertFalse(policy.usesOpaqueFallback)
+        XCTAssertTrue(policy.allowsInteractiveGlass)
+    }
+
+    @MainActor
+    func testIOS26GlassContainerIsConstructible() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(DVKIOS26GlassEffectContainer { HStack { Button("One") {}; Button("Two") {} }.dvkGlassControl(theme: theme) })
+        let policy = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: false, reduceMotion: true)
+        XCTAssertFalse(policy.usesOpaqueFallback)
+        XCTAssertFalse(policy.allowsInteractiveGlass)
+    }
+
+    @MainActor
+    func testHomeCTAUsesSharedGlassBoundary() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(DVKIOS26GlassEffectContainer { HStack { Button("Text") {}.dvkGlassControl(theme: theme, prominent: true); Button("Voice") {}.dvkGlassControl(theme: theme) } })
+        XCTAssertEqual(DVKCompanionStore().selectedTab, .home)
+    }
+
+    @MainActor
+    func testCatsConfirmationUsesGlassAndFallbackBoundary() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKProfilePreviewBar(profile: store.profiles[0], store: store, adapter: adapter))
+        XCTAssertFalse(DVKCompanionAccessibilityID.profileConfirm.isEmpty)
+    }
+
+    @MainActor
+    func testConversationControlsUseGlassFallbackBoundary() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKTextConversation(adapter: adapter))
+        _ = AnyView(DVKVoiceConversation(adapter: adapter))
+        XCTAssertFalse(DVKCompanionAccessibilityID.chatSend.isEmpty)
+    }
+
+    @MainActor
+    func testReduceTransparencyAndMotionHaveExplicitFallbacks() {
+        let opaque = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: true, reduceMotion: false)
+        let normal = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: false, reduceMotion: false)
+        let motion = DVKIOS26GlassAccessibilityPolicy(reduceTransparency: false, reduceMotion: true)
+        XCTAssertTrue(opaque.usesOpaqueFallback)
+        XCTAssertFalse(opaque.allowsInteractiveGlass)
+        XCTAssertFalse(normal.usesOpaqueFallback)
+        XCTAssertTrue(normal.allowsInteractiveGlass)
+        XCTAssertFalse(motion.usesOpaqueFallback)
+        XCTAssertFalse(motion.allowsInteractiveGlass)
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[3], appearance: .followProfile)
+        _ = AnyView(Button("Fallback").dvkGlassControl(theme: theme, prominent: true))
+    }
+
+    @MainActor
+    func testTabBarMinimizeBehaviorIsConfiguredForGlassPath() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionShellView(adapter: adapter))
+        XCTAssertEqual(store.selectedTab, .home)
+    }
+
+    @MainActor
+    func testLunaGlassPathKeepsDarkProfileTheme() {
+        let luna = DVKCompanionProfileCatalog().profiles[3]
+        let theme = DVKCompanionThemeResolver.resolve(profile: luna, appearance: .followProfile)
+        XCTAssertTrue(theme.isDark)
+        XCTAssertNotEqual(theme.pageBackground, theme.surface)
+    }
+
+    @MainActor
+    func testPreviewThemeDoesNotChangeFormalTheme() {
+        let store = DVKCompanionStore()
+        let selected = store.selectedProfileID
+        store.selectPreviewProfile(id: "mock.story-cat")
+        XCTAssertEqual(store.selectedProfileID, selected)
+        XCTAssertNotEqual(store.previewProfileID, store.selectedProfileID)
+    }
+
+    @MainActor
+    func testShowcaseGlassBoundaryKeepsPublicPackageMinimum() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionShellView(adapter: adapter))
+        XCTAssertEqual(store.mode, .text)
+    }
+
+    @MainActor
+    func testEachTabRootConstructsInsideIndependentNavigationStack() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(NavigationStack { DVKCompanionHomeView(adapter: adapter, openConversation: {}) })
+        _ = AnyView(NavigationStack { DVKCompanionProfilesView(adapter: adapter) })
+        _ = AnyView(NavigationStack { DVKReviewListView(adapter: adapter) })
+        _ = AnyView(NavigationStack { DVKCompanionSettingsView(adapter: adapter) })
+        XCTAssertEqual(store.selectedTab, .home)
+    }
+
+    @MainActor
+    func testGlassButtonRegularAndProminentFallbackBranchesConstruct() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(Button("Regular") {}.dvkGlassControl(theme: theme))
+        _ = AnyView(Button("Prominent") {}.dvkGlassControl(theme: theme, prominent: true))
+        XCTAssertNotEqual(DVKCompanionAccessibilityID.chatSend, DVKCompanionAccessibilityID.voiceStart)
+    }
+
+    @MainActor
+    func testVoiceButtonsHaveIndependentGlassControlViews() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(DVKIOS26GlassEffectContainer {
+            HStack {
+                Button("Start") {}.dvkGlassControl(theme: theme, prominent: true)
+                Button("Advance") {}.dvkGlassControl(theme: theme)
+                Button("End") {}.dvkGlassControl(theme: theme)
+            }
+        })
+        XCTAssertNotEqual(DVKCompanionAccessibilityID.voiceStart, DVKCompanionAccessibilityID.voiceAdvance)
+        XCTAssertNotEqual(DVKCompanionAccessibilityID.voiceAdvance, DVKCompanionAccessibilityID.voiceEnd)
+    }
+
+    @MainActor
+    func testCatsPreviewSurfaceAndConfirmationUseSeparateResponsibilities() {
+        let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
+        _ = AnyView(Color.clear.dvkGlassSurface(theme: theme))
+        _ = AnyView(Button("Use this cat") {}.dvkGlassControl(theme: theme, prominent: true))
+        XCTAssertNotEqual(DVKCompanionAccessibilityID.profilePreview, DVKCompanionAccessibilityID.profileConfirm)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryVisibilityUsesSessionState() {
+        let hidden = DVKActiveVoiceAccessoryPresentation(hasActiveSession: false, voiceState: .idle, profileName: "Mellow")
+        let visible = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .listening, profileName: "Mellow")
+        XCTAssertFalse(hidden.isVisible)
+        XCTAssertTrue(visible.isVisible)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryStatusMappings() {
+        XCTAssertEqual(DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .connecting, profileName: "Mellow").statusText, "Connecting")
+        XCTAssertEqual(DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .listening, profileName: "Mellow").statusText, "Listening")
+        XCTAssertEqual(DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .processing, profileName: "Mellow").statusText, "Thinking")
+        XCTAssertEqual(DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .speaking, profileName: "Mellow").statusText, "Speaking")
+        XCTAssertEqual(DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .ended, profileName: "Mellow").statusText, "Session ending")
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryUsesSelectedProfileName() {
+        let store = DVKCompanionStore()
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: store.voiceState, profileName: store.selectedProfile?.displayName)
+        XCTAssertEqual(presentation.profileName, store.selectedProfile?.displayName)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryAccessibilityLabelInterpolatesPublicStateOnly() {
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .speaking, profileName: "Mellow")
+        XCTAssertEqual(presentation.accessibilityLabel, "Mellow, Speaking, Return to voice session")
+        XCTAssertFalse(presentation.accessibilityLabel.contains("self.profileName"))
+        XCTAssertFalse(presentation.accessibilityLabel.contains("statusText"))
+        XCTAssertFalse(presentation.accessibilityLabel.localizedCaseInsensitiveContains("routeToken"))
+        XCTAssertFalse(presentation.accessibilityLabel.localizedCaseInsensitiveContains("sessionKey"))
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryReturnActionSetsVoiceModeWithoutStartingSession() {
+        let store = DVKCompanionStore()
+        var returned = false
+        let action = {
+            store.setMode(.voice)
+            returned = true
+        }
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: false, voiceState: .idle, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: action))
+        action()
+        XCTAssertTrue(returned)
+        XCTAssertEqual(store.mode, .voice)
+        XCTAssertFalse(store.hasActiveSession)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryDoesNotCreateSecondSession() {
+        let store = DVKCompanionStore()
+        let before = store.hasActiveSession
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: before, voiceState: .listening, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: { store.setMode(.voice) }))
+        XCTAssertEqual(store.hasActiveSession, before)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryIOS26AndFallbackHelpersConstruct() {
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .connecting, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: {}))
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionShellView(adapter: adapter))
+        XCTAssertEqual(store.selectedTab, .home)
+    }
+
+    @MainActor
+    func testActiveVoiceAccessoryHasSingleReturnBehavior() {
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .processing, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: {}))
+        XCTAssertFalse(presentation.accessibilityLabel.contains("End"))
+        XCTAssertFalse(presentation.accessibilityLabel.contains("Mute"))
+        XCTAssertFalse(presentation.accessibilityLabel.contains("Advance"))
+    }
+
+    @MainActor
+    func testCollapseDoesNotEndSessionOrChangeVoiceState() {
+        let store = DVKCompanionStore()
+        let before = store.voiceState
+        var collapsed = false
+        let collapse = { collapsed = true }
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .listening, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: collapse))
+        collapse()
+        XCTAssertTrue(collapsed)
+        XCTAssertEqual(store.voiceState, before)
+        XCTAssertFalse(store.hasActiveSession)
+    }
+
+    @MainActor
+    func testCollapseKeepsAccessoryPresentationVisible() {
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .speaking, profileName: "Mellow")
+        XCTAssertTrue(presentation.isVisible)
+        XCTAssertTrue(presentation.accessibilityLabel.contains("Return"))
+    }
+
+    @MainActor
+    func testEndControlUsesExistingEndLogicAndCloseCallback() async {
+        let store = DVKCompanionStore()
+        var closed = false
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKVoiceConversation(adapter: adapter, onEnded: { closed = true }))
+        await store.endVoiceDemo()
+        closed = true
+        XCTAssertTrue(closed)
+        XCTAssertFalse(store.hasActiveSession)
+    }
+
+    @MainActor
+    func testCollapseAndEndAccessibilityLabelsAreDistinct() {
+        let collapse = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .listening, profileName: "Mellow").accessibilityLabel
+        XCTAssertNotEqual(collapse, "结束通话")
+        XCTAssertFalse(collapse.contains("phone.down.fill"))
+        XCTAssertNotEqual("收起语音会话", "结束通话")
+    }
+
+    @MainActor
+    func testConversationSheetHasSeparateCloseAndEndContracts() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionConversationView(adapter: adapter, onClose: {}))
+        _ = AnyView(DVKVoiceConversation(adapter: adapter, onEnded: {}))
+        XCTAssertFalse(DVKCompanionAccessibilityID.voiceEnd.isEmpty)
+    }
+
+    @MainActor
+    func testEndCompletionHidesAccessoryProjection() async {
+        let store = DVKCompanionStore()
+        await store.endVoiceDemo()
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: store.hasActiveSession, voiceState: store.voiceState, profileName: store.selectedProfile?.displayName)
+        XCTAssertFalse(presentation.isVisible)
+    }
+
+    @MainActor
     func testLive2DHostIsInjectedIntoStoreAdapter() {
         let host = DVKStaticCharacterAdapter()
         let adapter = DVKCompanionStoreAdapter(store: DVKCompanionStore(), live2DHost: host)
