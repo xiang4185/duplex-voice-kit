@@ -9,7 +9,7 @@ import XCTest
     func testFailureAndRetry() async { let chat=DVKMockChatService(); await chat.failNextSend(); let s=DVKCompanionStore(chat:chat); s.setDraft("retry"); await s.sendDraft(); XCTAssertTrue(s.lastFailure); await s.retryLastMessage(); XCTAssertEqual(s.messages.filter{$0.role == .user}.count,1); XCTAssertFalse(s.lastFailure) }
     func testLimitedBlocksVoice() { let s=DVKCompanionStore(); s.setPrivacy(.limited); s.beginVoiceDemo(); XCTAssertEqual(s.mockVoiceState,"idle"); s.reauthorize(); s.beginVoiceDemo(); XCTAssertEqual(s.mockVoiceState,"connecting") }
     func testVoiceProgression() { let s=DVKCompanionStore(); s.beginVoiceDemo(); s.advanceVoiceDemo(); XCTAssertEqual(s.mockVoiceState,"listening"); s.advanceVoiceDemo(); XCTAssertEqual(s.mockVoiceState,"processing") }
-    func testReviewIdempotency() async { let g=DVKMockReviewGenerator(); let d=Date(); XCTAssertNotNil(await g.generate(sessionKey:"one",startedAt:d,endedAt:d)); XCTAssertNil(await g.generate(sessionKey:"one",startedAt:d,endedAt:d)) }
+    func testReviewIdempotency() async { let g=DVKMockReviewGenerator(); let d=Date(); let first = await g.generate(sessionKey:"one",startedAt:d,endedAt:d); let second = await g.generate(sessionKey:"one",startedAt:d,endedAt:d); XCTAssertNotNil(first); XCTAssertNil(second) }
     func testReviewDeletion() async { let s=DVKCompanionStore(); s.beginVoiceDemo(); await s.endVoiceDemo(); let id=try! XCTUnwrap(s.reviews.first?.id); s.deleteReview(id:id); XCTAssertTrue(s.reviews.isEmpty) }
     func testOneEggAtATime() { let s=DVKCompanionStore(); s.present(.care); s.present(.help); XCTAssertEqual(s.activeEasterEgg,.help); s.dismissEasterEgg(); XCTAssertNil(s.activeEasterEgg) }
 }
