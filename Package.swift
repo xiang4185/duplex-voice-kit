@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "DuplexVoiceKit",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v13)],
     products: [
         .library(name: "DuplexVoiceKit", targets: ["DuplexVoiceKit"]),
         .library(name: "DuplexVoiceKitCompanion", targets: ["DuplexVoiceKitCompanion"]),
