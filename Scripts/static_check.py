@@ -442,6 +442,80 @@ def main() -> None:
         failures.append("light/dark must preserve the profile accent color")
     if "activeScenario = .normalText" not in store_text:
         failures.append("nextTextFailure must be consumed automatically")
+    package_text = (ROOT / "Package.swift").read_text(encoding="utf-8")
+    showcase_project = (ROOT / "Examples" / "DVKCompanionShowcase" / "project.yml").read_text(encoding="utf-8")
+    glass_path = ui_root / "DVKIOS26Glass.swift"
+    glass_text = glass_path.read_text(encoding="utf-8") if glass_path.is_file() else ""
+    if "platforms: [.iOS(.v17)]" not in package_text:
+        failures.append("public Package minimum iOS deployment must remain 17")
+    if 'deploymentTarget: "26.0"' not in showcase_project:
+        failures.append("Showcase deployment target must be iOS 26")
+    for expected in ("#if compiler(>=6.2)", "#available(iOS 26.0", "tabBarMinimizeBehavior", "glass", "glassProminent", "glassEffect", "GlassEffectContainer", "accessibilityReduceTransparency", "accessibilityReduceMotion"):
+        if expected not in glass_text:
+            failures.append("iOS 26 glass boundary missing: " + expected)
+    if "toolbarBackground(.hidden, for: .tabBar)" in glass_text:
+        failures.append("iOS 26 Tab Bar path must not force hidden toolbar background")
+    if "tabBarMinimizeBehavior(.onScrollDown)" not in glass_text:
+        failures.append("iOS 26 Tab Bar path must minimize on scroll down")
+    if "DVKIOS26GlassEffectContainer" not in ui_text:
+        failures.append("Home/Cats glass controls must use the shared GlassEffectContainer boundary")
+    views_text = (ui_root / "DVKCompanionViews.swift").read_text(encoding="utf-8")
+    accessory_path = ui_root / "DVKActiveVoiceAccessory.swift"
+    accessory_text = accessory_path.read_text(encoding="utf-8") if accessory_path.is_file() else ""
+    if "tabViewBottomAccessory" not in accessory_text:
+        failures.append("iOS 26 active voice accessory path is missing")
+    if "tabViewBottomAccessory(isEnabled: presentation.isVisible)" not in accessory_text:
+        failures.append("iOS 26 active voice accessory must bind isEnabled to presentation.isVisible")
+    if "isEnabled" not in accessory_text or "presentation.isVisible" not in accessory_text:
+        failures.append("active voice accessory visibility binding is incomplete")
+    if "#if compiler(>=6.2)" not in accessory_text or "#available(iOS 26.0" not in accessory_text:
+        failures.append("active voice accessory availability boundary is missing")
+    if "hasActiveSession" not in accessory_text or "safeAreaInset" not in accessory_text:
+        failures.append("active voice accessory must have session visibility and fallback")
+    for expected in ("theme.elevatedSurface", "RoundedRectangle", "theme.textPrimary", "frame(minHeight: 44)", "theme.border"):
+        if expected not in accessory_text:
+            failures.append("legacy active voice accessory fallback missing: " + expected)
+    if "glassEffect" in accessory_text:
+        failures.append("active voice accessory must not add custom glass over iOS 26 Bottom Accessory")
+    if "routeToken" in accessory_text or "sessionKey" in accessory_text:
+        failures.append("active voice accessory must not expose internal session values")
+    if "End" in accessory_text or "Mute" in accessory_text or "Advance" in accessory_text:
+        failures.append("active voice accessory must expose only return-to-conversation behavior")
+    if "setMode(.voice)" not in views_text or "conversation = true" not in views_text:
+        failures.append("active voice accessory must reuse the existing Conversation Sheet")
+    if "chevron.down" not in views_text or "收起语音会话" not in views_text:
+        failures.append("active voice sheet collapse affordance is missing")
+    if "phone.down.fill" not in views_text or "结束通话" not in views_text:
+        failures.append("voice end control must remain a distinct destructive action")
+    if "onEnded" not in views_text or "await store.endVoiceDemo()" not in views_text:
+        failures.append("voice end control must close after existing end logic")
+    views_text = (ui_root / "DVKCompanionViews.swift").read_text(encoding="utf-8")
+    if ".toolbarBackground(theme.navigationSurface, for: .navigationBar)" in views_text:
+        failures.append("Views must use the centralized Navigation Chrome helper")
+    if views_text.count("NavigationStack") < 4:
+        failures.append("each public Tab must have its own NavigationStack")
+    if views_text.count("dvkIOS26NavigationChrome(theme: activeTheme)") < 4:
+        failures.append("each Tab NavigationStack must use activeTheme Navigation Chrome")
+    if "dvkIOS26TabBar(theme: activeTheme)" not in views_text:
+        failures.append("TabView must delegate Tab Bar chrome to the shared helper")
+    glass_test_methods = len(re.findall(r"\bfunc\s+test[^\(]*(?:Glass|glass|Transparency|Motion|TabBar)[^\(]*\(", all_r3_tests))
+    if glass_test_methods < 8:
+        failures.append(f"expected at least 8 iOS 26 glass UI tests, found {glass_test_methods}")
+    if "DVKIOS26GlassConfiguration" in glass_text or "DVKIOS26GlassConfiguration" in all_r3_tests:
+        failures.append("glass accessibility tests must use the runtime policy, not fixed booleans")
+    if ui_text.count("NavigationStack") < 4:
+        failures.append("each public Tab must have its own NavigationStack")
+    voice_start = ui_text.find("public struct DVKVoiceConversation")
+    voice_block = ui_text[voice_start:] if voice_start >= 0 else ""
+    if voice_block.count(".dvkGlassControl") < 3:
+        failures.append("Voice Start/Advance/End must each use an independent glass control")
+    if "HStack(spacing: 10) {" in voice_block and "}.dvkGlassControl" in voice_block:
+        failures.append("Voice HStack must not receive the glass control modifier directly")
+    if "content.buttonStyle(.glassProminent)" not in glass_text or "content.glassEffect(.regular.interactive()" not in glass_text:
+        failures.append("glass control helper must expose separate buttonStyle and glassEffect branches")
+    if "if #available(iOS 26.0, *)" not in glass_text or "content\n        } else" not in glass_text:
+        failures.append("iOS 26 navigation chrome must return automatic system content")
+
 
     result = {
         "status": "failed" if failures else "ok",
