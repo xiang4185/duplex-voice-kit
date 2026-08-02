@@ -61,3 +61,9 @@ Host App
 └── DuplexVoiceKit Core
 
 DuplexVoiceKitCompanion is Foundation-only and owns mode, draft, messages, mock delivery, privacy, voice state, cards, reviews, and deterministic playback amplitude. DuplexVoiceKitUI renders that Store; it does not keep a second business state. The Showcase app is a host and uses only local mock services.
+
+## R3A public multi-cat layer
+
+The optional Companion layer now owns the public profile catalog, selected and preview profile state, persistence boundary, session context, route resolution state, message snapshots, voice session snapshots, reviews, appearance, and deterministic Mock Lab scenarios. DuplexVoiceKitCompanion remains Foundation-only. DuplexVoiceKitUI depends on both DuplexVoiceKitCompanion and DuplexVoiceKit and renders the single Store.
+
+The public Showcase has Home, Cats, Conversation, Reviews, and Settings. The Cats page owns a horizontal snapping carousel; swiping changes only preview state and confirmation commits selection. A host supplies the route resolver, while the public sample supplies a mock resolver. XiaomaoApp may later inject private catalog, theme, copy, resolver, and character presentation resources.

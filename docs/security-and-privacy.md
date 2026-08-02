@@ -52,3 +52,9 @@ Never place sensitive details in a public issue or pull request. Follow `SECURIT
 ## Public Showcase boundary
 
 The existing security guidance above remains in force. The Showcase adds no credentials, production address, provider SDK, real audio, persistent database, or user identity. Limited privacy keeps the page browsable, blocks voice actions explicitly, and exposes a local re-authorization callback without presenting a system permission prompt.
+
+## R3A public Showcase data boundary
+
+The four Showcase cats are fictional and local. The public repository contains no real persona ID, private prompt, production address, token credential, database, audio asset, font, or third-party character model. A selected public profile is resolved by a host-provided neutral resolver into an opaque route token. That token is deliberately absent from ordinary logs, UI, message text, and review models.
+
+Limited privacy is explicit: the Showcase allows its configured local text demo while disabling voice, and the page explains the difference. XiaomaoApp remains a private host concern and can supply its own persistence, route mapping, and final assets without changing the public Core boundary.
