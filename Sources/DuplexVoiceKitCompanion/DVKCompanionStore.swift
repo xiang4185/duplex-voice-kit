@@ -36,7 +36,7 @@ import Foundation
     public func dismissEasterEgg(){activeEasterEgg=nil}
     public func beginVoiceDemo(){guard privacy == .allowed && key == nil else{return};key=UUID().uuidString;started=Date();mockVoiceState="connecting"}
     public func advanceVoiceDemo(){guard key != nil else{return};switch mockVoiceState{case "connecting":mockVoiceState="listening";case "listening":mockVoiceState="processing";case "processing":mockVoiceState="speaking";case "speaking":mockVoiceState="ended";default:break};playbackAmplitude=mockVoiceState == "speaking" ? 0.72 : 0}
-    public func endVoiceDemo() async {guard let key,let started else{return};mockVoiceState="ended";generating=.generating;if let review=await reviewGenerator.generate(sessionKey:key,startedAt:started,endedAt:Date()){reviews.insert(review,at:0)};generating=.idle;self.key=nil;self.started=nil;playbackAmplitude=0}
+    public func endVoiceDemo() async {guard let key,let started else{return};mockVoiceState="ended";generating = .generating;if let review=await reviewGenerator.generate(sessionKey:key,startedAt:started,endedAt:Date()){reviews.insert(review,at:0)};generating = .idle;self.key=nil;self.started=nil;playbackAmplitude=0}
     public func deleteReview(id:UUID){reviews.removeAll{$0.id == id}}
     private func update(_ id:UUID,_ state:DVKCompanionDeliveryState){guard let i=messages.firstIndex(where:{$0.id == id}) else{return};messages[i].deliveryState=state}
 }
