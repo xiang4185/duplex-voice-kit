@@ -12,6 +12,7 @@ targets:
     sources: [DVKCompanionShowcase]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: org.example.DVKCompanionShowcase
+      GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - package: DuplexVoiceKit
         product: DuplexVoiceKitUI
