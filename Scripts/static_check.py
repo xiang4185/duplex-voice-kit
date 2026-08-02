@@ -505,8 +505,56 @@ def main() -> None:
         failures.append("glass accessibility tests must use the runtime policy, not fixed booleans")
     if ui_text.count("NavigationStack") < 4:
         failures.append("each public Tab must have its own NavigationStack")
-    voice_start = ui_text.find("public struct DVKVoiceConversation")
-    voice_block = ui_text[voice_start:] if voice_start >= 0 else ""
+    voice_start = views_text.find("public struct DVKVoiceConversation")
+    voice_block = views_text[voice_start:] if voice_start >= 0 else ""
+    ripple_path = ui_root / "DVKCharacterVoiceRipple.swift"
+    ripple_text = ripple_path.read_text(encoding="utf-8") if ripple_path.is_file() else ""
+    if not ripple_path.is_file():
+        failures.append("character voice ripple component is missing")
+    if "DVKCharacterVoiceRipplePresentation" not in voice_block or "DVKCharacterVoiceRipple(" not in voice_block:
+        failures.append("Voice Conversation must compose the character voice ripple")
+    if "store.playbackAmplitude" not in voice_block:
+        failures.append("character voice ripple must consume Store playbackAmplitude")
+    if "DVKPlaybackAmplitudeView" in voice_block:
+        failures.append("Voice Conversation must not construct the horizontal playback amplitude view")
+    for forbidden in ("Timer", "random", "arc4random"):
+        if forbidden.lower() in ripple_text.lower():
+            failures.append("character voice ripple must not use " + forbidden)
+    if ".glassEffect" in ripple_text or ".buttonStyle(.glass" in ripple_text:
+        failures.append("character voice ripple must not be a glass control")
+    for forbidden in ("Halo", "Spectrum", "Equalizer", "CircularWaveform", "rotationEffect", "Waveform"):
+        if forbidden in ripple_text:
+            failures.append("character voice ripple contains forbidden player-style token: " + forbidden)
+    if "Circle()" in ripple_text:
+        failures.append("character voice ripple must use soft Ellipse ripples, not a full Circle")
+    if "ForEach" in ripple_text:
+        failures.append("character voice ripple must not contain bar-style spectrum iteration")
+    if "rippleOpacity" not in ripple_text or "rippleStrokeWidth" not in ripple_text or "rippleScale" not in ripple_text:
+        failures.append("character voice ripple must expose bounded ripple parameters")
+    if "outwardRipple" not in ripple_text:
+        failures.append("character voice ripple must expose outwardRipple animation mode")
+    if "case .listening, .speaking:" not in ripple_text or "animationMode = canAnimate && showsPrimaryRipple ? .outwardRipple" not in ripple_text:
+        failures.append("listening and speaking must map to outwardRipple")
+    if ".easeOut(duration: 2.8).repeatForever(autoreverses: false)" not in ripple_text:
+        failures.append("outwardRipple must use a non-reversing repeat animation")
+    if "frame(width: 268, height: 238)" not in ripple_text or "frame(width: 272, height: 248)" not in ripple_text:
+        failures.append("primary and secondary ripples must use bounded non-square frames")
+    if ".task(id: presentation.animationMode)" not in ripple_text:
+        failures.append("ripple animation must restart from animationMode task identity")
+    if "transaction.disablesAnimations = true" not in ripple_text or "phase = false" not in ripple_text:
+        failures.append("ripple animation task must reset phase without animation")
+    if "await Task.yield()" not in ripple_text:
+        failures.append("ripple animation task must yield before restarting")
+    if "Task.isCancelled" not in ripple_text:
+        failures.append("ripple animation task must guard cancellation before restarting")
+    if ".onChange(of: presentation.animationMode)" in ripple_text:
+        failures.append("ripple animation must not use the old direct onChange lifecycle")
+    if "1.06" in ripple_text or "1.06" in all_r3_tests:
+        failures.append("ripple scale bound must not use the old 1.06 limit")
+    if ".accessibilityHidden(true)" not in ripple_text:
+        failures.append("character voice ripple must be accessibility hidden as decoration")
+    if "repeatForever" in ripple_text and not all(token in ripple_text for token in ("case .none:", ".task(id: presentation.animationMode)", "phase = false", "canAnimate")):
+        failures.append("ripple repeatForever must be gated by Reduce Motion and static mode policy")
     if voice_block.count(".dvkGlassControl") < 3:
         failures.append("Voice Start/Advance/End must each use an independent glass control")
     if "HStack(spacing: 10) {" in voice_block and "}.dvkGlassControl" in voice_block:

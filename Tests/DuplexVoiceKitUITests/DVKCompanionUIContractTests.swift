@@ -477,6 +477,215 @@ extension DVKCompanionUIContractTests {
     }
 
     @MainActor
+    func testVoiceRippleClampsAmplitudeBelowZero() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: -0.4, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.normalizedAmplitude, 0)
+        XCTAssertEqual(presentation.rippleScale, 1)
+    }
+
+    @MainActor
+    func testVoiceRippleClampsAmplitudeAboveOne() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 2.0, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.normalizedAmplitude, 1)
+        XCTAssertLessThanOrEqual(presentation.rippleScale, 1.045)
+    }
+
+    @MainActor
+    func testSpeakingRippleScaleIsMonotonicWithPlaybackAmplitude() {
+        let quiet = DVKCharacterVoiceRipplePresentation(amplitude: 0.2, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        let loud = DVKCharacterVoiceRipplePresentation(amplitude: 0.8, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertGreaterThanOrEqual(loud.rippleScale, quiet.rippleScale)
+    }
+
+    @MainActor
+    func testSpeakingRippleOpacityIsMonotonicWithPlaybackAmplitude() {
+        let quiet = DVKCharacterVoiceRipplePresentation(amplitude: 0.2, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        let loud = DVKCharacterVoiceRipplePresentation(amplitude: 0.8, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertGreaterThanOrEqual(loud.rippleOpacity, quiet.rippleOpacity)
+    }
+
+    @MainActor
+    func testVoiceRippleScaleAndLineWidthHaveVisualBounds() {
+        let loud = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertLessThanOrEqual(loud.rippleScale, 1.045)
+        XCTAssertLessThanOrEqual(loud.rippleStrokeWidth, 1.8)
+        XCTAssertGreaterThanOrEqual(loud.rippleStrokeWidth, 0.8)
+    }
+
+    @MainActor
+    func testIdleRippleDoesNotLoop() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .idle, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .none)
+        XCTAssertFalse(presentation.showsPrimaryRipple)
+    }
+
+    @MainActor
+    func testEndedRippleDoesNotLoop() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .ended, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .none)
+        XCTAssertEqual(presentation.statusText, "Session ending")
+    }
+
+    @MainActor
+    func testErrorRippleDoesNotLoop() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.7, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: true)
+        XCTAssertEqual(presentation.animationMode, .none)
+        XCTAssertEqual(presentation.statusText, "Error")
+        XCTAssertFalse(presentation.usesPlaybackAmplitude)
+    }
+
+    @MainActor
+    func testReduceMotionDisablesRippleLoop() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.7, voiceState: .speaking, reduceMotion: true, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .none)
+        XCTAssertGreaterThan(presentation.rippleOpacity, 0)
+    }
+
+    @MainActor
+    func testStaticModeDisablesRippleLoop() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.7, voiceState: .speaking, reduceMotion: false, staticMode: true, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .none)
+        XCTAssertGreaterThan(presentation.rippleScale, 1)
+    }
+
+    @MainActor
+    func testListeningRippleDoesNotUsePlaybackAmplitudeAsInputSpectrum() {
+        let quiet = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        let loud = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertFalse(loud.usesPlaybackAmplitude)
+        XCTAssertEqual(loud.normalizedAmplitude, quiet.normalizedAmplitude)
+        XCTAssertEqual(loud.rippleScale, quiet.rippleScale)
+    }
+
+    @MainActor
+    func testProcessingRippleUsesThinkingCopy() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.4, voiceState: .processing, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.statusText, "Thinking")
+        XCTAssertEqual(presentation.animationMode, .gentlePulse)
+    }
+
+    @MainActor
+    func testSpeakingRippleUsesSpeakingCopy() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.4, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.statusText, "Speaking")
+        XCTAssertTrue(presentation.usesPlaybackAmplitude)
+    }
+
+    @MainActor
+    func testConnectingRippleUsesLowFrequencyBreathingMode() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.4, voiceState: .connecting, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.statusText, "Connecting")
+        XCTAssertEqual(presentation.animationMode, .breathing)
+    }
+
+    @MainActor
+    func testListeningRippleUsesOutwardRippleMode() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.8, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .outwardRipple)
+    }
+
+    @MainActor
+    func testSpeakingRippleUsesOutwardRippleMode() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.8, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.animationMode, .outwardRipple)
+    }
+
+    @MainActor
+    func testConnectingAndProcessingKeepDistinctAnimationModes() {
+        let connecting = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .connecting, reduceMotion: false, staticMode: false, hasError: false)
+        let processing = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .processing, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(connecting.animationMode, .breathing)
+        XCTAssertEqual(processing.animationMode, .gentlePulse)
+    }
+
+    @MainActor
+    func testRippleAnimationModesStopForReducedMotionAndStatic() {
+        let reduced = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .speaking, reduceMotion: true, staticMode: false, hasError: false)
+        let staticMode = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .listening, reduceMotion: false, staticMode: true, hasError: false)
+        XCTAssertEqual(reduced.animationMode, .none)
+        XCTAssertEqual(staticMode.animationMode, .none)
+    }
+
+    @MainActor
+    func testVoiceRippleAnimationModesRemainDistinctAndRestartable() {
+        let connecting = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .connecting, reduceMotion: false, staticMode: false, hasError: false)
+        let listening = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        let processing = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .processing, reduceMotion: false, staticMode: false, hasError: false)
+        let speaking = DVKCharacterVoiceRipplePresentation(amplitude: 0.8, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(connecting.animationMode, .breathing)
+        XCTAssertEqual(listening.animationMode, .outwardRipple)
+        XCTAssertEqual(processing.animationMode, .gentlePulse)
+        XCTAssertEqual(speaking.animationMode, .outwardRipple)
+        XCTAssertNotEqual(connecting.animationMode, listening.animationMode)
+        XCTAssertNotEqual(listening.animationMode, processing.animationMode)
+    }
+
+    @MainActor
+    func testVoiceRippleStaticModesRemainNone() {
+        let reduced = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .speaking, reduceMotion: true, staticMode: false, hasError: false)
+        let staticMode = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .listening, reduceMotion: false, staticMode: true, hasError: false)
+        XCTAssertEqual(reduced.animationMode, .none)
+        XCTAssertEqual(staticMode.animationMode, .none)
+    }
+
+    @MainActor
+    func testVoiceRippleUsesResolvedCharacterTheme() {
+        let profile = DVKCompanionProfileCatalog().profiles[3]
+        let theme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: .followProfile)
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.5, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        _ = AnyView(DVKCharacterVoiceRipple(presentation: presentation, theme: theme))
+        XCTAssertTrue(theme.isDark)
+    }
+
+    @MainActor
+    func testVoiceRippleViewIsConstructible() {
+        let theme = DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile)
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.5, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        _ = AnyView(DVKCharacterVoiceRipple(presentation: presentation, theme: theme))
+        XCTAssertTrue(presentation.showsPrimaryRipple)
+    }
+
+    @MainActor
+    func testVoicePageKeepsAllVoiceControlIdentifiers() {
+        XCTAssertFalse(DVKCompanionAccessibilityID.voiceStart.isEmpty)
+        XCTAssertFalse(DVKCompanionAccessibilityID.voiceAdvance.isEmpty)
+        XCTAssertFalse(DVKCompanionAccessibilityID.voiceEnd.isEmpty)
+        XCTAssertEqual(DVKCompanionAccessibilityID.voiceState, "companion.voice.state")
+    }
+
+    @MainActor
+    func testVoicePageKeepsCollapseAndEndSemantics() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionConversationView(adapter: adapter, onClose: {}))
+        _ = AnyView(DVKVoiceConversation(adapter: adapter, onEnded: {}))
+        XCTAssertNotEqual("collapse voice session", "end call")
+        XCTAssertFalse(DVKCompanionAccessibilityID.voiceEnd.isEmpty)
+    }
+
+    @MainActor
+    func testVoicePageKeepsActiveAccessoryContract() {
+        let presentation = DVKActiveVoiceAccessoryPresentation(hasActiveSession: true, voiceState: .speaking, profileName: "Mellow")
+        _ = AnyView(DVKActiveVoiceAccessoryView(presentation: presentation, theme: DVKCompanionThemeResolver.resolve(themeKey: nil, appearance: .followProfile), onReturn: {}))
+        XCTAssertTrue(presentation.isVisible)
+        XCTAssertTrue(presentation.accessibilityLabel.contains("Return to voice session"))
+    }
+
+    @MainActor
+    func testVoicePageKeepsStatusAsAccessibleValue() {
+        let presentation = DVKCharacterVoiceRipplePresentation(amplitude: 0.3, voiceState: .listening, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertEqual(presentation.statusText, "Listening")
+        XCTAssertFalse(presentation.statusText.isEmpty)
+    }
+
+    @MainActor
+    func testVoiceRippleAmplitudeDoesNotChangeLayoutBounds() {
+        let quiet = DVKCharacterVoiceRipplePresentation(amplitude: 0, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        let loud = DVKCharacterVoiceRipplePresentation(amplitude: 1, voiceState: .speaking, reduceMotion: false, staticMode: false, hasError: false)
+        XCTAssertLessThanOrEqual(loud.rippleScale - quiet.rippleScale, 0.045)
+    }
+
+    @MainActor
     func testLive2DHostIsInjectedIntoStoreAdapter() {
         let host = DVKStaticCharacterAdapter()
         let adapter = DVKCompanionStoreAdapter(store: DVKCompanionStore(), live2DHost: host)

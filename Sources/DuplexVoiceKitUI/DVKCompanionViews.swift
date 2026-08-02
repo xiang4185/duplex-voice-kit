@@ -282,28 +282,50 @@ public struct DVKVoiceConversation: View {
     public var body: some View {
         let store = adapter.store
         let theme = DVKCompanionThemeResolver.resolve(profile: store.selectedProfile, appearance: store.appearance)
+        let ripplePresentation = DVKCharacterVoiceRipplePresentation(
+            amplitude: store.playbackAmplitude,
+            voiceState: store.voiceState,
+            reduceMotion: store.reduceMotionPreview,
+            staticMode: store.presentationMode == .staticFallback,
+            hasError: store.voiceError != nil
+        )
         VStack(spacing: 16) {
             Text("Mock voice").font(.title2.bold())
-            Text(store.voiceState.rawValue.capitalized)
-                .font(.headline)
-                .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
+            if let profile = store.selectedProfile {
+                VStack(spacing: 8) {
+                    ZStack {
+                        DVKCharacterVoiceRipple(presentation: ripplePresentation, theme: theme)
+                        DVKCharacterPresentationView(
+                            profile: profile,
+                            state: store.characterState,
+                            reduceMotion: store.reduceMotionPreview,
+                            staticMode: store.presentationMode == .staticFallback,
+                            host: store.presentationMode == .staticFallback ? nil : adapter.live2DHost
+                        )
+                        .frame(height: 220)
+                    }
+                    .frame(height: 286)
+                    Text(profile.displayName)
+                        .font(.title3.bold())
+                        .foregroundStyle(theme.textPrimary)
+                    Text(ripplePresentation.statusText)
+                        .font(.headline)
+                        .foregroundStyle(theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
+                }
+            } else {
+                Text(ripplePresentation.statusText)
+                    .font(.headline)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
+            }
             if let error = store.voiceError {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
                     .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceError)
             }
-            if let profile = store.selectedProfile {
-                DVKCharacterPresentationView(
-                    profile: profile,
-                    state: store.characterState,
-                    reduceMotion: store.reduceMotionPreview,
-                    staticMode: store.presentationMode == .staticFallback,
-                    host: store.presentationMode == .staticFallback ? nil : adapter.live2DHost
-                )
-                .frame(height: 220)
-            }
-            DVKPlaybackAmplitudeView(amplitude: store.playbackAmplitude, reduceMotion: store.reduceMotionPreview)
             DVKIOS26GlassEffectContainer {
                 HStack(spacing: 10) {
                     Button("Start") {
