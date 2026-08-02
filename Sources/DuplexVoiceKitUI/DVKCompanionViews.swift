@@ -32,7 +32,7 @@ public final class DVKCompanionStoreAdapter: ObservableObject {
     @Published public private(set) var revision = 0
     public let store: DVKCompanionStore
     public let playbackAmplitudeRelay: DVKPlaybackAmplitudeRelay
-    public init(store: DVKCompanionStore = DVKCompanionStore()) {
+    public init(store: DVKCompanionStore) {
         self.store = store
         let relay = DVKPlaybackAmplitudeRelay()
         self.playbackAmplitudeRelay = relay
@@ -46,16 +46,26 @@ public final class DVKCompanionStoreAdapter: ObservableObject {
             relay?.playbackAmplitudeDidChange(amplitude)
         }
     }
+
+    public convenience init() {
+        self.init(store: DVKCompanionStore())
+    }
     public func refresh() {
         store.receivePlaybackAmplitude(playbackAmplitudeRelay.currentAmplitude)
         revision += 1
     }
 }
 
+@MainActor
 public struct DVKCompanionStartupView: View {
     @StateObject private var adapter: DVKCompanionStoreAdapter
-    public init(store: DVKCompanionStore = DVKCompanionStore()) {
+
+    public init(store: DVKCompanionStore) {
         _adapter = StateObject(wrappedValue: DVKCompanionStoreAdapter(store: store))
+    }
+
+    public init() {
+        self.init(store: DVKCompanionStore())
     }
     public var body: some View {
         Group {
@@ -149,10 +159,18 @@ public struct DVKReviewDetailView: View {
     }
 }
 
+@MainActor
 public struct DVKCompanionView: View {
     @StateObject private var adapter: DVKCompanionStoreAdapter
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    public init(store: DVKCompanionStore = DVKCompanionStore()) { _adapter=StateObject(wrappedValue: DVKCompanionStoreAdapter(store: store)) }
+
+    public init(store: DVKCompanionStore) {
+        _adapter = StateObject(wrappedValue: DVKCompanionStoreAdapter(store: store))
+    }
+
+    public init() {
+        self.init(store: DVKCompanionStore())
+    }
     public var body: some View {
         let store=adapter.store
         ScrollView {
