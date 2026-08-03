@@ -31,7 +31,7 @@ jobs:
           if ! command -v xcodegen >/dev/null 2>&1; then
             brew install xcodegen
           fi
-          xcodegen version
+          xcodegen --version
 
       - name: Generate Showcase Xcode project
         working-directory: Examples/DVKCompanionShowcase
@@ -73,7 +73,7 @@ jobs:
           lipo -info "$APP/$EXECUTABLE" | grep -q 'arm64'
           xcrun vtool -show-build -arch arm64 "$APP/$EXECUTABLE" | grep -q 'platform IOS'
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-          [[ "$BUNDLE_ID" == *"DVKCompanionShowcase"* ]]
+          [[ "$BUNDLE_ID" == "org.example.DVKCompanionShowcase" ]]
           echo "app=$APP" >> "$GITHUB_OUTPUT"
           echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
           echo "minimum_os=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
@@ -125,7 +125,14 @@ jobs:
           set -euo pipefail
           unzip -t "$IPA"
           unzip -Z1 "$IPA" | grep -q '^Payload/DVKCompanionShowcase.app/'
-          shasum -a 256 "$IPA" > "$SHA_FILE"
+          IPA_DIR="$(dirname "$IPA")"
+          IPA_NAME="$(basename "$IPA")"
+          SHA_NAME="$(basename "$SHA_FILE")"
+          (
+            cd "$IPA_DIR"
+            shasum -a 256 "$IPA_NAME" > "$SHA_NAME"
+            shasum -a 256 -c "$SHA_NAME"
+          )
           test -s "$SHA_FILE"
           cat "$SHA_FILE"
 
