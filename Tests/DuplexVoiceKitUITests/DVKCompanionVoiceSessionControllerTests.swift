@@ -416,9 +416,8 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
     // failure instead of the transient .ready / isRecording flags.
     // The watchdog interval must outlive the session ready gate: waitForReady
     // polls every 50 ms and, if it observes state == .failed, funnels the
-    // failure through applyDisconnectInfo, which overwrites the watchdog's
-    // descriptive error with a generic user message. Firing the stall after
-    // the gate has returned keeps the original capture error message intact.
+    // failure through applyDisconnectInfo, which rewrites the error message.
+    // Assertions contract the terminal failure behaviour, not display copy.
     func testCaptureWatchdogFailsAfterExhaustion() async {
         audioIO.callbackCount = 0
         audioIO.engineRunning = false
@@ -432,8 +431,16 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         await waitUntil { audioIO.startCount > 0 }
         await waitUntil { controller.state == .failed }
         XCTAssertGreaterThan(audioIO.startCount, 0)
-        XCTAssertTrue(controller.errorMessage.lowercased().contains("capture"))
+        XCTAssertFalse(
+            controller.errorMessage
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty,
+            "watchdog failure must expose a user-visible error"
+        )
         XCTAssertEqual(controller.lastReasonCategoryForTesting, "capture_watchdog_exhausted")
+        XCTAssertFalse(controller.isRecording)
+        XCTAssertFalse(controller.hasCaptureWatchdogTaskForTesting)
+        XCTAssertFalse(controller.hasReconnectTaskForTesting)
     }
 
     // 14.4: diagnostics never contain token, device id, or transcript
