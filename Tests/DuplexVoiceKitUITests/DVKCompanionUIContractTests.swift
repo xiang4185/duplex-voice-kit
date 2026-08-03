@@ -86,6 +86,7 @@ extension DVKCompanionUIContractTests {
 
 #endif
 
+extension DVKCompanionUIContractTests {
     func testTabIdentifiersCoverFourPublicDestinations() {
         XCTAssertEqual(DVKCompanionAccessibilityID.home, "companion.home")
         XCTAssertEqual(DVKCompanionAccessibilityID.profiles, "companion.profiles")
