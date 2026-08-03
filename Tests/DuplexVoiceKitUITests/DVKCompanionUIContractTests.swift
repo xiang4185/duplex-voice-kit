@@ -82,6 +82,7 @@ extension DVKCompanionUIContractTests {
         _ = AnyView(DVKProfileCard(profile: profile, selected: true))
         XCTAssertNotEqual(DVKCompanionAccessibilityID.profilePreview, DVKCompanionAccessibilityID.profileConfirm)
     }
+}
 
 #endif
 
