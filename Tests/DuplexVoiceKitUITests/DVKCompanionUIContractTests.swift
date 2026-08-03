@@ -748,4 +748,76 @@ extension DVKCompanionUIContractTests {
         _ = AnyView(DVKEasterEggCard(egg: .care, onClose: {}))
     }
 }
+
+extension DVKCompanionUIContractTests {
+    @MainActor
+    func testCatsRoleCardPageConstructsWithSharedStoreAndConversationAction() {
+        let store=DVKCompanionStore()
+        let adapter=DVKCompanionStoreAdapter(store:store)
+        _=AnyView(DVKCompanionProfilesView(adapter:adapter,openConversation:{}))
+        XCTAssertNotNil(store.previewProfile)
+    }
+
+    @MainActor
+    func testCatsRoleCardPreviewRemainsSeparateUntilConfirmation() {
+        let store=DVKCompanionStore()
+        let selected=store.selectedProfileID
+        guard let alternate=store.profiles.first(where:{$0.id != selected}) else {
+            XCTFail("Showcase Store must provide an alternate profile")
+            return
+        }
+        store.selectPreviewProfile(id:alternate.id)
+        XCTAssertEqual(store.previewProfileID,alternate.id)
+        XCTAssertEqual(store.selectedProfileID,selected)
+        store.confirmProfileSelection()
+        XCTAssertEqual(store.selectedProfileID,alternate.id)
+    }
+
+    @MainActor
+    func testCatsRoleCardActionLabelsFollowPreviewSelection() {
+        let store=DVKCompanionStore()
+        let selected=store.selectedProfileID
+        guard let alternate=store.profiles.first(where:{$0.id != selected}) else {
+            XCTFail("Showcase Store must provide an alternate profile")
+            return
+        }
+        let currentTitle=DVKRoleSelectionActionPresentation.title(previewProfileID:selected,selectedProfileID:selected)
+        let alternateTitle=DVKRoleSelectionActionPresentation.title(previewProfileID:alternate.id,selectedProfileID:selected)
+        XCTAssertEqual(currentTitle,"Start chat")
+        XCTAssertEqual(alternateTitle,"Use this cat")
+        XCTAssertEqual(DVKCompanionAccessibilityID.profileConfirm,"companion.profile.confirm")
+        store.selectPreviewProfile(id:alternate.id)
+        XCTAssertTrue(store.canConfirmProfileSelection)
+    }
+
+    @MainActor
+    func testCatsRoleCarouselPreservesCompactHomeCarouselContract() {
+        let store=DVKCompanionStore()
+        let adapter=DVKCompanionStoreAdapter(store:store)
+        _=AnyView(DVKProfileCarousel(adapter:adapter,compact:true,onPreview:{}))
+        XCTAssertEqual(DVKCompanionAccessibilityID.profileCarousel,"companion.profile.carousel")
+    }
+
+    @MainActor
+    func testCatsRoleCardReduceMotionPreviewRemainsConstructible() {
+        let store=DVKCompanionStore()
+        store.setReduceMotionPreview(true)
+        let adapter=DVKCompanionStoreAdapter(store:store)
+        _=AnyView(DVKCompanionProfilesView(adapter:adapter))
+        XCTAssertTrue(store.reduceMotionPreview)
+    }
+
+    @MainActor
+    func testPublicPreviewBarRemainsConstructibleForCompatibility() {
+        let store=DVKCompanionStore()
+        let adapter=DVKCompanionStoreAdapter(store:store)
+        guard let profile=store.previewProfile else {
+            XCTFail("Showcase Store must provide a preview profile")
+            return
+        }
+        _=AnyView(DVKProfilePreviewBar(profile:profile,store:store,adapter:adapter))
+        XCTAssertFalse(DVKCompanionAccessibilityID.profilePreview.isEmpty)
+    }
+
+}
 #endif
