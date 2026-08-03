@@ -216,6 +216,35 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         XCTFail("condition not met within timeout", file: file, line: line)
     }
 
+    /// Polls the transport actor until a message of the given type appears.
+    /// Used where an assertion must observe an asynchronous outbound message
+    /// rather than a controller state that is already true before the event
+    /// that produces the message has been consumed.
+    private func waitForSentMessage(
+        type: String,
+        timeout: Duration = .seconds(3),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async -> DVKOutboundMessage? {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            let messages = await transport.sentMessagesSnapshot()
+            if let message = messages.first(where: { $0.type == type }) {
+                return message
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail(
+            "message \(type) not sent within timeout",
+            file: file,
+            line: line
+        )
+        return nil
+    }
+
     private func event(type: String, sessionID: String, sequence: Int, payload: [String: DVKJSONValue] = [:]) -> DVKInboundEvent {
         DVKInboundEvent(
             version: "0.2",
@@ -254,11 +283,15 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
                 reasonCategory: "abnormal_close"
             )
         ))
-        await waitUntil { controller.state == .ready && controller.reconnectAttempt == 0 }
 
-        let messages = await transport.sentMessagesSnapshot()
-        let resume = messages.first { $0.type == "session.resume" }
+        // Poll the actor for the resume message itself: the ready/reconnect
+        // condition below is already true before the disconnected lifecycle
+        // event is consumed, so reading the snapshot immediately races the
+        // reconnect loop.
+        let resume = await waitForSentMessage(type: "session.resume")
         XCTAssertNotNil(resume, "reconnect must send session.resume")
+
+        await waitUntil { controller.state == .ready && controller.reconnectAttempt == 0 }
         if case .int(let sequence)? = resume?.payload["last_received_server_sequence"] {
             XCTAssertEqual(sequence, 1)
         } else {
@@ -377,7 +410,10 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         XCTAssertTrue(messages.contains { $0.type == "ping" })
     }
 
-    // 14.4: the capture watchdog fails explicitly after recovery is exhausted
+    // 14.4: the capture watchdog fails explicitly after recovery is exhausted.
+    // On the simulator the watchdog can run from .ready straight into .failed,
+    // so the test waits on the durable capture-started state and the final
+    // failure instead of the transient .ready / isRecording flags.
     func testCaptureWatchdogFailsAfterExhaustion() async {
         audioIO.callbackCount = 0
         audioIO.engineRunning = false
@@ -388,9 +424,9 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
             watchdogInterval: .milliseconds(20)
         )
         await controller.startNewCall()
-        await waitUntil { controller.state == .ready }
-        await waitUntil { controller.isRecording }
+        await waitUntil { audioIO.startCount > 0 }
         await waitUntil { controller.state == .failed }
+        XCTAssertGreaterThan(audioIO.startCount, 0)
         XCTAssertTrue(controller.errorMessage.lowercased().contains("capture"))
         XCTAssertEqual(controller.lastReasonCategoryForTesting, "capture_watchdog_exhausted")
     }
