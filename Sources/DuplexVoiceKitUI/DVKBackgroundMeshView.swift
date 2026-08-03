@@ -44,6 +44,7 @@ public struct DVKBackgroundMeshView: View {
         var rightY: CGFloat = 0.5
     }
 
+    @available(iOS 18.0, *)
     private var animatedMesh: some View {
         KeyframeAnimator(initialValue: MeshMotion(), repeating: true) { motion in
             meshView(motion: motion)
@@ -93,10 +94,12 @@ public struct DVKBackgroundMeshView: View {
         }
     }
 
+    @available(iOS 18.0, *)
     private var staticMesh: some View {
         meshView(motion: MeshMotion())
     }
 
+    @available(iOS 18.0, *)
     private func meshView(motion: MeshMotion) -> some View {
         MeshGradient(
             width: 3,
