@@ -10,6 +10,8 @@ public enum DVKCompanionAccessibilityID {
     public static let privacyAllowed="companion.privacyAllowed"; public static let privacyLimited="companion.privacyLimited"; public static let reauthorize="companion.reauthorize"
     public static let cards="companion.cards"; public static let reviewList="companion.reviewList"; public static let reviewDetail="companion.reviewDetail"; public static let reviewDelete="companion.reviewDelete"; public static let mockLab="companion.mockLab"; public static let characterPresentation="companion.character.presentation"
     public static let homeSettings="companion.home.settings"; public static let homeStatus="companion.home.status"; public static let homePrimaryCTA="companion.home.cta"; public static let homeHistory="companion.home.history"
+    public static let voiceMute="companion.voiceMute"; public static let voiceInterrupt="companion.voiceInterrupt"; public static let conversationReply="companion.conversation.reply"
+    public static let settingsConnection="companion.settings.connection"; public static let settingsTokenClear="companion.settings.tokenClear"
 }
 
 #if canImport(SwiftUI)
@@ -25,15 +27,20 @@ public final class DVKCompanionStoreAdapter: ObservableObject {
     public let store: DVKCompanionStore
     public let playbackAmplitudeRelay: DVKPlaybackAmplitudeRelay
     public let live2DHost: (any DVKLive2DCharacterHosting)?
-    public init(store:DVKCompanionStore, live2DHost:(any DVKLive2DCharacterHosting)? = nil){ self.store=store; self.live2DHost=live2DHost; let relay=DVKPlaybackAmplitudeRelay(); playbackAmplitudeRelay=relay; relay.setOnChange{[weak self,weak store] value in Task{@MainActor in store?.receivePlaybackAmplitude(value);self?.refresh()} }; store.setPlaybackAmplitudeInput{[weak relay] value in relay?.playbackAmplitudeDidChange(value)} }
+    public let runtimeConfiguration: DVKRuntimeConfiguration
+    public let tokenStore: any DVKTokenStoring
+    public init(store:DVKCompanionStore, live2DHost:(any DVKLive2DCharacterHosting)? = nil, runtimeConfiguration:DVKRuntimeConfiguration = .mock, tokenStore:any DVKTokenStoring = DVKMemoryTokenStore()){ self.store=store; self.live2DHost=live2DHost; self.runtimeConfiguration=runtimeConfiguration; self.tokenStore=tokenStore; let relay=DVKPlaybackAmplitudeRelay(); playbackAmplitudeRelay=relay; relay.setOnChange{[weak self,weak store] value in Task{@MainActor in store?.receivePlaybackAmplitude(value);self?.refresh()} }; store.setPlaybackAmplitudeInput{[weak relay] value in relay?.playbackAmplitudeDidChange(value)} }
     public convenience init(){ self.init(store:DVKCompanionStore()) }
     public func refresh(){ store.receivePlaybackAmplitude(playbackAmplitudeRelay.currentAmplitude); revision += 1 }
+    public var usesLiveConnection: Bool { runtimeConfiguration.mode == .live }
+    public var hasLiveToken: Bool { !(tokenStore.load() ?? "").isEmpty }
 }
 
 @MainActor
 public struct DVKCompanionStartupView: View {
     @StateObject private var adapter:DVKCompanionStoreAdapter
     public init(store:DVKCompanionStore){_adapter=StateObject(wrappedValue:DVKCompanionStoreAdapter(store:store))}
+    public init(store:DVKCompanionStore, runtimeConfiguration:DVKRuntimeConfiguration, tokenStore:any DVKTokenStoring){_adapter=StateObject(wrappedValue:DVKCompanionStoreAdapter(store:store,runtimeConfiguration:runtimeConfiguration,tokenStore:tokenStore))}
     public init(){self.init(store:DVKCompanionStore())}
     public var body:some View {
         Group {
@@ -332,7 +339,7 @@ public struct DVKCompanionHomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
-        .background(theme.backgroundGradient.ignoresSafeArea())
+        .background(DVKBackgroundMeshView(mode: .home, theme: theme))
         .toolbar(.hidden, for: .navigationBar)
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
@@ -440,7 +447,7 @@ public struct DVKCompanionProfilesView: View {
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .foregroundStyle(theme.textPrimary)
-        .background(theme.backgroundGradient.ignoresSafeArea())
+        .background(DVKBackgroundMeshView(mode: .home, theme: theme))
         .tint(theme.primaryAction)
         .accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
     }
@@ -925,7 +932,7 @@ public struct DVKCompanionConversationView: View {
     public var body:some View {
         let store=adapter.store
         let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance)
-        ScrollView{VStack(alignment:.leading,spacing:16){if let profile=store.selectedProfile{HStack{DVKCharacterPresentationView(profile:profile,state:store.characterState,reduceMotion:store.reduceMotionPreview,staticMode:store.presentationMode == .staticFallback,host:store.presentationMode == .staticFallback ? nil : adapter.live2DHost).frame(width:54,height:54);VStack(alignment:.leading){Text(profile.displayName).font(.headline);Text(profile.personalityTags.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)}};Text("Switch cat from the Cats tab when this conversation is idle.").font(.caption).foregroundStyle(.secondary)};Picker("Mode",selection:Binding(get:{store.mode},set:{store.setMode($0);adapter.refresh()})){Text("Text").tag(DVKCompanionMode.text);Text("Voice").tag(DVKCompanionMode.voice)}.pickerStyle(.segmented).accessibilityIdentifier(DVKCompanionAccessibilityID.modePicker);if store.mode == .text {DVKTextConversation(adapter:adapter)} else {DVKVoiceConversation(adapter:adapter, onEnded:onClose)}}.padding(20)}.background(DVKCompanionThemeResolver.resolve(profile:adapter.store.selectedProfile, appearance:adapter.store.appearance).backgroundGradient.ignoresSafeArea()).navigationTitle("Conversation")
+        ScrollView{VStack(alignment:.leading,spacing:16){if let profile=store.selectedProfile{HStack{DVKCharacterPresentationView(profile:profile,state:store.characterState,reduceMotion:store.reduceMotionPreview,staticMode:store.presentationMode == .staticFallback,host:store.presentationMode == .staticFallback ? nil : adapter.live2DHost).frame(width:54,height:54);VStack(alignment:.leading){Text(profile.displayName).font(.headline);Text(profile.personalityTags.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)}};Text("Switch cat from the Cats tab when this conversation is idle.").font(.caption).foregroundStyle(.secondary)};Picker("Mode",selection:Binding(get:{store.mode},set:{store.setMode($0);adapter.refresh()})){Text("Text").tag(DVKCompanionMode.text);Text("Voice").tag(DVKCompanionMode.voice)}.pickerStyle(.segmented).accessibilityIdentifier(DVKCompanionAccessibilityID.modePicker);if store.mode == .text {DVKTextConversation(adapter:adapter)} else {DVKVoiceConversation(adapter:adapter, onEnded:onClose)}}.padding(20)}.background(DVKBackgroundMeshView(mode: .call, theme: theme)).navigationTitle("Conversation")
         .toolbar { ToolbarItem(placement: .topBarLeading) { Button(action: onClose) { Image(systemName: store.hasActiveSession ? "chevron.down" : "xmark") }.accessibilityLabel(store.hasActiveSession ? "收起语音会话" : "关闭会话") } }
         .accessibilityIdentifier("companion.conversation")
     }
@@ -948,6 +955,15 @@ public struct DVKVoiceConversation: View {
     public var body: some View {
         let store = adapter.store
         let theme = DVKCompanionThemeResolver.resolve(profile: store.selectedProfile, appearance: store.appearance)
+        if adapter.usesLiveConnection, adapter.hasLiveToken {
+            DVKLiveVoiceConversation(adapter: adapter, onEnded: onEnded)
+        } else {
+            mockPane(store: store, theme: theme)
+        }
+    }
+
+    @ViewBuilder
+    private func mockPane(store: DVKCompanionStore, theme: DVKCompanionTheme) -> some View {
         let ripplePresentation = DVKCharacterVoiceRipplePresentation(
             amplitude: store.playbackAmplitude,
             voiceState: store.voiceState,
@@ -1036,10 +1052,183 @@ public struct DVKVoiceConversation: View {
 }
 
 @MainActor
+public struct DVKLiveVoiceConversation: View {
+    @ObservedObject var adapter: DVKCompanionStoreAdapter
+    private let onEnded: () -> Void
+    @StateObject private var controller: DVKCompanionVoiceSessionController
+
+    public init(adapter: DVKCompanionStoreAdapter, onEnded: @escaping () -> Void = {}) {
+        self.adapter = adapter
+        self.onEnded = onEnded
+        _controller = StateObject(wrappedValue: DVKCompanionVoiceSessionController(
+            configuration: adapter.runtimeConfiguration,
+            tokenStore: adapter.tokenStore
+        ))
+    }
+
+    public var body: some View {
+        let store = adapter.store
+        let theme = DVKCompanionThemeResolver.resolve(profile: store.selectedProfile, appearance: store.appearance)
+        let ripplePresentation = DVKCharacterVoiceRipplePresentation(
+            amplitude: controller.playbackAmplitude,
+            voiceState: controller.companionVoiceState,
+            reduceMotion: store.reduceMotionPreview,
+            staticMode: store.presentationMode == .staticFallback,
+            hasError: !controller.errorMessage.isEmpty
+        )
+        VStack(spacing: 16) {
+            if let profile = store.selectedProfile {
+                VStack(spacing: 8) {
+                    ZStack {
+                        DVKCharacterVoiceRipple(presentation: ripplePresentation, theme: theme)
+                        DVKCharacterPresentationView(
+                            profile: profile,
+                            state: liveCharacterState,
+                            reduceMotion: store.reduceMotionPreview,
+                            staticMode: store.presentationMode == .staticFallback,
+                            host: store.presentationMode == .staticFallback ? nil : adapter.live2DHost
+                        )
+                        .frame(height: 220)
+                    }
+                    .frame(height: 286)
+                    Text(profile.displayName)
+                        .font(.title3.bold())
+                        .foregroundStyle(theme.textPrimary)
+                    Text(controller.errorMessage.isEmpty ? ripplePresentation.statusText : controller.errorMessage)
+                        .font(.headline)
+                        .foregroundStyle(theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
+                }
+            }
+            if !controller.responseText.isEmpty {
+                Text(controller.responseText)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(theme.textPrimary)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.conversationReply)
+            }
+            DVKIOS26GlassEffectContainer {
+                HStack(spacing: 10) {
+                    Button(controller.isMuted ? "Unmute" : "Mute") {
+                        Task { await controller.setMuted(!controller.isMuted) }
+                    }
+                    .disabled(!controller.canMute)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceMute)
+                    .dvkGlassControl(theme: theme)
+
+                    Button("Interrupt") {
+                        Task { await controller.interrupt() }
+                    }
+                    .disabled(!controller.canInterrupt)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceInterrupt)
+                    .dvkGlassControl(theme: theme)
+
+                    Button(role: .destructive) {
+                        Task {
+                            await controller.endCurrentCall()
+                            adapter.refresh()
+                            onEnded()
+                        }
+                    } label: {
+                        Label("结束通话", systemImage: "phone.down.fill")
+                    }
+                    .disabled(!controller.canEndVoice)
+                    .accessibilityLabel("结束通话")
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceEnd)
+                    .dvkGlassControl(theme: theme)
+                }
+            }
+        }
+        .task { await controller.startNewCall() }
+        .onDisappear { Task { await controller.endCurrentCall() } }
+    }
+
+    private var liveCharacterState: DVKCompanionCharacterPresentationState {
+        switch controller.companionVoiceState {
+        case .speaking: return .speaking(amplitude: controller.playbackAmplitude)
+        case .listening: return .listening
+        case .processing: return .thinking
+        default: return controller.errorMessage.isEmpty ? .idle : .error
+        }
+    }
+}
+
+@MainActor
 public struct DVKCompanionSettingsView: View {
     @ObservedObject var adapter:DVKCompanionStoreAdapter
     public init(adapter:DVKCompanionStoreAdapter){self.adapter=adapter}
-    public var body:some View{let store=adapter.store;let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance);Form{Section("Default cat"){Picker("Cat",selection:Binding(get:{store.selectedProfileID ?? ""},set:{store.selectPreviewProfile(id:$0);store.confirmProfileSelection();adapter.refresh()})){ForEach(store.profiles){Text($0.displayName).tag($0.id)}}};Section("Appearance"){Picker("Theme",selection:Binding(get:{store.appearance},set:{store.setAppearance($0);adapter.refresh()})){ForEach(DVKCompanionAppearance.allCases,id:\.self){Text($0.rawValue.capitalized).tag($0)}};Toggle("Reduce Motion preview",isOn:Binding(get:{store.reduceMotionPreview},set:{store.setReduceMotionPreview($0);adapter.refresh()}));Text("Dynamic Type, VoiceOver and Reduce Motion are supported by the public UI.").font(.footnote)};Section("Privacy"){Button(store.privacy == .allowed ? "Preview limited privacy":"Re-authorize"){if store.privacy == .allowed{store.setPrivacy(.limited)}else{store.reauthorize()};adapter.refresh()}.accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyLimited:DVKCompanionAccessibilityID.reauthorize)};Section("Mock Lab"){DVKMockLabView(adapter:adapter)};Section("About"){Text("DVK Companion is local-only, provider-neutral, and uses four fictional mock cats. No production identity, prompt, token, or asset is included.")}}.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding).scrollContentBackground(.hidden).listRowBackground(theme.surface).foregroundStyle(theme.textPrimary).tint(theme.primaryAction).background(theme.pageBackground).dvkIOS26NavigationChrome(theme: theme).navigationTitle("Settings").accessibilityIdentifier(DVKCompanionAccessibilityID.settings)}
+    public var body: some View {
+        let store=adapter.store
+        let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance)
+        Form {
+            Section("Default cat") {
+                Picker("Cat", selection: Binding(get: { store.selectedProfileID ?? "" }, set: { store.selectPreviewProfile(id: $0); store.confirmProfileSelection(); adapter.refresh() })) {
+                    ForEach(store.profiles) { Text($0.displayName).tag($0.id) }
+                }
+            }
+            Section("Appearance") {
+                Picker("Theme", selection: Binding(get: { store.appearance }, set: { store.setAppearance($0); adapter.refresh() })) {
+                    ForEach(DVKCompanionAppearance.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                }
+                Toggle("Reduce Motion preview", isOn: Binding(get: { store.reduceMotionPreview }, set: { store.setReduceMotionPreview($0); adapter.refresh() }))
+                Text("Dynamic Type, VoiceOver and Reduce Motion are supported by the public UI.").font(.footnote)
+            }
+            Section("Connection") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(adapter.runtimeConfiguration.statusDescription)
+                        .font(.subheadline)
+                        .foregroundStyle(theme.textPrimary)
+                    Text(adapter.hasLiveToken
+                         ? "A private token is stored in the secure store."
+                         : "No token stored. Live chat and voice need a token plus a live build configuration.")
+                        .font(.caption)
+                        .foregroundStyle(theme.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsConnection)
+                NavigationLink("Device binding") {
+                    DVKDeviceBindingView(
+                        configuration: adapter.runtimeConfiguration,
+                        tokenStore: adapter.tokenStore
+                    )
+                }
+                Button("Clear saved token") {
+                    try? adapter.tokenStore.clear()
+                    adapter.refresh()
+                }
+                .disabled(!adapter.hasLiveToken)
+                .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsTokenClear)
+                if !adapter.runtimeConfiguration.buildSHA.isEmpty {
+                    Text("Build \(adapter.runtimeConfiguration.buildSHA) · \(adapter.runtimeConfiguration.buildTime)")
+                        .font(.caption2)
+                        .foregroundStyle(theme.textSecondary)
+                }
+            }
+            Section("Privacy") {
+                Button(store.privacy == .allowed ? "Preview limited privacy" : "Re-authorize") {
+                    if store.privacy == .allowed { store.setPrivacy(.limited) } else { store.reauthorize() }
+                    adapter.refresh()
+                }
+                .accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyLimited : DVKCompanionAccessibilityID.reauthorize)
+            }
+            Section("Mock Lab") {
+                DVKMockLabView(adapter: adapter)
+            }
+            Section("About") {
+                Text("DVK Companion is local-only, provider-neutral, and uses four fictional mock cats. No production identity, prompt, token, or asset is included.")
+            }
+        }
+        .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(theme.surface)
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.primaryAction)
+        .background(theme.pageBackground)
+        .dvkIOS26NavigationChrome(theme: theme)
+        .navigationTitle("Settings")
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.settings)
+    }
 }
 
 @MainActor
