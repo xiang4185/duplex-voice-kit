@@ -159,6 +159,55 @@ public struct DVKCompanionProfilesView: View {
 
 
 @MainActor
+private struct DVKRoleCardCarouselItem: View {
+    let profile: DVKCompanionProfile
+    let selected: Bool
+    let isPreview: Bool
+    let reduced: Bool
+    let width: CGFloat
+    let canSelectProfiles: Bool
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        DVKRoleLargeCard(
+            profile: profile,
+            selected: selected,
+            isPreview: isPreview,
+            reduced: reduced
+        )
+        .frame(width: width)
+        .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+            let amount = CGFloat(phase.value)
+            let scale: CGFloat = reduced
+                ? (phase.isIdentity ? 1 : 0.94)
+                : 1 - min(abs(amount) * 0.06, 0.06)
+            let opacity: Double = reduced
+                ? (phase.isIdentity ? 1 : 0.82)
+                : 1 - min(abs(phase.value) * 0.18, 0.18)
+            let rotation: Double = reduced ? 0 : phase.value * -4
+            let verticalOffset: CGFloat = reduced
+                ? 0
+                : min(abs(amount) * 6, 6)
+
+            let scaledContent = content.scaleEffect(scale)
+            let fadedContent = scaledContent.opacity(opacity)
+            let rotatedContent = fadedContent.rotation3DEffect(
+                .degrees(rotation),
+                axis: (x: 0, y: 1, z: 0)
+            )
+            rotatedContent.offset(y: verticalOffset)
+        }
+        .id(profile.id)
+        .accessibilityIdentifier("companion.profile.card.\(profile.id)")
+        .accessibilityLabel(profile.accessibilityDescription)
+        .onTapGesture {
+            guard canSelectProfiles else { return }
+            onSelect(profile.id)
+        }
+    }
+}
+
+@MainActor
 private struct DVKRoleCardCarousel: View {
     @ObservedObject private var adapter:DVKCompanionStoreAdapter
     let openConversation:()->Void
@@ -178,30 +227,21 @@ private struct DVKRoleCardCarousel: View {
                 ScrollView(.horizontal,showsIndicators:false) {
                     LazyHStack(spacing:16) {
                         ForEach(store.profiles) { profile in
-                            DVKRoleLargeCard(profile:profile,selected:profile.id == store.selectedProfileID,isPreview:profile.id == store.previewProfileID,reduced:reduced)
-                                .frame(width:width)
-                                .scrollTransition(.interactive,axis:.horizontal) { content,phase in
-                                    let amount=CGFloat(phase.value)
-                                    let scale:CGFloat=reduced ? (phase.isIdentity ? 1:0.94):(1-min(abs(amount)*0.06,0.06))
-                                    let opacity:Double=reduced ? (phase.isIdentity ? 1:0.82):(1-min(abs(phase.value)*0.18,0.18))
-                                    let rotation:Double=reduced ? 0:phase.value * -4
-                                    let verticalOffset:CGFloat=reduced ? 0:min(abs(amount)*6,6)
-                                    let scaledContent=content.scaleEffect(scale)
-                                    let fadedContent=scaledContent.opacity(opacity)
-                                    let rotatedContent=fadedContent.rotation3DEffect(.degrees(rotation),axis:(x:0,y:1,z:0))
-                                    rotatedContent.offset(y:verticalOffset)
-                                }
-                                .id(profile.id)
-                                .accessibilityIdentifier("companion.profile.card.\(profile.id)")
-                                .accessibilityLabel(profile.accessibilityDescription)
-                                .onTapGesture {
-                                    guard store.canSelectProfiles else { return }
-                                    store.selectPreviewProfile(id:profile.id)
-                                    scrollPosition=profile.id
-                                    adapter.refresh()
-                                    if reduced { proxy.scrollTo(profile.id,anchor:.center) }
-                                    else { withAnimation(.snappy(duration:0.32)) { proxy.scrollTo(profile.id,anchor:.center) } }
-                                }
+                            DVKRoleCardCarouselItem(
+                                profile: profile,
+                                selected: profile.id == store.selectedProfileID,
+                                isPreview: profile.id == store.previewProfileID,
+                                reduced: reduced,
+                                width: width,
+                                canSelectProfiles: store.canSelectProfiles
+                            ) { id in
+                                select(
+                                    id,
+                                    store: store,
+                                    proxy: proxy,
+                                    reduced: reduced
+                                )
+                            }
                         }
                     }.scrollTargetLayout().padding(.vertical,12)
                 }
@@ -227,6 +267,27 @@ private struct DVKRoleCardCarousel: View {
         }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.profilePreview)
     }
+    private func select(
+        _ id: String,
+        store: DVKCompanionStore,
+        proxy: ScrollViewProxy,
+        reduced: Bool
+    ) {
+        guard store.canSelectProfiles else { return }
+        store.selectPreviewProfile(id: id)
+        scrollPosition = id
+        adapter.refresh()
+
+        if reduced {
+            proxy.scrollTo(id, anchor: .center)
+        } else {
+            let animation: Animation = .snappy(duration: 0.32)
+            withAnimation(animation) {
+                proxy.scrollTo(id, anchor: .center)
+            }
+        }
+    }
+
     private func move(_ offset:Int,_ store:DVKCompanionStore,_ proxy:ScrollViewProxy) {
         guard store.canSelectProfiles,let index=store.profiles.firstIndex(where:{$0.id == store.previewProfileID}) else{return}
         let destination=index+offset
