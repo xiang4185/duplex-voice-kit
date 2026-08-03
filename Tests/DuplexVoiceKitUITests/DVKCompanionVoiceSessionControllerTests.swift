@@ -414,6 +414,11 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
     // On the simulator the watchdog can run from .ready straight into .failed,
     // so the test waits on the durable capture-started state and the final
     // failure instead of the transient .ready / isRecording flags.
+    // The watchdog interval must outlive the session ready gate: waitForReady
+    // polls every 50 ms and, if it observes state == .failed, funnels the
+    // failure through applyDisconnectInfo, which overwrites the watchdog's
+    // descriptive error with a generic user message. Firing the stall after
+    // the gate has returned keeps the original capture error message intact.
     func testCaptureWatchdogFailsAfterExhaustion() async {
         audioIO.callbackCount = 0
         audioIO.engineRunning = false
@@ -421,7 +426,7 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         audioIO.recoverFailure = DVKAudioUploadError.sendFailed
         let controller = makeController(
             stallThreshold: .milliseconds(30),
-            watchdogInterval: .milliseconds(20)
+            watchdogInterval: .milliseconds(150)
         )
         await controller.startNewCall()
         await waitUntil { audioIO.startCount > 0 }
