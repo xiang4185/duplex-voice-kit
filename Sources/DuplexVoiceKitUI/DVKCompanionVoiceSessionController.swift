@@ -919,6 +919,11 @@ public final class DVKCompanionVoiceSessionController: ObservableObject {
 
         case .pong, .serverState:
             break
+
+        // Fallback for the gated ready/resume cases when the waiting gate is
+        // for a different event; keeps the switch exhaustive without a default.
+        case .sessionReady, .sessionResumed:
+            break
         }
     }
 
