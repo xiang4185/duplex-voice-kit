@@ -45,7 +45,7 @@ SENSITIVE_NAMES = {".env", "Secrets.xcconfig"}
 SENSITIVE_SUFFIXES = {
     ".p12", ".pfx", ".pem", ".key", ".cer", ".crt", ".mobileprovision",
     ".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm",
-    ".wav", ".mp3", ".m4a", ".pcm", ".ipa",
+    ".wav", ".mp3", ".m4a", ".pcm", ".ipa", ".env",
 }
 
 FORBIDDEN_SOURCE_TERMS = (
@@ -578,6 +578,73 @@ def main() -> None:
         failures.append("glass control helper must expose separate buttonStyle and glassEffect branches")
     if "if #available(iOS 26.0, *)" not in glass_text or "content\n        } else" not in glass_text:
         failures.append("iOS 26 navigation chrome must return automatic system content")
+
+    # ------------------------------------------------------------------
+    # V7.0 one-shot sanitized migration gates (lightweight, no DLP engine)
+    # ------------------------------------------------------------------
+    v70_required = (
+        "Sources/DuplexVoiceKitCompanion/DVKRuntimeConfiguration.swift",
+        "Sources/DuplexVoiceKitCompanion/DVKTokenStoring.swift",
+        "Sources/DuplexVoiceKitCompanion/DVKBackendClient.swift",
+        "Sources/DuplexVoiceKitCompanion/DVKChatService.swift",
+        "Sources/DuplexVoiceKitUI/DVKVoiceTransport.swift",
+        "Sources/DuplexVoiceKitUI/DVKCompanionVoiceSessionController.swift",
+        "Sources/DuplexVoiceKitUI/DVKDeviceBindingView.swift",
+        "Tests/DuplexVoiceKitCompanionTests/DVKRuntimeConfigurationTests.swift",
+        "Tests/DuplexVoiceKitCompanionTests/DVKTokenStoreTests.swift",
+        "Tests/DuplexVoiceKitCompanionTests/DVKChatServiceTests.swift",
+        "Tests/DuplexVoiceKitUITests/DVKVoiceTransportTests.swift",
+        "Tests/DuplexVoiceKitUITests/DVKCompanionVoiceSessionControllerTests.swift",
+    )
+    for relative in v70_required:
+        if not (ROOT / relative).is_file():
+            failures.append("missing V7.0 required file: " + relative)
+
+    v70_private_terms = (
+        "xiaomao-api.xiangpt.ltd",
+        "xiaomao-voice.xiangpt.ltd",
+        "xiang4185@gmail.com",
+        "com.xiang4185",
+        "ios-owner-01",
+        "ios-owner-dev",
+        "/srv/yusuan/",
+        "owner-token.txt",
+        "xiaomao-app-backend.service",
+        "xiaomao-app-voice.service",
+        "xiaomao-app-test-tunnel",
+        "SC2.0",
+        "路线 B",
+        "sc2.0",
+    )
+    v70_text_extensions = {".md", ".py", ".swift", ".yml", ".yaml"}
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if path.suffix.lower() not in v70_text_extensions:
+            continue
+        if relative.as_posix() == "Scripts/static_check.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for term in v70_private_terms:
+            if term in text:
+                failures.append(f"V7.0 forbidden private term {term!r}: {relative}")
+
+    v70_bearer_pattern = re.compile(
+        r"Authorization:\s*Bearer\s+[A-Za-z0-9._\-]{12,}"
+    )
+    v70_token_assignment_pattern = re.compile(
+        r"DEVELOPMENT_TOKEN\s*=\s*[\"'][^\"']+[\"']"
+    )
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if path.suffix.lower() not in v70_text_extensions:
+            continue
+        if relative.as_posix() == "Scripts/static_check.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if v70_bearer_pattern.search(text):
+            failures.append("V7.0 possible embedded live bearer credential: " + str(relative))
+        if v70_token_assignment_pattern.search(text):
+            failures.append("V7.0 possible embedded development token: " + str(relative))
 
 
     result = {
