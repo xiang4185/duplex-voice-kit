@@ -9,6 +9,7 @@ public enum DVKCompanionAccessibilityID {
     public static let voiceState="companion.voiceState"; public static let voiceStart="companion.voiceStart"; public static let voiceAdvance="companion.voiceAdvance"; public static let voiceEnd="companion.voiceEnd"; public static let voiceError="companion.voiceError"
     public static let privacyAllowed="companion.privacyAllowed"; public static let privacyLimited="companion.privacyLimited"; public static let reauthorize="companion.reauthorize"
     public static let cards="companion.cards"; public static let reviewList="companion.reviewList"; public static let reviewDetail="companion.reviewDetail"; public static let reviewDelete="companion.reviewDelete"; public static let mockLab="companion.mockLab"; public static let characterPresentation="companion.character.presentation"
+    public static let homeSettings="companion.home.settings"; public static let homeStatus="companion.home.status"; public static let homePrimaryCTA="companion.home.cta"; public static let homeHistory="companion.home.history"
 }
 
 #if canImport(SwiftUI)
@@ -98,50 +99,107 @@ public struct DVKCompanionShellView: View {
 }
 
 @MainActor
-private struct DVKHomeCharacterPanel: View {
+enum DVKHomePresentation {
+    static func primaryCTATitle(profileName: String?, hasActiveSession: Bool) -> String {
+        if hasActiveSession { return "Return to conversation" }
+        guard let name = profileName, !name.isEmpty else { return "Talk with your cat" }
+        return "Talk with \(name)"
+    }
+}
+
+@MainActor
+private struct DVKHomeSettingsButton: View {
+    let theme: DVKCompanionTheme
+    let height: CGFloat
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "gearshape")
+                .imageScale(.medium)
+                .frame(width: height, height: height)
+                .contentShape(Rectangle())
+        }
+        .dvkGlassControl(theme: theme)
+        .frame(height: height)
+        .accessibilityLabel("Open settings")
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.homeSettings)
+    }
+}
+
+@MainActor
+private struct DVKHomeCharacterCanvas: View {
     let profile: DVKCompanionProfile
     let state: DVKCompanionCharacterPresentationState
+    let dimension: CGFloat
     let reduceMotion: Bool
     let staticMode: Bool
     let host: (any DVKLive2DCharacterHosting)?
-    let theme: DVKCompanionTheme
-    let characterHeight: CGFloat
 
     var body: some View {
-        VStack(spacing: 6) {
-            DVKCharacterPresentationView(
-                profile: profile,
-                state: state,
-                reduceMotion: reduceMotion,
-                staticMode: staticMode,
-                host: staticMode ? nil : host
-            )
-            .frame(height: characterHeight)
-            .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
-            Text(profile.displayName)
-                .font(.title2.bold())
-            Text(profile.personalityTags.joined(separator: "  ·  "))
-                .font(.caption)
-                .foregroundStyle(theme.primaryAction)
-            Text(profile.greeting)
-                .font(.system(size: 18, design: .serif))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .foregroundStyle(theme.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(12)
-        .background(
-            theme.elevatedSurface,
-            in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+        DVKCharacterPresentationView(
+            profile: profile,
+            state: state,
+            reduceMotion: reduceMotion,
+            staticMode: staticMode,
+            host: staticMode ? nil : host
         )
+        .frame(width: 250, height: 250)
+        .scaleEffect(dimension / 250)
+        .frame(width: dimension, height: dimension)
+        .contentShape(Rectangle())
+    }
+}
+
+@MainActor
+private struct DVKHomeHistoryEntry: View {
+    let profile: DVKCompanionProfile?
+    let theme: DVKCompanionTheme
+    let height: CGFloat
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                if let profile {
+                    DVKHomeCharacterCanvas(
+                        profile: profile,
+                        state: .idle,
+                        dimension: 40,
+                        reduceMotion: true,
+                        staticMode: true,
+                        host: nil
+                    )
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Conversation history")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text("Open public mock reviews")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .foregroundStyle(theme.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.textSecondary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: height)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .dvkGlassSurface(theme: theme)
+        .accessibilityLabel("Conversation history, Open public mock reviews")
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.homeHistory)
     }
 }
 
 @MainActor
 public struct DVKCompanionHomeView: View {
     @ObservedObject private var adapter: DVKCompanionStoreAdapter
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     private let openConversation: () -> Void
 
     public init(
@@ -160,161 +218,142 @@ public struct DVKCompanionHomeView: View {
         )
 
         GeometryReader { geometry in
-            let usableHeight = max(
-                0,
-                geometry.size.height - dvkTabBarBottomContentPadding
-            )
-            let regularHomeFixedBudget: CGFloat =
-                64 + 132 + 52 + 32 + 48 + 96 + 16
-            let regularAvailableCharacterHeight = max(
-                0,
-                usableHeight - regularHomeFixedBudget
-            )
-            let compact = regularAvailableCharacterHeight < 178
-            let homeHeaderBudget: CGFloat = compact ? 56 : 64
-            let homePanelFixedBudget: CGFloat = compact ? 120 : 132
-            let homeActionsBudget: CGFloat = 52
-            let homeStatusBudget: CGFloat = 32
-            let homePrivacyBudget: CGFloat = 48
-            let homeSpacingBudget: CGFloat = compact ? 60 : 96
-            let homeTopPadding: CGFloat = compact ? 8 : 16
-            let fixedHomeBudget = homeHeaderBudget
-                + homePanelFixedBudget
-                + homeActionsBudget
-                + homeStatusBudget
-                + homePrivacyBudget
-                + homeSpacingBudget
-                + homeTopPadding
-            let availableCharacterHeight = max(
-                0,
-                usableHeight - fixedHomeBudget
-            )
+            let availableHeight = geometry.size.height
+            let compact = store.hasActiveSession || availableHeight < 580
+            let topPadding: CGFloat = compact ? 8 : 16
+            let settingsHeight: CGFloat = compact ? 40 : 44
+            let settingsGap: CGFloat = compact ? 4 : 8
+            let statusHeight: CGFloat = compact ? 18 : 22
+            let nameHeight: CGFloat = compact ? 26 : 30
+            let readyHeight: CGFloat = compact ? 16 : 18
+            let ctaHeight: CGFloat = compact ? 48 : 54
+            let historyHeight: CGFloat = compact ? 56 : 64
+            let innerSpacing: CGFloat = compact ? 10 : 14
+            let nonCharacterBudget = statusHeight
+                + nameHeight
+                + readyHeight
+                + ctaHeight
+                + historyHeight
+            let characterMaxHeight: CGFloat = compact ? 200 : 300
             let characterHeight = min(
-                compact ? 178 : 230,
-                availableCharacterHeight
+                characterMaxHeight,
+                max(0, availableHeight - topPadding - settingsHeight - settingsGap - nonCharacterBudget - innerSpacing * 5)
             )
 
-            VStack(alignment: .leading, spacing: compact ? 10 : 16) {
-                Text("A little room for today")
-                    .font(.system(
-                        size: compact ? 28 : 32,
-                        weight: .semibold,
-                        design: .serif
-                    ))
-                Text("DVK Companion · Mock only")
-                    .font(.subheadline)
-                    .foregroundStyle(theme.textSecondary)
-
-                if let profile = store.selectedProfile {
-                    DVKHomeCharacterPanel(
-                        profile: profile,
-                        state: store.characterState,
-                        reduceMotion: store.reduceMotionPreview,
-                        staticMode: store.presentationMode == .staticFallback,
-                        host: adapter.live2DHost,
+            VStack(spacing: 0) {
+                HStack {
+                    DVKHomeSettingsButton(
                         theme: theme,
-                        characterHeight: characterHeight
-                    )
-
-                    DVKIOS26GlassEffectContainer {
-                        HStack(spacing: 12) {
-                            homeCTA(
-                                "Text",
-                                icon: "text.bubble.fill",
-                                theme: theme
-                            ) {
-                                store.setMode(.text)
-                                adapter.refresh()
-                                openConversation()
-                            }
-                            homeCTA(
-                                "Voice",
-                                icon: "waveform",
-                                theme: theme
-                            ) {
-                                store.setMode(.voice)
-                                adapter.refresh()
-                                openConversation()
-                            }
-                        }
+                        height: settingsHeight
+                    ) {
+                        store.setSelectedTab(.settings)
+                        adapter.refresh()
                     }
-
-                    Text(
-                        store.lastError
-                            ?? "Your selected cat is ready for a gentle mock conversation."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(
-                        store.lastError == nil ? theme.textSecondary : .red
-                    )
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                } else {
-                    ContentUnavailableView(
-                        "Choose a cat",
-                        systemImage: "pawprint.fill",
-                        description: Text("Visit Cats to choose a public mock profile.")
-                    )
+                    Spacer()
                 }
+                .frame(height: settingsHeight)
 
-                privacyCard(store)
+                Spacer(minLength: settingsGap)
+
+                VStack(spacing: innerSpacing) {
+                    if let profile = store.selectedProfile {
+                        DVKHomeCharacterCanvas(
+                            profile: profile,
+                            state: store.characterState,
+                            dimension: characterHeight,
+                            reduceMotion: systemReduceMotion || store.reduceMotionPreview,
+                            staticMode: store.presentationMode == .staticFallback,
+                            host: adapter.live2DHost
+                        )
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
+
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(theme.activeStatus)
+                                .frame(width: 8, height: 8)
+                            Text("Here with you")
+                                .font(.footnote)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(theme.textSecondary)
+                        }
+                        .frame(height: statusHeight)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.homeStatus)
+
+                        Text(profile.displayName)
+                            .font(.title2.bold())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .foregroundStyle(theme.textPrimary)
+                            .frame(height: nameHeight)
+
+                        Text("Ready")
+                            .font(.subheadline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .foregroundStyle(theme.textSecondary)
+                            .frame(height: readyHeight)
+
+                        primaryCTA(
+                            title: DVKHomePresentation.primaryCTATitle(
+                                profileName: profile.displayName,
+                                hasActiveSession: store.hasActiveSession
+                            ),
+                            theme: theme,
+                            height: ctaHeight
+                        ) {
+                            store.setMode(.voice)
+                            adapter.refresh()
+                            openConversation()
+                        }
+
+                        DVKHomeHistoryEntry(
+                            profile: profile,
+                            theme: theme,
+                            height: historyHeight
+                        ) {
+                            store.setSelectedTab(.reviews)
+                            adapter.refresh()
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            "Choose a cat",
+                            systemImage: "pawprint.fill",
+                            description: Text("Visit Cats to choose a public mock profile.")
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
-            .padding(.top, compact ? 8 : 16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, topPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .background(theme.backgroundGradient.ignoresSafeArea())
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Settings", systemImage: "gearshape") {
-                    store.setSelectedTab(.settings)
-                    adapter.refresh()
-                }
-                .accessibilityLabel("Open settings")
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
 
-    private func homeCTA(
-        _ title: String,
-        icon: String,
+    private func primaryCTA(
+        title: String,
         theme: DVKCompanionTheme,
+        height: CGFloat,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: icon)
+            Text(title)
+                .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .frame(height: height)
         }
-        .dvkGlassControl(theme: theme, prominent: title == "Text")
-    }
-
-    private func privacyCard(_ store: DVKCompanionStore) -> some View {
-        let theme = DVKCompanionThemeResolver.resolve(
-            profile: store.selectedProfile,
-            appearance: store.appearance
-        )
-        return HStack {
-            Image(systemName: store.privacy == .allowed
-                ? "checkmark.shield.fill"
-                : "lock.shield.fill")
-            Text(store.privacy == .allowed ? "Privacy allowed" : "Privacy limited")
-            Spacer()
-            Text("Mock")
-                .font(.caption)
-                .foregroundStyle(theme.textSecondary)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.surface, in: RoundedRectangle(cornerRadius: 18))
-        .accessibilityIdentifier(
-            store.privacy == .allowed
-                ? DVKCompanionAccessibilityID.privacyAllowed
-                : DVKCompanionAccessibilityID.privacyLimited
-        )
+        .dvkGlassControl(theme: theme, prominent: true)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.homePrimaryCTA)
     }
 }
 
