@@ -1,0 +1,141 @@
+name: Unsigned Showcase IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-showcase-ipa:
+    name: Build unsigned Showcase IPA
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Show toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          git rev-parse HEAD
+
+      - name: Install or confirm XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen version
+
+      - name: Generate Showcase Xcode project
+        working-directory: Examples/DVKCompanionShowcase
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodegen generate
+
+      - name: Build unsigned iphoneos Showcase app
+        working-directory: Examples/DVKCompanionShowcase
+        shell: bash
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/DVKUnsignedIPA
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DVKCompanionShowcase.xcodeproj \
+            -scheme DVKCompanionShowcase \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Verify iphoneos app product
+        id: verify-app
+        shell: bash
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/DVKUnsignedIPA
+        run: |
+          set -euo pipefail
+          APP="$DERIVED_DATA/Build/Products/Debug-iphoneos/DVKCompanionShowcase.app"
+          [[ -d "$APP" ]]
+          [[ -f "$APP/Info.plist" ]]
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          [[ -f "$APP/$EXECUTABLE" ]]
+          lipo -info "$APP/$EXECUTABLE" | grep -q 'arm64'
+          xcrun vtool -show-build -arch arm64 "$APP/$EXECUTABLE" | grep -q 'platform IOS'
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          [[ "$BUNDLE_ID" == *"DVKCompanionShowcase"* ]]
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
+          echo "minimum_os=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          echo "Verified iphoneos app: DVKCompanionShowcase.app"
+          echo "Bundle ID: $BUNDLE_ID"
+
+      - name: Verify app is unsigned
+        shell: bash
+        env:
+          APP: ${{ steps.verify-app.outputs.app }}
+        run: |
+          set -euo pipefail
+          set +e
+          codesign -d --verbose=4 "$APP" > "$RUNNER_TEMP/codesign-check.txt" 2>&1
+          CODESIGN_STATUS=$?
+          set -e
+          if [[ "$CODESIGN_STATUS" -eq 0 ]]; then
+            echo 'A valid code signature was detected; refusing to package.'
+            cat "$RUNNER_TEMP/codesign-check.txt"
+            exit 1
+          fi
+          grep -qi 'code object is not signed at all' "$RUNNER_TEMP/codesign-check.txt"
+          echo 'Verified: app has no valid code signature.'
+
+      - name: Package unsigned IPA
+        id: package
+        shell: bash
+        env:
+          APP: ${{ steps.verify-app.outputs.app }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          PACKAGE_ROOT="$RUNNER_TEMP/DVKUnsignedIPAPackage"
+          mkdir -p "$PACKAGE_ROOT/Payload"
+          ditto "$APP" "$PACKAGE_ROOT/Payload/DVKCompanionShowcase.app"
+          IPA="$RUNNER_TEMP/DVKCompanionShowcase-unsigned-${SHORT_SHA}.ipa"
+          ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_ROOT/Payload" "$IPA"
+          echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
+          echo "sha=$IPA.sha256" >> "$GITHUB_OUTPUT"
+          echo "artifact=DVKCompanionShowcase-unsigned-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify IPA ZIP structure and checksum
+        id: verify-ipa
+        shell: bash
+        env:
+          IPA: ${{ steps.package.outputs.ipa }}
+          SHA_FILE: ${{ steps.package.outputs.sha }}
+        run: |
+          set -euo pipefail
+          unzip -t "$IPA"
+          unzip -Z1 "$IPA" | grep -q '^Payload/DVKCompanionShowcase.app/'
+          shasum -a 256 "$IPA" > "$SHA_FILE"
+          test -s "$SHA_FILE"
+          cat "$SHA_FILE"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: |
+            ${{ steps.package.outputs.ipa }}
+            ${{ steps.package.outputs.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0
