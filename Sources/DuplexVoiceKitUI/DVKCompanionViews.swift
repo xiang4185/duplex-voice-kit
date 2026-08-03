@@ -98,65 +98,346 @@ public struct DVKCompanionShellView: View {
 }
 
 @MainActor
+private struct DVKHomeCharacterPanel: View {
+    let profile: DVKCompanionProfile
+    let state: DVKCompanionCharacterPresentationState
+    let reduceMotion: Bool
+    let staticMode: Bool
+    let host: (any DVKLive2DCharacterHosting)?
+    let theme: DVKCompanionTheme
+    let characterHeight: CGFloat
+
+    var body: some View {
+        VStack(spacing: 6) {
+            DVKCharacterPresentationView(
+                profile: profile,
+                state: state,
+                reduceMotion: reduceMotion,
+                staticMode: staticMode,
+                host: staticMode ? nil : host
+            )
+            .frame(height: characterHeight)
+            .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
+            Text(profile.displayName)
+                .font(.title2.bold())
+            Text(profile.personalityTags.joined(separator: "  ·  "))
+                .font(.caption)
+                .foregroundStyle(theme.primaryAction)
+            Text(profile.greeting)
+                .font(.system(size: 18, design: .serif))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .foregroundStyle(theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(
+            theme.elevatedSurface,
+            in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+        )
+    }
+}
+
+@MainActor
 public struct DVKCompanionHomeView: View {
-    @ObservedObject private var adapter:DVKCompanionStoreAdapter
-    private let openConversation:()->Void
-    public init(adapter:DVKCompanionStoreAdapter,openConversation:@escaping()->Void){self.adapter=adapter;self.openConversation=openConversation}
-    public var body:some View {
-        let store=adapter.store; let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance)
-        ScrollView {
-            VStack(alignment:.leading,spacing:18){
-                HStack{VStack(alignment:.leading,spacing:4){Text("A little room for today").font(.system(size:32,weight:.semibold,design:.serif));Text("DVK Companion · Mock only").font(.subheadline).foregroundStyle(.secondary)};Spacer()}.padding(.top,8)
-                if let profile=store.selectedProfile {
-                    VStack(spacing:8){DVKCharacterPresentationView(profile:profile,state:store.characterState,reduceMotion:store.reduceMotionPreview,staticMode:store.presentationMode == .staticFallback,host:adapter.store.presentationMode == .staticFallback ? nil : adapter.live2DHost).frame(height:230).accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation);Text(profile.displayName).font(.title2.bold());Text(profile.personalityTags.joined(separator:"  ·  ")).font(.caption).foregroundStyle(DVKCompanionThemeResolver.resolve(profile: adapter.store.selectedProfile, appearance: adapter.store.appearance).primaryAction);Text(profile.greeting).font(.system(size:18,design:.serif)).multilineTextAlignment(.center).foregroundStyle(.secondary)}
-                    .frame(maxWidth:.infinity).padding(18).background(theme.elevatedSurface,in:RoundedRectangle(cornerRadius:28,style:.continuous))
+    @ObservedObject private var adapter: DVKCompanionStoreAdapter
+    private let openConversation: () -> Void
+
+    public init(
+        adapter: DVKCompanionStoreAdapter,
+        openConversation: @escaping () -> Void
+    ) {
+        self.adapter = adapter
+        self.openConversation = openConversation
+    }
+
+    public var body: some View {
+        let store = adapter.store
+        let theme = DVKCompanionThemeResolver.resolve(
+            profile: store.selectedProfile,
+            appearance: store.appearance
+        )
+
+        GeometryReader { geometry in
+            let usableHeight = max(
+                0,
+                geometry.size.height - dvkTabBarBottomContentPadding
+            )
+            let regularHomeFixedBudget: CGFloat =
+                64 + 132 + 52 + 32 + 48 + 96 + 16
+            let regularAvailableCharacterHeight = max(
+                0,
+                usableHeight - regularHomeFixedBudget
+            )
+            let compact = regularAvailableCharacterHeight < 178
+            let homeHeaderBudget: CGFloat = compact ? 56 : 64
+            let homePanelFixedBudget: CGFloat = compact ? 120 : 132
+            let homeActionsBudget: CGFloat = 52
+            let homeStatusBudget: CGFloat = 32
+            let homePrivacyBudget: CGFloat = 48
+            let homeSpacingBudget: CGFloat = compact ? 60 : 96
+            let homeTopPadding: CGFloat = compact ? 8 : 16
+            let fixedHomeBudget = homeHeaderBudget
+                + homePanelFixedBudget
+                + homeActionsBudget
+                + homeStatusBudget
+                + homePrivacyBudget
+                + homeSpacingBudget
+                + homeTopPadding
+            let availableCharacterHeight = max(
+                0,
+                usableHeight - fixedHomeBudget
+            )
+            let characterHeight = min(
+                compact ? 178 : 230,
+                availableCharacterHeight
+            )
+
+            VStack(alignment: .leading, spacing: compact ? 10 : 16) {
+                Text("A little room for today")
+                    .font(.system(
+                        size: compact ? 28 : 32,
+                        weight: .semibold,
+                        design: .serif
+                    ))
+                Text("DVK Companion · Mock only")
+                    .font(.subheadline)
+                    .foregroundStyle(theme.textSecondary)
+
+                if let profile = store.selectedProfile {
+                    DVKHomeCharacterPanel(
+                        profile: profile,
+                        state: store.characterState,
+                        reduceMotion: store.reduceMotionPreview,
+                        staticMode: store.presentationMode == .staticFallback,
+                        host: adapter.live2DHost,
+                        theme: theme,
+                        characterHeight: characterHeight
+                    )
+
                     DVKIOS26GlassEffectContainer {
-                        HStack(spacing:12){homeCTA("Text",icon:"text.bubble.fill"){store.setMode(.text);adapter.refresh();openConversation()};homeCTA("Voice",icon:"waveform"){store.setMode(.voice);adapter.refresh();openConversation()}}
+                        HStack(spacing: 12) {
+                            homeCTA(
+                                "Text",
+                                icon: "text.bubble.fill",
+                                theme: theme
+                            ) {
+                                store.setMode(.text)
+                                adapter.refresh()
+                                openConversation()
+                            }
+                            homeCTA(
+                                "Voice",
+                                icon: "waveform",
+                                theme: theme
+                            ) {
+                                store.setMode(.voice)
+                                adapter.refresh()
+                                openConversation()
+                            }
+                        }
                     }
-                    Text(store.lastError ?? "Your selected cat is ready for a gentle mock conversation.").font(.footnote).foregroundStyle(store.lastError == nil ? Color.secondary : Color.red)
-                } else { ContentUnavailableView("Choose a cat",systemImage:"pawprint.fill",description:Text("Visit Cats to choose a public mock profile.")) }
+
+                    Text(
+                        store.lastError
+                            ?? "Your selected cat is ready for a gentle mock conversation."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(
+                        store.lastError == nil ? theme.textSecondary : .red
+                    )
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                } else {
+                    ContentUnavailableView(
+                        "Choose a cat",
+                        systemImage: "pawprint.fill",
+                        description: Text("Visit Cats to choose a public mock profile.")
+                    )
+                }
+
                 privacyCard(store)
-                Text("Quick switch").font(.headline)
-                DVKProfileCarousel(adapter:adapter,compact:true,onPreview:{store.setSelectedTab(.profiles);adapter.refresh()})
-                VStack(alignment:.leading,spacing:8) {
-                    Text("Small public moments").font(.headline)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack { ForEach(DVKCompanionEasterEgg.allCases,id:\.self) { egg in Button(egg.title) { store.presentEasterEgg(egg); adapter.refresh() }.font(.caption).tint(theme.primaryAction).accessibilityLabel(egg.title) } }
-                    }
-                    if let egg=store.activeEasterEgg { DVKEasterEggCard(egg:egg) { store.dismissEasterEgg(); adapter.refresh() } }
-                }.accessibilityIdentifier(DVKCompanionAccessibilityID.cards)
-                if let review=store.reviews.first { reviewCard(review) }
-            }.padding(20)
-        }.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
-        .background(DVKCompanionThemeResolver.resolve(profile:adapter.store.selectedProfile, appearance:adapter.store.appearance).backgroundGradient.ignoresSafeArea())
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Settings", systemImage: "gearshape") { store.setSelectedTab(.settings); adapter.refresh() }.accessibilityLabel("Open settings") } }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, compact ? 8 : 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
+        .background(theme.backgroundGradient.ignoresSafeArea())
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Settings", systemImage: "gearshape") {
+                    store.setSelectedTab(.settings)
+                    adapter.refresh()
+                }
+                .accessibilityLabel("Open settings")
+            }
+        }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
-    private func homeCTA(_ title:String,icon:String,action:@escaping()->Void)->some View { Button(action:action){Label(title,systemImage:icon).frame(maxWidth:.infinity).padding(.vertical,12)}.dvkGlassControl(theme: DVKCompanionThemeResolver.resolve(profile: adapter.store.selectedProfile, appearance: adapter.store.appearance), prominent: title == "Text") }
-    private func privacyCard(_ store:DVKCompanionStore)->some View { let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance); return HStack{Image(systemName:store.privacy == .allowed ? "checkmark.shield.fill":"lock.shield.fill");Text(store.privacy == .allowed ? "Privacy allowed":"Privacy limited");Spacer();Text("Mock").font(.caption).foregroundStyle(.secondary)}.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(theme.surface,in:RoundedRectangle(cornerRadius:18)).accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyAllowed:DVKCompanionAccessibilityID.privacyLimited) }
-    private func reviewCard(_ review:DVKCompanionReview)->some View { let theme=DVKCompanionThemeResolver.resolve(profile:adapter.store.selectedProfile, appearance:adapter.store.appearance); return VStack(alignment:.leading,spacing:6){Text("Latest review").font(.headline);Text(review.title);Text(review.profileSnapshot?.displayName ?? "Mock cat").font(.caption).foregroundStyle(.secondary);Text(review.summary).font(.subheadline).foregroundStyle(.secondary)}.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(theme.surface,in:RoundedRectangle(cornerRadius:20)).accessibilityIdentifier("companion.home.latestReview") }
+
+    private func homeCTA(
+        _ title: String,
+        icon: String,
+        theme: DVKCompanionTheme,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .dvkGlassControl(theme: theme, prominent: title == "Text")
+    }
+
+    private func privacyCard(_ store: DVKCompanionStore) -> some View {
+        let theme = DVKCompanionThemeResolver.resolve(
+            profile: store.selectedProfile,
+            appearance: store.appearance
+        )
+        return HStack {
+            Image(systemName: store.privacy == .allowed
+                ? "checkmark.shield.fill"
+                : "lock.shield.fill")
+            Text(store.privacy == .allowed ? "Privacy allowed" : "Privacy limited")
+            Spacer()
+            Text("Mock")
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityIdentifier(
+            store.privacy == .allowed
+                ? DVKCompanionAccessibilityID.privacyAllowed
+                : DVKCompanionAccessibilityID.privacyLimited
+        )
+    }
 }
 
 @MainActor
 public struct DVKCompanionProfilesView: View {
-    @ObservedObject private var adapter:DVKCompanionStoreAdapter
-    private let openConversation:()->Void
-    public init(adapter:DVKCompanionStoreAdapter, openConversation:@escaping()->Void = {}){self.adapter=adapter;self.openConversation=openConversation}
-    public var body:some View {
-        let store=adapter.store
-        let theme=DVKCompanionThemeResolver.resolve(profile:store.previewProfile, appearance:store.appearance)
-        ScrollView {
-            VStack(alignment:.leading,spacing:16){
-                Text("Choose a cat").font(.system(size:32,weight:.semibold,design:.serif));Text("Four fictional public profiles. The choice is local and reversible.").font(.subheadline).foregroundStyle(.secondary)
-                DVKRoleCardCarousel(adapter:adapter, openConversation:openConversation)
-                if !store.canSelectProfiles { Text("Profile switching is paused while a message or voice session is active.").font(.footnote).foregroundStyle(.orange) }
-                Text("All profiles are mock-only and declare text, voice, and review capabilities.").font(.caption).foregroundStyle(.secondary)
-            }.padding(20)
-        }.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
-        .foregroundStyle(theme.textPrimary).background(theme.backgroundGradient.ignoresSafeArea()).tint(theme.primaryAction).accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
+    @ObservedObject private var adapter: DVKCompanionStoreAdapter
+    private let openConversation: () -> Void
+
+    public init(
+        adapter: DVKCompanionStoreAdapter,
+        openConversation: @escaping () -> Void = {}
+    ) {
+        self.adapter = adapter
+        self.openConversation = openConversation
+    }
+
+    public var body: some View {
+        let store = adapter.store
+        let theme = DVKCompanionThemeResolver.resolve(
+            profile: store.previewProfile,
+            appearance: store.appearance
+        )
+
+        GeometryReader { geometry in
+            let usableHeight = max(
+                0,
+                geometry.size.height - dvkTabBarBottomContentPadding
+            )
+            let regularHeaderBudget: CGFloat = 96
+            let regularFooterBudget: CGFloat = store.canSelectProfiles ? 56 : 88
+            let regularSpacingBudget: CGFloat = 56
+            let regularFixedBudget = regularHeaderBudget
+                + regularFooterBudget
+                + regularSpacingBudget
+            let regularAvailableCarouselHeight = max(
+                0,
+                usableHeight - regularFixedBudget
+            )
+            let compact = regularAvailableCarouselHeight < 486
+            let headerBudget: CGFloat = compact ? 80 : regularHeaderBudget
+            let footerBudget: CGFloat = compact
+                ? (store.canSelectProfiles ? 56 : 84)
+                : regularFooterBudget
+            let spacingBudget: CGFloat = compact ? 32 : regularSpacingBudget
+            let fixedBudget = headerBudget + footerBudget + spacingBudget
+            let availableCarouselHeight = max(
+                0,
+                usableHeight - fixedBudget
+            )
+            let carouselHeight = min(486, availableCarouselHeight)
+
+            VStack(alignment: .leading, spacing: compact ? 8 : 14) {
+                Text("Choose a cat")
+                    .font(.system(
+                        size: compact ? 28 : 32,
+                        weight: .semibold,
+                        design: .serif
+                    ))
+                Text("Four fictional public profiles. The choice is local and reversible.")
+                    .font(.subheadline)
+                    .foregroundStyle(theme.textSecondary)
+                    .lineLimit(2)
+
+                DVKRoleCardCarousel(
+                    adapter: adapter,
+                    carouselHeight: carouselHeight,
+                    compact: compact
+                )
+
+                rolePrimaryAction(store: store, theme: theme)
+
+                if !store.canSelectProfiles {
+                    Text("Profile switching is paused while a message or voice session is active.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, compact ? 8 : 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
+        .foregroundStyle(theme.textPrimary)
+        .background(theme.backgroundGradient.ignoresSafeArea())
+        .tint(theme.primaryAction)
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
+    }
+
+    @ViewBuilder
+    private func rolePrimaryAction(
+        store: DVKCompanionStore,
+        theme: DVKCompanionTheme
+    ) -> some View {
+        if let profile = store.previewProfile {
+            let current = profile.id == store.selectedProfileID
+            Button(
+                DVKRoleSelectionActionPresentation.title(
+                    previewProfileID: profile.id,
+                    selectedProfileID: store.selectedProfileID
+                )
+            ) {
+                if current {
+                    openConversation()
+                } else {
+                    store.confirmProfileSelection()
+                    adapter.refresh()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .dvkGlassControl(theme: theme, prominent: true)
+            .disabled(
+                current
+                    ? store.selectedProfile == nil
+                    : !store.canConfirmProfileSelection
+            )
+            .accessibilityIdentifier(DVKCompanionAccessibilityID.profileConfirm)
+        }
     }
 }
-
 
 @MainActor
 private struct DVKRoleCardCarouselItem: View {
@@ -166,6 +447,7 @@ private struct DVKRoleCardCarouselItem: View {
     let reduced: Bool
     let width: CGFloat
     let canSelectProfiles: Bool
+    let compact: Bool
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -173,7 +455,8 @@ private struct DVKRoleCardCarouselItem: View {
             profile: profile,
             selected: selected,
             isPreview: isPreview,
-            reduced: reduced
+            reduced: reduced,
+            compact: compact
         )
         .frame(width: width)
         .scrollTransition(.interactive, axis: .horizontal) { content, phase in
@@ -210,12 +493,18 @@ private struct DVKRoleCardCarouselItem: View {
 @MainActor
 private struct DVKRoleCardCarousel: View {
     @ObservedObject private var adapter:DVKCompanionStoreAdapter
-    let openConversation:()->Void
+    let carouselHeight: CGFloat
+    let compact: Bool
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var scrollPosition:String?
-    init(adapter:DVKCompanionStoreAdapter, openConversation:@escaping()->Void) {
-        self.adapter=adapter
-        self.openConversation=openConversation
+    init(
+        adapter: DVKCompanionStoreAdapter,
+        carouselHeight: CGFloat,
+        compact: Bool
+    ) {
+        self.adapter = adapter
+        self.carouselHeight = carouselHeight
+        self.compact = compact
     }
     var body:some View {
         let store=adapter.store
@@ -233,7 +522,8 @@ private struct DVKRoleCardCarousel: View {
                                 isPreview: profile.id == store.previewProfileID,
                                 reduced: reduced,
                                 width: width,
-                                canSelectProfiles: store.canSelectProfiles
+                                canSelectProfiles: store.canSelectProfiles,
+                                compact: compact
                             ) { id in
                                 select(
                                     id,
@@ -262,8 +552,7 @@ private struct DVKRoleCardCarousel: View {
                 }
             }
             }
-            .frame(height:486)
-            DVKRoleSelectionBar(adapter:adapter,openConversation:openConversation)
+            .frame(height: carouselHeight)
         }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.profilePreview)
     }
@@ -300,22 +589,89 @@ private struct DVKRoleCardCarousel: View {
 }
 @MainActor
 private struct DVKRoleLargeCard:View {
-    let profile:DVKCompanionProfile;let selected:Bool;let isPreview:Bool;let reduced:Bool
+    let profile:DVKCompanionProfile
+    let selected:Bool
+    let isPreview:Bool
+    let reduced:Bool
+    let compact:Bool
+
     var body:some View {
         let theme=DVKCompanionThemeResolver.resolve(profile:profile,appearance:.followProfile)
-        VStack(spacing:10) {
-            if selected {Text("Current cat").font(.caption.weight(.semibold)).padding(.horizontal,14).padding(.vertical,6).background(theme.elevatedSurface,in:Capsule()).foregroundStyle(theme.primaryAction)} else {Color.clear.frame(height:28)}
+        let avatarDimension: CGFloat = compact ? 154 : 228
+        let characterAreaHeight: CGFloat = compact ? 170 : 246
+        let cardPadding: CGFloat = compact ? 10 : 16
+        let verticalSpacing: CGFloat = compact ? 6 : 10
+        let markerHeight: CGFloat = compact ? 24 : 28
+
+        VStack(spacing: verticalSpacing) {
+            if selected {
+                Text("Current cat")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, compact ? 11 : 14)
+                    .padding(.vertical, compact ? 4 : 6)
+                    .background(theme.elevatedSurface,in:Capsule())
+                    .foregroundStyle(theme.primaryAction)
+            } else {
+                Color.clear.frame(height: markerHeight)
+            }
             ZStack {
-                RoundedRectangle(cornerRadius:24,style:.continuous).fill(theme.elevatedSurface)
-                DVKRoleAvatar(profile:profile,dimension:228,reduced:reduced)
-            }.frame(height:246)
-            Text(profile.displayName).font(.title2.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.82)
-            HStack(spacing:6){ForEach(profile.personalityTags,id:\.self){Text($0).font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal,9).padding(.vertical,5).background(theme.elevatedSurface,in:Capsule()).foregroundStyle(theme.primaryAction)}}.frame(maxWidth:.infinity)
-            Text(profile.greeting).font(.subheadline).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.86).foregroundStyle(theme.textSecondary)
-            HStack(spacing:6){ForEach(profile.capabilities,id:\.self){Text($0.rawValue.capitalized).font(.caption2.weight(.medium)).padding(.horizontal,7).padding(.vertical,4).background(theme.surface,in:Capsule())}}
-        }.padding(16).frame(maxWidth:.infinity).background(theme.surface,in:RoundedRectangle(cornerRadius:30,style:.continuous))
-        .overlay(RoundedRectangle(cornerRadius:30,style:.continuous).stroke(isPreview ? theme.primaryAction:theme.border.opacity(0.4),lineWidth:isPreview ? 2.5:1))
-        .shadow(color:theme.shadow.opacity(isPreview ? 0.22:0.1),radius:isPreview ? 16:10,y:8).accessibilityElement(children:.combine)
+                RoundedRectangle(cornerRadius:24,style:.continuous)
+                    .fill(theme.elevatedSurface)
+                DVKRoleAvatar(
+                    profile:profile,
+                    dimension:avatarDimension,
+                    reduced:reduced
+                )
+            }
+            .frame(height: characterAreaHeight)
+            Text(profile.displayName)
+                .font(.title2.weight(.semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+            HStack(spacing:6) {
+                ForEach(profile.personalityTags,id:\.self) {
+                    Text($0)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                        .padding(.horizontal, compact ? 7 : 9)
+                        .padding(.vertical, compact ? 4 : 5)
+                        .background(theme.elevatedSurface,in:Capsule())
+                        .foregroundStyle(theme.primaryAction)
+                }
+            }
+            .frame(maxWidth:.infinity)
+            Text(profile.greeting)
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
+                .foregroundStyle(theme.textSecondary)
+            HStack(spacing:6) {
+                ForEach(profile.capabilities,id:\.self) {
+                    Text($0.rawValue.capitalized)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, compact ? 6 : 7)
+                        .padding(.vertical, compact ? 3 : 4)
+                        .background(theme.surface,in:Capsule())
+                }
+            }
+        }
+        .padding(cardPadding)
+        .frame(maxWidth:.infinity)
+        .background(theme.surface,in:RoundedRectangle(cornerRadius:30,style:.continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius:30,style:.continuous)
+                .stroke(
+                    isPreview ? theme.primaryAction : theme.border.opacity(0.4),
+                    lineWidth:isPreview ? 2.5 : 1
+                )
+        )
+        .shadow(
+            color:theme.shadow.opacity(isPreview ? 0.22 : 0.1),
+            radius:isPreview ? 16 : 10,
+            y:8
+        )
+        .accessibilityElement(children:.combine)
     }
 }
 private let dvkRoleAvatarCanvasSize:CGFloat = 250
