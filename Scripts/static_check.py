@@ -460,6 +460,16 @@ def main() -> None:
     if "DVKIOS26GlassEffectContainer" not in ui_text:
         failures.append("Home/Cats glass controls must use the shared GlassEffectContainer boundary")
     views_text = (ui_root / "DVKCompanionViews.swift").read_text(encoding="utf-8")
+    if "INFOPLIST_KEY_UILaunchScreen_Generation: YES" not in showcase_project:
+        failures.append("Showcase must use generated system Launch Screen metadata")
+    if "private let dvkTabBarBottomContentPadding" not in views_text:
+        failures.append("bottom Tab Bar content spacing must use a named private constant")
+    if views_text.count("safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)") != 4:
+        failures.append("all four Tab roots must use the named bottom content spacing constant")
+    if ".scrollClipDisabled()" not in views_text:
+        failures.append("Cats Carousel must not clip scaled cards or shadows")
+    if "ViewThatFits(in: .horizontal)" not in views_text or 'Button("Use this cat")' not in views_text:
+        failures.append("Cats Preview Bar must provide a responsive confirmation layout")
     accessory_path = ui_root / "DVKActiveVoiceAccessory.swift"
     accessory_text = accessory_path.read_text(encoding="utf-8") if accessory_path.is_file() else ""
     if "tabViewBottomAccessory" not in accessory_text:

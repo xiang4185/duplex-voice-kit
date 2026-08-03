@@ -15,6 +15,9 @@ public enum DVKCompanionAccessibilityID {
 import SwiftUI
 import Combine
 
+private let dvkTabBarBottomContentPadding: CGFloat = 96
+
+
 @MainActor
 public final class DVKCompanionStoreAdapter: ObservableObject {
     @Published public private(set) var revision=0
@@ -124,7 +127,8 @@ public struct DVKCompanionHomeView: View {
                 }.accessibilityIdentifier(DVKCompanionAccessibilityID.cards)
                 if let review=store.reviews.first { reviewCard(review) }
             }.padding(20)
-        }.background(DVKCompanionThemeResolver.resolve(profile:adapter.store.selectedProfile, appearance:adapter.store.appearance).backgroundGradient.ignoresSafeArea())
+        }.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
+        .background(DVKCompanionThemeResolver.resolve(profile:adapter.store.selectedProfile, appearance:adapter.store.appearance).backgroundGradient.ignoresSafeArea())
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Settings", systemImage: "gearshape") { store.setSelectedTab(.settings); adapter.refresh() }.accessibilityLabel("Open settings") } }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
@@ -148,7 +152,8 @@ public struct DVKCompanionProfilesView: View {
                 if !store.canSelectProfiles { Text("Profile switching is paused while a message or voice session is active.").font(.footnote).foregroundStyle(.orange) }
                 Text("All profiles are mock-only and declare text, voice, and review capabilities.").font(.caption).foregroundStyle(.secondary)
             }.padding(20)
-        }.foregroundStyle(theme.textPrimary).background(theme.backgroundGradient.ignoresSafeArea()).tint(theme.primaryAction).accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
+        }.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
+        .foregroundStyle(theme.textPrimary).background(theme.backgroundGradient.ignoresSafeArea()).tint(theme.primaryAction).accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
     }
 }
 
@@ -190,8 +195,10 @@ public struct DVKProfileCarousel: View {
                         }
                     }
                     .scrollTargetLayout()
+                    .padding(.vertical, 8)
                 }
                 .scrollTargetBehavior(.viewAligned)
+                .scrollClipDisabled()
                 .scrollPosition(id: $scrollPosition)
                 .contentMargins(.horizontal, compact ? 20 : 32)
                 .accessibilityIdentifier(DVKCompanionAccessibilityID.profileCarousel)
@@ -248,7 +255,63 @@ public struct DVKProfileCard: View {
 public struct DVKProfilePreviewBar: View {
     let profile:DVKCompanionProfile; let store:DVKCompanionStore; @ObservedObject var adapter:DVKCompanionStoreAdapter
     public init(profile:DVKCompanionProfile,store:DVKCompanionStore,adapter:DVKCompanionStoreAdapter){self.profile=profile;self.store=store;self.adapter=adapter}
-    public var body:some View { let theme=DVKCompanionThemeResolver.resolve(profile:profile, appearance:store.appearance); HStack{DVKProgrammaticCatView(profile:profile,reduceMotion:true).frame(width:64,height:64);VStack(alignment:.leading){Text("Previewing \(profile.displayName)").font(.headline);Text(profile.shortSummary).font(.caption).foregroundStyle(.secondary)};Spacer();Button("Use this cat"){store.confirmProfileSelection();adapter.refresh()}.dvkGlassControl(theme: theme, prominent: true).disabled(!store.canConfirmProfileSelection).accessibilityIdentifier(DVKCompanionAccessibilityID.profileConfirm)}.padding(12).dvkGlassSurface(theme: theme).accessibilityIdentifier(DVKCompanionAccessibilityID.profilePreview)}
+    public var body: some View {
+        let theme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: store.appearance)
+        ViewThatFits(in: .horizontal) {
+            previewWideLayout(theme: theme)
+                .fixedSize(horizontal: true, vertical: false)
+            previewCompactLayout(theme: theme)
+        }
+        .padding(12)
+        .dvkGlassSurface(theme: theme)
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.profilePreview)
+    }
+
+    @ViewBuilder
+    private func previewWideLayout(theme: DVKCompanionTheme) -> some View {
+        HStack(spacing: 12) {
+            DVKProgrammaticCatView(profile: profile, reduceMotion: true)
+                .frame(width: 64, height: 64)
+            previewSummary
+            Spacer(minLength: 8)
+            confirmButton(theme: theme)
+        }
+    }
+
+    @ViewBuilder
+    private func previewCompactLayout(theme: DVKCompanionTheme) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                DVKProgrammaticCatView(profile: profile, reduceMotion: true)
+                    .frame(width: 56, height: 56)
+                previewSummary
+            }
+            confirmButton(theme: theme)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var previewSummary: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Previewing \(profile.displayName)").font(.headline)
+            Text(profile.shortSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
+
+    private func confirmButton(theme: DVKCompanionTheme) -> some View {
+        Button("Use this cat") {
+            store.confirmProfileSelection()
+            adapter.refresh()
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .dvkGlassControl(theme: theme, prominent: true)
+        .disabled(!store.canConfirmProfileSelection)
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.profileConfirm)
+    }
 }
 
 @MainActor
@@ -373,7 +436,7 @@ public struct DVKVoiceConversation: View {
 public struct DVKCompanionSettingsView: View {
     @ObservedObject var adapter:DVKCompanionStoreAdapter
     public init(adapter:DVKCompanionStoreAdapter){self.adapter=adapter}
-    public var body:some View{let store=adapter.store;let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance);Form{Section("Default cat"){Picker("Cat",selection:Binding(get:{store.selectedProfileID ?? ""},set:{store.selectPreviewProfile(id:$0);store.confirmProfileSelection();adapter.refresh()})){ForEach(store.profiles){Text($0.displayName).tag($0.id)}}};Section("Appearance"){Picker("Theme",selection:Binding(get:{store.appearance},set:{store.setAppearance($0);adapter.refresh()})){ForEach(DVKCompanionAppearance.allCases,id:\.self){Text($0.rawValue.capitalized).tag($0)}};Toggle("Reduce Motion preview",isOn:Binding(get:{store.reduceMotionPreview},set:{store.setReduceMotionPreview($0);adapter.refresh()}));Text("Dynamic Type, VoiceOver and Reduce Motion are supported by the public UI.").font(.footnote)};Section("Privacy"){Button(store.privacy == .allowed ? "Preview limited privacy":"Re-authorize"){if store.privacy == .allowed{store.setPrivacy(.limited)}else{store.reauthorize()};adapter.refresh()}.accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyLimited:DVKCompanionAccessibilityID.reauthorize)};Section("Mock Lab"){DVKMockLabView(adapter:adapter)};Section("About"){Text("DVK Companion is local-only, provider-neutral, and uses four fictional mock cats. No production identity, prompt, token, or asset is included.")}}.scrollContentBackground(.hidden).listRowBackground(theme.surface).foregroundStyle(theme.textPrimary).tint(theme.primaryAction).background(theme.pageBackground).dvkIOS26NavigationChrome(theme: theme).navigationTitle("Settings").accessibilityIdentifier(DVKCompanionAccessibilityID.settings)}
+    public var body:some View{let store=adapter.store;let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance);Form{Section("Default cat"){Picker("Cat",selection:Binding(get:{store.selectedProfileID ?? ""},set:{store.selectPreviewProfile(id:$0);store.confirmProfileSelection();adapter.refresh()})){ForEach(store.profiles){Text($0.displayName).tag($0.id)}}};Section("Appearance"){Picker("Theme",selection:Binding(get:{store.appearance},set:{store.setAppearance($0);adapter.refresh()})){ForEach(DVKCompanionAppearance.allCases,id:\.self){Text($0.rawValue.capitalized).tag($0)}};Toggle("Reduce Motion preview",isOn:Binding(get:{store.reduceMotionPreview},set:{store.setReduceMotionPreview($0);adapter.refresh()}));Text("Dynamic Type, VoiceOver and Reduce Motion are supported by the public UI.").font(.footnote)};Section("Privacy"){Button(store.privacy == .allowed ? "Preview limited privacy":"Re-authorize"){if store.privacy == .allowed{store.setPrivacy(.limited)}else{store.reauthorize()};adapter.refresh()}.accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyLimited:DVKCompanionAccessibilityID.reauthorize)};Section("Mock Lab"){DVKMockLabView(adapter:adapter)};Section("About"){Text("DVK Companion is local-only, provider-neutral, and uses four fictional mock cats. No production identity, prompt, token, or asset is included.")}}.safeAreaPadding(.bottom, dvkTabBarBottomContentPadding).scrollContentBackground(.hidden).listRowBackground(theme.surface).foregroundStyle(theme.textPrimary).tint(theme.primaryAction).background(theme.pageBackground).dvkIOS26NavigationChrome(theme: theme).navigationTitle("Settings").accessibilityIdentifier(DVKCompanionAccessibilityID.settings)}
 }
 
 @MainActor
@@ -448,6 +511,7 @@ public struct DVKReviewListView: View {
                 }
             }
         }
+        .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .scrollContentBackground(.hidden)
         .background(theme.pageBackground)
         .foregroundStyle(theme.textPrimary)

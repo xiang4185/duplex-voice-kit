@@ -54,6 +54,38 @@ extension DVKCompanionUIContractTests {
 }
 #endif
 
+#if canImport(SwiftUI)
+
+extension DVKCompanionUIContractTests {
+    @MainActor
+    func testFullscreenRootsReserveReachableBottomContent() {
+        let adapter = DVKCompanionStoreAdapter(store: DVKCompanionStore())
+        _ = AnyView(NavigationStack { DVKCompanionHomeView(adapter: adapter, openConversation: {}) })
+        _ = AnyView(NavigationStack { DVKCompanionProfilesView(adapter: adapter) })
+        _ = AnyView(NavigationStack { DVKReviewListView(adapter: adapter) })
+        _ = AnyView(NavigationStack { DVKCompanionSettingsView(adapter: adapter) })
+        XCTAssertEqual(DVKCompanionAccessibilityID.home, "companion.home")
+        XCTAssertEqual(DVKCompanionAccessibilityID.profiles, "companion.profiles")
+        XCTAssertEqual(DVKCompanionAccessibilityID.reviews, "companion.reviews")
+        XCTAssertEqual(DVKCompanionAccessibilityID.settings, "companion.settings")
+    }
+
+    @MainActor
+    func testCatsPreviewBarAndConfirmationRemainConstructibleOnNarrowLayout() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        guard let profile = store.previewProfile else {
+            XCTFail("The default Showcase Store must provide a preview profile")
+            return
+        }
+        _ = AnyView(DVKProfilePreviewBar(profile: profile, store: store, adapter: adapter))
+        _ = AnyView(DVKProfileCard(profile: profile, selected: true))
+        XCTAssertNotEqual(DVKCompanionAccessibilityID.profilePreview, DVKCompanionAccessibilityID.profileConfirm)
+    }
+}
+
+#endif
+
 extension DVKCompanionUIContractTests {
     func testTabIdentifiersCoverFourPublicDestinations() {
         XCTAssertEqual(DVKCompanionAccessibilityID.home, "companion.home")
