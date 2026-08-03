@@ -195,7 +195,7 @@ private struct DVKRoleCardCarouselItem: View {
                 .degrees(rotation),
                 axis: (x: 0, y: 1, z: 0)
             )
-            rotatedContent.offset(y: verticalOffset)
+            return rotatedContent.offset(y: verticalOffset)
         }
         .id(profile.id)
         .accessibilityIdentifier("companion.profile.card.\(profile.id)")
