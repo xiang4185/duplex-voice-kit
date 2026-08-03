@@ -164,6 +164,10 @@ private struct DVKRoleCardCarousel: View {
     let openConversation:()->Void
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var scrollPosition:String?
+    init(adapter:DVKCompanionStoreAdapter, openConversation:@escaping()->Void) {
+        self.adapter=adapter
+        self.openConversation=openConversation
+    }
     var body:some View {
         let store=adapter.store
         let reduced=systemReduceMotion || store.reduceMotionPreview
@@ -234,7 +238,7 @@ private struct DVKRoleLargeCard:View {
     var body:some View {
         let theme=DVKCompanionThemeResolver.resolve(profile:profile,appearance:.followProfile)
         VStack(spacing:10) {
-            if selected {Text("Current cat").font(.caption.weight(.semibold)).padding(.horizontal,14).padding(.vertical,6).background(theme.primarySoft,in:Capsule()).foregroundStyle(theme.primaryAction)} else {Color.clear.frame(height:28)}
+            if selected {Text("Current cat").font(.caption.weight(.semibold)).padding(.horizontal,14).padding(.vertical,6).background(theme.elevatedSurface,in:Capsule()).foregroundStyle(theme.primaryAction)} else {Color.clear.frame(height:28)}
             ZStack {
                 RoundedRectangle(cornerRadius:24,style:.continuous).fill(theme.elevatedSurface)
                 DVKRoleAvatar(profile:profile,dimension:228,reduced:reduced)
@@ -244,7 +248,7 @@ private struct DVKRoleLargeCard:View {
                     }
             }.frame(height:246)
             Text(profile.displayName).font(.title2.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.82)
-            HStack(spacing:6){ForEach(profile.personalityTags,id:\.self){Text($0).font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal,9).padding(.vertical,5).background(theme.primarySoft,in:Capsule()).foregroundStyle(theme.primaryAction)}}.frame(maxWidth:.infinity)
+            HStack(spacing:6){ForEach(profile.personalityTags,id:\.self){Text($0).font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal,9).padding(.vertical,5).background(theme.elevatedSurface,in:Capsule()).foregroundStyle(theme.primaryAction)}}.frame(maxWidth:.infinity)
             Text(profile.greeting).font(.subheadline).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.86).foregroundStyle(theme.textSecondary)
             HStack(spacing:6){ForEach(profile.capabilities,id:\.self){Text($0.rawValue.capitalized).font(.caption2.weight(.medium)).padding(.horizontal,7).padding(.vertical,4).background(theme.surface,in:Capsule())}}
         }.padding(16).frame(maxWidth:.infinity).background(theme.surface,in:RoundedRectangle(cornerRadius:30,style:.continuous))
