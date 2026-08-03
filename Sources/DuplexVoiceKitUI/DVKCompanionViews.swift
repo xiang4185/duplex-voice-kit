@@ -186,10 +186,10 @@ private struct DVKRoleCardCarousel: View {
                                     let opacity:Double=reduced ? (phase.isIdentity ? 1:0.82):(1-min(abs(phase.value)*0.18,0.18))
                                     let rotation:Double=reduced ? 0:phase.value * -4
                                     let verticalOffset:CGFloat=reduced ? 0:min(abs(amount)*6,6)
-                                    content.scaleEffect(scale)
-                                        .opacity(opacity)
-                                        .rotation3DEffect(.degrees(rotation),axis:(x:0,y:1,z:0))
-                                        .offset(y:verticalOffset)
+                                    let scaledContent=content.scaleEffect(scale)
+                                    let fadedContent=scaledContent.opacity(opacity)
+                                    let rotatedContent=fadedContent.rotation3DEffect(.degrees(rotation),axis:(x:0,y:1,z:0))
+                                    rotatedContent.offset(y:verticalOffset)
                                 }
                                 .id(profile.id)
                                 .accessibilityIdentifier("companion.profile.card.\(profile.id)")
