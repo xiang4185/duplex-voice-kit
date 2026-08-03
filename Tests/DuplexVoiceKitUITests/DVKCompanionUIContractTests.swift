@@ -219,7 +219,7 @@ extension DVKCompanionUIContractTests {
     }
 
     @MainActor
-    func testProfileAppearanceAndHomeCarouselContracts() {
+    func testProfileAppearanceAndPublicCarouselContracts() {
         let catalog = DVKCompanionProfileCatalog()
         let luna = catalog.profiles[3]
         let mellow = catalog.profiles[0]
@@ -234,9 +234,7 @@ extension DVKCompanionUIContractTests {
         let store = DVKCompanionStore()
         XCTAssertEqual(store.selectedTab, .home)
         let adapter = DVKCompanionStoreAdapter(store: store)
-        _ = AnyView(DVKProfileCarousel(adapter: adapter, compact: true, onPreview: {
-            store.setSelectedTab(.profiles)
-        }))
+        _ = AnyView(DVKProfileCarousel(adapter: adapter, compact: true))
         XCTAssertEqual(store.selectedTab, .home)
     }
 
@@ -791,7 +789,7 @@ extension DVKCompanionUIContractTests {
     }
 
     @MainActor
-    func testCatsRoleCarouselPreservesCompactHomeCarouselContract() {
+    func testPublicCarouselCompactFormRemainsConstructible() {
         let store=DVKCompanionStore()
         let adapter=DVKCompanionStoreAdapter(store:store)
         _=AnyView(DVKProfileCarousel(adapter:adapter,compact:true,onPreview:{}))

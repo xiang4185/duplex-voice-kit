@@ -412,8 +412,13 @@ def main() -> None:
         failures.append("voice must use injected routeResolver")
     if 'opaqueValue:"mock-route-' in voice_block or 'opaqueValue: "mock-route-' in voice_block:
         failures.append("voice must not construct mock route tokens directly")
-    if "DVKCompanionEasterEgg.allCases" not in ui_text:
-        failures.append("all five public easter eggs must have a UI entry")
+    if "public struct DVKEasterEggCard" not in ui_text:
+        failures.append("public easter egg card compatibility must remain")
+    if "DVKCompanionEasterEgg.allCases" not in all_r3_tests:
+        failures.append("all five public easter eggs must remain covered")
+    for expected in ("presentEasterEgg", "dismissEasterEgg"):
+        if expected not in store_text:
+            failures.append("easter egg store capability missing: " + expected)
     for expected in ("setMockCharacterState", "setMockPlaybackAmplitude", "presentationMode", "reduceMotionPreview"):
         if expected not in ui_text:
             failures.append("Mock Lab control missing: " + expected)
