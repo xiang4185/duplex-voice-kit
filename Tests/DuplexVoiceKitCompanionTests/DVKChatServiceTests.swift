@@ -13,9 +13,29 @@ final class MockURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// Darwin URLSession moves the request body into the httpBodyStream before
+    /// handing it to a URLProtocol; read both sources so capture works on every
+    /// platform.
+    private static func bodyData(of request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufferSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
+    }
+
     override func startLoading() {
         MockURLProtocol.capturedRequests.append(request)
-        if let body = request.httpBody {
+        if let body = Self.bodyData(of: request) {
             MockURLProtocol.capturedBodies.append(body)
         }
         guard let handler = MockURLProtocol.requestHandler else {

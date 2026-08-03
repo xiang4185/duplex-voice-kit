@@ -37,13 +37,19 @@ final class DVKTokenStoreTests: XCTestCase {
     }
 
     #if canImport(Security)
-    // 14.2: the Keychain implementation exists and conforms to the protocol
+    // 14.2: the Keychain implementation exists and conforms to the protocol.
+    // Simulator unit test bundles have no keychain entitlement, so the test is
+    // skipped there and fully asserts on macOS hosts and real devices.
     func testKeychainStoreConstructible() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Keychain entitlement is unavailable in this simulator test bundle.")
+        #else
         let store: any DVKTokenStoring = DVKKeychainTokenStore()
         try store.save("synthetic-token")
         XCTAssertEqual(store.load(), "synthetic-token")
         try store.clear()
         XCTAssertNil(store.load())
+        #endif
     }
     #endif
 

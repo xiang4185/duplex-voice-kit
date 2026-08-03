@@ -173,9 +173,13 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         tokenStore = nil
     }
 
+    /// Defaults keep heartbeat and capture-watchdog timers out of the way so
+    /// assertions are not raced by background pong sequences or a stall failure.
+    /// Only the dedicated heartbeat / watchdog tests shorten their own timer.
     private func makeController(
-        heartbeat: Duration = .milliseconds(30),
-        stallThreshold: Duration = .milliseconds(40)
+        heartbeat: Duration = .seconds(30),
+        stallThreshold: Duration = .seconds(30),
+        watchdogInterval: Duration = .seconds(30)
     ) -> DVKCompanionVoiceSessionController {
         let configuration = DVKRuntimeConfiguration(
             apiBaseURL: URL(string: "https" + "://" + "api.example.test")!,
@@ -193,7 +197,7 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
                 maximumDelay: .milliseconds(40)
             ),
             protocolReadyTimeout: .seconds(2),
-            captureWatchdogInterval: .milliseconds(20),
+            captureWatchdogInterval: watchdogInterval,
             captureStallThreshold: stallThreshold,
             maximumCaptureRecoveryAttempts: 1,
             heartbeatInterval: heartbeat
@@ -379,7 +383,10 @@ final class DVKCompanionVoiceSessionControllerTests: XCTestCase {
         audioIO.engineRunning = false
         audioIO.tapInstalled = false
         audioIO.recoverFailure = DVKAudioUploadError.sendFailed
-        let controller = makeController(stallThreshold: .milliseconds(30))
+        let controller = makeController(
+            stallThreshold: .milliseconds(30),
+            watchdogInterval: .milliseconds(20)
+        )
         await controller.startNewCall()
         await waitUntil { controller.state == .ready }
         await waitUntil { controller.isRecording }
