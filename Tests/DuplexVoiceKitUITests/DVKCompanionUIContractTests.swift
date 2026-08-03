@@ -54,6 +54,8 @@ extension DVKCompanionUIContractTests {
 }
 #endif
 
+#if canImport(SwiftUI)
+
 extension DVKCompanionUIContractTests {
     @MainActor
     func testFullscreenRootsReserveReachableBottomContent() {
@@ -80,6 +82,8 @@ extension DVKCompanionUIContractTests {
         _ = AnyView(DVKProfileCard(profile: profile, selected: true))
         XCTAssertNotEqual(DVKCompanionAccessibilityID.profilePreview, DVKCompanionAccessibilityID.profileConfirm)
     }
+
+#endif
 
     func testTabIdentifiersCoverFourPublicDestinations() {
         XCTAssertEqual(DVKCompanionAccessibilityID.home, "companion.home")
