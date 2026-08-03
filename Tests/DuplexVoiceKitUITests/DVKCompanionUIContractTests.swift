@@ -260,8 +260,10 @@ extension DVKCompanionUIContractTests {
     @MainActor
     func testHomeCTAUsesSharedGlassBoundary() {
         let theme = DVKCompanionThemeResolver.resolve(profile: DVKCompanionProfileCatalog().profiles[0], appearance: .followProfile)
-        _ = AnyView(DVKIOS26GlassEffectContainer { HStack { Button("Text") {}.dvkGlassControl(theme: theme, prominent: true); Button("Voice") {}.dvkGlassControl(theme: theme) } })
-        XCTAssertEqual(DVKCompanionStore().selectedTab, .home)
+        _ = AnyView(Button("Talk with Mellow") {}.dvkGlassControl(theme: theme, prominent: true))
+        _ = AnyView(Button("Conversation history") {}.dvkGlassSurface(theme: theme))
+        XCTAssertEqual(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: false), "Talk with Mellow")
+        XCTAssertEqual(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: true), "Return to conversation")
     }
 
     @MainActor
@@ -815,6 +817,72 @@ extension DVKCompanionUIContractTests {
         }
         _=AnyView(DVKProfilePreviewBar(profile:profile,store:store,adapter:adapter))
         XCTAssertFalse(DVKCompanionAccessibilityID.profilePreview.isEmpty)
+    }
+
+    @MainActor
+    func testHomeBaselineConstructsWithSharedStoreAndConversationAction() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        var opened = false
+        _ = AnyView(DVKCompanionHomeView(adapter: adapter, openConversation: { opened = true }))
+        XCTAssertEqual(adapter.store.selectedProfileID, store.selectedProfileID)
+        XCTAssertEqual(store.selectedTab, .home)
+    }
+
+    @MainActor
+    func testHomeBaselineUsesSelectedProfilePublicStructure() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionHomeView(adapter: adapter, openConversation: {}))
+        XCTAssertNotNil(store.selectedProfile)
+        XCTAssertEqual(store.selectedProfile?.id, store.selectedProfileID)
+        XCTAssertFalse(store.selectedProfileNeedsChoice)
+    }
+
+    @MainActor
+    func testHomeBaselinePrimaryCTAIncludesProfileNameWhenIdle() {
+        XCTAssertEqual(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: false), "Talk with Mellow")
+        XCTAssertTrue(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: false).contains("Mellow"))
+    }
+
+    @MainActor
+    func testHomeBaselinePrimaryCTAIsReturnToConversationWhenActive() {
+        XCTAssertEqual(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: true), "Return to conversation")
+        XCTAssertFalse(DVKHomePresentation.primaryCTATitle(profileName: "Mellow", hasActiveSession: true).contains("Talk with"))
+    }
+
+    @MainActor
+    func testHomeBaselineAccessibilityIdentifiersAreNonEmptyAndDistinct() {
+        let ids = [
+            DVKCompanionAccessibilityID.homeSettings,
+            DVKCompanionAccessibilityID.homeStatus,
+            DVKCompanionAccessibilityID.homePrimaryCTA,
+            DVKCompanionAccessibilityID.homeHistory,
+        ]
+        XCTAssertTrue(ids.allSatisfy { !$0.isEmpty })
+        XCTAssertEqual(Set(ids).count, ids.count)
+        XCTAssertTrue(ids.allSatisfy { $0.hasPrefix("companion.home.") })
+        XCTAssertEqual(DVKCompanionAccessibilityID.homePrimaryCTA, "companion.home.cta")
+        XCTAssertEqual(DVKCompanionAccessibilityID.homeHistory, "companion.home.history")
+    }
+
+    @MainActor
+    func testHomeBaselineReviewsTabRemainsReachableViaSetSelectedTab() {
+        let store = DVKCompanionStore()
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionHomeView(adapter: adapter, openConversation: {}))
+        store.setSelectedTab(.reviews)
+        XCTAssertEqual(store.selectedTab, .reviews)
+        XCTAssertEqual(DVKCompanionAccessibilityID.reviews, "companion.reviews")
+    }
+
+    @MainActor
+    func testHomeBaselineReduceMotionPreviewRemainsConstructible() {
+        let store = DVKCompanionStore()
+        store.setReduceMotionPreview(true)
+        let adapter = DVKCompanionStoreAdapter(store: store)
+        _ = AnyView(DVKCompanionHomeView(adapter: adapter, openConversation: {}))
+        XCTAssertTrue(store.reduceMotionPreview)
     }
 
 }
