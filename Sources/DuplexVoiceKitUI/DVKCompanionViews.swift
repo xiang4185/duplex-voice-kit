@@ -182,10 +182,14 @@ private struct DVKRoleCardCarousel: View {
                                 .frame(width:width)
                                 .scrollTransition(.interactive,axis:.horizontal) { content,phase in
                                     let amount=CGFloat(phase.value)
-                                    content.scaleEffect(reduced ? (phase.isIdentity ? 1:0.94):(1-min(abs(amount)*0.06,0.06)))
-                                        .opacity(reduced ? (phase.isIdentity ? 1:0.82):(1-min(abs(phase.value)*0.18,0.18)))
-                                        .rotation3DEffect(.degrees(reduced ? 0:phase.value * -4),axis:(x:0,y:1,z:0))
-                                        .offset(y:reduced ? 0:min(abs(amount)*6,6))
+                                    let scale:CGFloat=reduced ? (phase.isIdentity ? 1:0.94):(1-min(abs(amount)*0.06,0.06))
+                                    let opacity:Double=reduced ? (phase.isIdentity ? 1:0.82):(1-min(abs(phase.value)*0.18,0.18))
+                                    let rotation:Double=reduced ? 0:phase.value * -4
+                                    let verticalOffset:CGFloat=reduced ? 0:min(abs(amount)*6,6)
+                                    content.scaleEffect(scale)
+                                        .opacity(opacity)
+                                        .rotation3DEffect(.degrees(rotation),axis:(x:0,y:1,z:0))
+                                        .offset(y:verticalOffset)
                                 }
                                 .id(profile.id)
                                 .accessibilityIdentifier("companion.profile.card.\(profile.id)")
@@ -202,6 +206,7 @@ private struct DVKRoleCardCarousel: View {
                     }.scrollTargetLayout().padding(.vertical,12)
                 }
                 .scrollTargetBehavior(.viewAligned)
+                .coordinateSpace(name:"dvkRoleCarousel")
                 .scrollPosition(id:$scrollPosition)
                 .contentMargins(.horizontal,max((geometry.size.width-width)/2,0))
                 .scrollDisabled(!store.canSelectProfiles)
@@ -242,10 +247,6 @@ private struct DVKRoleLargeCard:View {
             ZStack {
                 RoundedRectangle(cornerRadius:24,style:.continuous).fill(theme.elevatedSurface)
                 DVKRoleAvatar(profile:profile,dimension:228,reduced:reduced)
-                    .scrollTransition(.interactive,axis:.horizontal) { content,phase in
-                        let amount=CGFloat(phase.value)
-                        content.offset(x:reduced ? 0:amount * -8)
-                    }
             }.frame(height:246)
             Text(profile.displayName).font(.title2.weight(.semibold)).lineLimit(2).minimumScaleFactor(0.82)
             HStack(spacing:6){ForEach(profile.personalityTags,id:\.self){Text($0).font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal,9).padding(.vertical,5).background(theme.elevatedSurface,in:Capsule()).foregroundStyle(theme.primaryAction)}}.frame(maxWidth:.infinity)
@@ -262,13 +263,20 @@ private let dvkRoleAvatarCanvasSize:CGFloat = 250
 private struct DVKRoleAvatar:View {
     let profile:DVKCompanionProfile;let dimension:CGFloat;let reduced:Bool
     var body:some View {
-        DVKProgrammaticCatView(profile:profile,reduceMotion:reduced)
-            .frame(width:dvkRoleAvatarCanvasSize,height:dvkRoleAvatarCanvasSize)
-            .scaleEffect(dimension / dvkRoleAvatarCanvasSize)
-            .frame(width:dimension,height:dimension)
-            .clipShape(RoundedRectangle(cornerRadius:22,style:.continuous))
-            .clipped()
-            .contentShape(RoundedRectangle(cornerRadius:22,style:.continuous))
+        GeometryReader { geometry in
+            let center=geometry.frame(in:.named("dvkRoleCarousel")).midX
+            let localCenter=geometry.size.width / 2
+            let parallax:CGFloat=reduced ? 0:max(-8,min(8,(localCenter-center) * 0.08))
+            DVKProgrammaticCatView(profile:profile,reduceMotion:reduced)
+                .frame(width:dvkRoleAvatarCanvasSize,height:dvkRoleAvatarCanvasSize)
+                .scaleEffect(dimension / dvkRoleAvatarCanvasSize)
+                .frame(width:dimension,height:dimension)
+                .offset(x:parallax)
+                .clipShape(RoundedRectangle(cornerRadius:22,style:.continuous))
+                .clipped()
+                .contentShape(RoundedRectangle(cornerRadius:22,style:.continuous))
+        }
+        .frame(width:dimension,height:dimension)
     }
 }
 enum DVKRoleSelectionActionPresentation {
