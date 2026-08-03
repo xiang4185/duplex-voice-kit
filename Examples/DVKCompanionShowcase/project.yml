@@ -13,6 +13,7 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: org.example.DVKCompanionShowcase
       GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
     dependencies:
       - package: DuplexVoiceKit
         product: DuplexVoiceKitUI
