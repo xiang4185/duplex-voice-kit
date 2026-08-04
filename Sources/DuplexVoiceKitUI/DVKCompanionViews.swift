@@ -164,6 +164,7 @@ public struct DVKCompanionHomeView: View {
     private let openConversation: () -> Void
 
     @State private var appeared = false
+    @State private var isHomeVisible = false
     @State private var avatarBreath = false
     @State private var greetingIndex = 0
     @State private var greetingTimer: Timer?
@@ -269,10 +270,11 @@ public struct DVKCompanionHomeView: View {
                             .scaleEffect(avatarBreath ? 1.012 : 0.988)
                             .offset(y: avatarBreath ? -3 : 0)
                             .animation(
-                                reduced ? nil : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
+                                (reduced || !isHomeVisible)
+                                    ? nil
+                                    : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
                                 value: avatarBreath
                             )
-                            .onAppear { avatarBreath = true }
                             .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
                         }
                     }
@@ -392,10 +394,22 @@ public struct DVKCompanionHomeView: View {
             )
             .presentationDetents([.medium])
         }
-        .onAppear { appeared = true }
+        .onAppear {
+            appeared = true
+            isHomeVisible = true
+            avatarBreath = true
+        }
         .onDisappear {
             greetingTimer?.invalidate()
             greetingTimer = nil
+            // 离开首页时以禁用动画的 Transaction 复位呼吸状态，
+            // 确保 TabView 保留页面时动画也已明确停止
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isHomeVisible = false
+                avatarBreath = false
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)

@@ -671,14 +671,25 @@ struct DVKCatCompactAvatar: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [themeColor.opacity(0.85), themeColor.opacity(0.55)],
+                            colors: [
+                                themeColor.opacity(revealed ? 0.85 : 0.40),
+                                themeColor.opacity(revealed ? 0.55 : 0.22)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                 Image(systemName: symbol)
                     .font(.system(size: size * 0.38, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(.white.opacity(revealed ? 0.92 : 0.30))
+                    .blur(radius: revealed ? 0 : 1.5)
+                if !revealed {
+                    Circle()
+                        .fill(Color(hex: 0xF7DDD6).opacity(0.32))
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: size * 0.26, weight: .medium))
+                        .foregroundStyle(Color(hex: 0xFFF9F6))
+                }
             }
             .frame(width: size, height: size)
             .overlay(
