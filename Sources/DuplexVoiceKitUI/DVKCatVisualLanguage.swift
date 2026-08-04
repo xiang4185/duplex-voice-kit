@@ -5,6 +5,13 @@ import UIKit
 import SwiftUI
 import DuplexVoiceKitCompanion
 
+// MARK: - Hex 颜色扩展（文件级私有，与仓库既有 UI 文件模式一致）
+private extension Color {
+    init(hex: UInt32) {
+        self.init(.sRGB, red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255)
+    }
+}
+
 // MARK: - 原版壳视觉令牌（DVKCatStyle）
 // 将公共 DVKCompanionTheme 映射为参考壳的设计令牌（颜色 / 圆角 / 字体 / 动效 / 阴影），
 // 让移植页面保留参考壳的布局与节奏，同时跟随公共主题与角色主题联动。
