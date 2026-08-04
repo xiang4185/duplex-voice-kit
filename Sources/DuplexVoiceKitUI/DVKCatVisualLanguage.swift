@@ -1,4 +1,7 @@
 #if canImport(SwiftUI)
+#if canImport(UIKit)
+import UIKit
+#endif
 import SwiftUI
 import DuplexVoiceKitCompanion
 
@@ -155,6 +158,7 @@ struct DVKCatStyle {
 }
 
 // MARK: - 触摸反馈（参考壳触觉，UIKit 条件编译；Linux 测试目标下为空实现）
+@MainActor
 enum DVKCatHaptics {
     static func comfort() {
         #if canImport(UIKit)
