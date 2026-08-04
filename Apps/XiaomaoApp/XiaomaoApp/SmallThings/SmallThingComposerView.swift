@@ -46,13 +46,28 @@ struct SmallThingComposerView: View {
                             .accessibilityLabel("无法保存：\(validationMessage)")
                     }
 
-                    Button("保存") {
+                    Button {
                         save()
+                    } label: {
+                        Text("保存")
+                            .font(Theme.headlineFont)
+                            .foregroundStyle(Theme.onPrimary)
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                            .background(
+                                canSave ? Theme.primary : Theme.primary.opacity(0.38),
+                                in: RoundedRectangle(
+                                    cornerRadius: Theme.Radius.medium,
+                                    style: .continuous
+                                )
+                            )
+                            .shadow(
+                                color: canSave ? Theme.ctaShadow : .clear,
+                                radius: 12,
+                                y: 5
+                            )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.primary)
-                    .font(Theme.headlineFont)
-                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
                     .disabled(!canSave)
                     .accessibilityIdentifier("smallThings.form.save")
                     .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
@@ -103,10 +118,16 @@ struct SmallThingComposerView: View {
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)
 
-            HStack(spacing: Theme.Spacing.xSmall) {
-                typeButton(.note, title: "记个小记", symbol: "text.book.closed")
-                typeButton(.expense, title: "记一笔账", symbol: "yensign.circle")
+            Picker("记录类型", selection: $type) {
+                Text("记个小记")
+                    .tag(SmallThingEntryType.note)
+                    .accessibilityIdentifier("smallThings.form.type.note")
+                Text("记一笔账")
+                    .tag(SmallThingEntryType.expense)
+                    .accessibilityIdentifier("smallThings.form.type.expense")
             }
+            .pickerStyle(.segmented)
+            .tint(Theme.primary)
             .padding(Theme.Spacing.xxSmall)
             .background(Theme.surfaceWarm)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
@@ -115,30 +136,6 @@ struct SmallThingComposerView: View {
                     .stroke(Theme.border.opacity(0.85), lineWidth: 1)
             }
         }
-    }
-
-    private func typeButton(
-        _ candidate: SmallThingEntryType,
-        title: String,
-        symbol: String
-    ) -> some View {
-        Button {
-            type = candidate
-        } label: {
-            Label(title, systemImage: symbol)
-                .font(Theme.subheadFont.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
-                .foregroundStyle(type == candidate ? Theme.onPrimary : Theme.textSecondary)
-                .background(
-                    type == candidate ? Theme.primary : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(type == candidate ? .isSelected : [])
-        .accessibilityIdentifier(
-            candidate == .note ? "smallThings.form.type.note" : "smallThings.form.type.expense"
-        )
     }
 
     private var noteFields: some View {

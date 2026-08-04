@@ -26,13 +26,6 @@ struct SmallThingsApprovalView: View {
         .background(Theme.bg.ignoresSafeArea())
         .navigationTitle("等你点头")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("关闭") {
-                    dismiss()
-                }
-            }
-        }
         .overlay(alignment: .bottom) {
             if let decision {
                 undoToast(decision)

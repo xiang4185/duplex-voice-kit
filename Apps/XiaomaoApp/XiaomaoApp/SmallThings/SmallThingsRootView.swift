@@ -3,7 +3,6 @@ import SwiftUI
 struct SmallThingsRootView: View {
     @StateObject private var store = SmallThingsStore()
     @State private var path: [SmallThingsRoute] = []
-    @State private var showingApproval = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -12,7 +11,7 @@ struct SmallThingsRootView: View {
                     SmallThingsLedgerCard(
                         store: store,
                         addExpense: { path.append(.composer(.expense)) },
-                        openApprovals: { showingApproval = true },
+                        openApprovals: { path.append(.approval) },
                         openBinding: { path.append(.binding) }
                     )
 
@@ -34,14 +33,9 @@ struct SmallThingsRootView: View {
                     SmallThingComposerView(store: store, initialType: initialType)
                 case .binding:
                     SmallThingsBindingView(store: store)
-                }
-            }
-            .sheet(isPresented: $showingApproval) {
-                NavigationStack {
+                case .approval:
                     SmallThingsApprovalView(store: store)
                 }
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
             }
         }
         .accessibilityIdentifier("smallThings.root")
@@ -68,4 +62,5 @@ struct SmallThingsRootView: View {
 private enum SmallThingsRoute: Hashable {
     case composer(SmallThingEntryType)
     case binding
+    case approval
 }
