@@ -31,9 +31,11 @@ public struct DVKActiveVoiceAccessoryModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         #if compiler(>=6.2)
-        if #available(iOS 26.1, *) {
-            content.tabViewBottomAccessory(isEnabled: presentation.isVisible) {
-                DVKActiveVoiceAccessoryView(presentation: presentation, theme: theme, onReturn: onReturn)
+        if #available(iOS 26.0, *) {
+            content.tabViewBottomAccessory {
+                if presentation.isVisible {
+                    DVKActiveVoiceAccessoryView(presentation: presentation, theme: theme, onReturn: onReturn)
+                }
             }
         } else {
             content.safeAreaInset(edge: .bottom, spacing: 8) {

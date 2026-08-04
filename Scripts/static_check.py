@@ -481,9 +481,11 @@ def main() -> None:
     accessory_text = accessory_path.read_text(encoding="utf-8") if accessory_path.is_file() else ""
     if "tabViewBottomAccessory" not in accessory_text:
         failures.append("iOS 26 active voice accessory path is missing")
-    if "tabViewBottomAccessory(isEnabled: presentation.isVisible)" not in accessory_text:
-        failures.append("iOS 26 active voice accessory must bind isEnabled to presentation.isVisible")
-    if "isEnabled" not in accessory_text or "presentation.isVisible" not in accessory_text:
+    if "tabViewBottomAccessory {" not in accessory_text:
+        failures.append("iOS 26 active voice accessory must use the SDK 26.0 content overload")
+    if "if presentation.isVisible" not in accessory_text:
+        failures.append("iOS 26 active voice accessory must gate content with presentation.isVisible")
+    if "presentation.isVisible" not in accessory_text:
         failures.append("active voice accessory visibility binding is incomplete")
     if "#if compiler(>=6.2)" not in accessory_text or "#available(iOS 26.0" not in accessory_text:
         failures.append("active voice accessory availability boundary is missing")
