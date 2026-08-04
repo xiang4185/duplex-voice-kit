@@ -57,7 +57,8 @@ jobs:
           test -n "$XCODE_26_APP" || { echo '::error::Xcode 26 not found in /Applications'; exit 1; }
           export DEVELOPER_DIR="$XCODE_26_APP/Contents/Developer"
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          XCODE_VERSION_LINE="$(xcodebuild -version | head -n 1)"
+          XCODE_VERSION_OUTPUT="$(xcodebuild -version)"
+          XCODE_VERSION_LINE="${XCODE_VERSION_OUTPUT%%$'\n'*}"
           echo "xcodebuild: $XCODE_VERSION_LINE"
           case "$XCODE_VERSION_LINE" in
             "Xcode 26"*) ;;
