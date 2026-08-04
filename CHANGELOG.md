@@ -15,6 +15,7 @@ The project follows Keep a Changelog conventions. Versioned release history will
 - Public transport and transport-factory boundaries.
 - Apache License 2.0 and public repository governance documentation.
 - GitHub Actions workflow for static checks and iOS Simulator tests.
+- Complete single-source `Apps/XiaomaoApp` target with chat, small-things, voice, Widget, app tests, and manual unsigned IPA packaging through the local DVK package.
 
 ### Security
 
@@ -30,4 +31,4 @@ The project follows Keep a Changelog conventions. Versioned release history will
 - Added four fictional public mock cats, a Store-driven Home/Cats/Conversation/Reviews/Settings flow, and a snapping profile carousel.
 - Added neutral host-injected profile routing, review/profile snapshots, deterministic Mock Lab scenarios, procedural character states, and a Live2D adapter boundary.
 - Added explicit accessibility, Dynamic Type, dark-mode, and Reduce Motion contracts without third-party character, font, audio, or model assets.
-- Documented that XiaomaoApp is a future private host integration; no real persona ID or private prompt is included in this repository.
+- Kept the public Core boundary provider-neutral while moving the runnable Xiaomao application into the same repository with empty Release endpoints and no committed credential or private deployment material.

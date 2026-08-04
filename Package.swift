@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         .target(name: "DuplexVoiceKit"),
         .target(name: "DuplexVoiceKitCompanion"),
-        .target(name: "DuplexVoiceKitUI", dependencies: ["DuplexVoiceKitCompanion", "DuplexVoiceKit"]),
+        .target(name: "DuplexVoiceKitUI", dependencies: ["DuplexVoiceKitCompanion", "DuplexVoiceKit"], resources: [.process("Resources")]),
         .testTarget(name: "DuplexVoiceKitTests", dependencies: ["DuplexVoiceKit"]),
         .testTarget(name: "DuplexVoiceKitCompanionTests", dependencies: ["DuplexVoiceKitCompanion"]),
         .testTarget(name: "DuplexVoiceKitUITests", dependencies: ["DuplexVoiceKitUI"])

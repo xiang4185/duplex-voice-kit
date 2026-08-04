@@ -1,6 +1,11 @@
 .DS_Store
 .build/
 .swiftpm/
+Apps/XiaomaoApp/Config/Secrets.xcconfig
+Apps/XiaomaoApp/XiaomaoApp.xcodeproj/
+Apps/XiaomaoApp/*.xcworkspace/
+Apps/XiaomaoApp/DerivedData/
+.swiftpm/
 DerivedData/
 xcuserdata/
 __pycache__/

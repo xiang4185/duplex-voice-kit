@@ -1,0 +1,73 @@
+name: XiaomaoApp
+options:
+  bundleIdPrefix: com.example.xiaomao
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+configs:
+  Debug: debug
+  Release: release
+packages:
+  DuplexVoiceKit:
+    path: ../..
+targets:
+  XiaomaoShared:
+    type: framework
+    platform: iOS
+    sources:
+      - XiaomaoShared
+    settings:
+      base:
+        MACH_O_TYPE: staticlib
+        SKIP_INSTALL: YES
+        SWIFT_EMIT_LOC_STRINGS: NO
+  XiaomaoApp:
+    type: application
+    platform: iOS
+    sources:
+      - XiaomaoApp
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Release: Config/Release.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
+        INFOPLIST_FILE: XiaomaoApp/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: DuplexVoiceKit
+      - target: XiaomaoShared
+        embed: false
+      - target: XiaomaoAppWidgets
+    scheme:
+      testTargets:
+        - XiaomaoAppTests
+  XiaomaoAppWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - XiaomaoAppWidgets
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Release: Config/Release.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID).widgets
+        INFOPLIST_FILE: XiaomaoAppWidgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: NO
+        SKIP_INSTALL: YES
+    dependencies:
+      - target: XiaomaoShared
+        embed: false
+  XiaomaoAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - XiaomaoAppTests
+    dependencies:
+      - target: XiaomaoApp
+      - package: DuplexVoiceKit

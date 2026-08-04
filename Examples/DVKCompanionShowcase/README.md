@@ -21,3 +21,7 @@ The Cats page uses a horizontal snapping carousel with centered 156:190 cards, n
 Routing is intentionally neutral: a host resolver maps a public profile ID to an opaque route token. The token is not displayed, logged, or written to a review. The public repository contains no real persona ID, private prompt, production endpoint, credential, or third-party character/font/model asset. XiaomaoApp can later inject its private catalog, theme, route mapping, copy, and final character resources.
 
 Mock Lab scenarios are deterministic and local: text success, slow response, next text failure, route failure, unavailable profile, voice connection failure, voice interruption, review generation failure, limited privacy, multiple reviews, empty reviews, appearance, Reduce Motion, procedural character states, and playback amplitude.
+
+## V7.1-R4 character artwork
+
+The default companion character artwork (`DVKCatPortrait`, 1024×1536 PNG, and `DVKCatAvatar`, 512×512 PNG) is AI-generated for this project and approved by the project owner for public redistribution. It ships under public resource names inside the DuplexVoiceKitUI target, using `.process("Resources")` in Package.swift and `Image(_:bundle: .module)` lookups. The private source asset names are intentionally not reused to avoid collisions with host apps. The App Icon and any other branded assets are not included. The procedural mock cats remain the fallback for the other three public roles and for resource-load failures.
