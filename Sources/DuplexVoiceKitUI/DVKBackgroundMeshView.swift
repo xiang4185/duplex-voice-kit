@@ -15,16 +15,20 @@ public struct DVKBackgroundMeshView: View {
 
     public let mode: Mode
     public let theme: DVKCompanionTheme
+    /// 静态模式：Home/Cats 使用静态 Mesh（保留颜色渐变，不启动 KeyframeAnimator）；
+    /// 通话页保持默认动态。Reduce Motion 时同样静态。
+    public let staticMode: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(mode: Mode, theme: DVKCompanionTheme) {
+    public init(mode: Mode, theme: DVKCompanionTheme, staticMode: Bool = false) {
         self.mode = mode
         self.theme = theme
+        self.staticMode = staticMode
     }
 
     public var body: some View {
         if #available(iOS 18.0, *) {
-            if reduceMotion {
+            if reduceMotion || staticMode {
                 staticMesh
             } else {
                 animatedMesh

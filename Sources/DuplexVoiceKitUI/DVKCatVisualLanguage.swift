@@ -647,4 +647,59 @@ struct DVKCatMiniWave: View {
         return maxH * base * pulse
     }
 }
+
+// MARK: - 底部摘要条专用 52pt 圆形头像（DVKCatCompactAvatar）
+// 默认角色使用 AI 缩略图（DVKCatAvatar）；其他公共角色使用专用程序化圆形头像
+// （渐变圆 + 主题符号），不再把完整 fallback 画布裁成方形色块。
+struct DVKCatCompactAvatar: View {
+    let profile: DVKCompanionProfile
+    var size: CGFloat = 52
+    var revealed: Bool = true
+
+    var body: some View {
+        if profile.id == "mock.gentle-cat" {
+            DVKCatAvatarView(
+                profile: profile,
+                size: size,
+                style: .thumbnail,
+                revealed: revealed
+            )
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+        } else {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [themeColor.opacity(0.85), themeColor.opacity(0.55)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.38, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+            }
+            .frame(width: size, height: size)
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+            )
+        }
+    }
+
+    private var themeColor: Color {
+        let theme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: .followProfile)
+        return theme.primaryAction
+    }
+
+    private var symbol: String {
+        switch profile.themeKey {
+        case .coralGold: return "sun.max.fill"
+        case .mistBlue: return "cloud.fill"
+        case .lavenderNight: return "moon.stars.fill"
+        case .warmCreamRose: return "pawprint.fill"
+        }
+    }
+}
 #endif

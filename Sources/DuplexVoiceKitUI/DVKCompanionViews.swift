@@ -164,9 +164,7 @@ public struct DVKCompanionHomeView: View {
     private let openConversation: () -> Void
 
     @State private var appeared = false
-    @State private var nameBreath = false
     @State private var avatarBreath = false
-    @State private var sonarPulse = false
     @State private var greetingIndex = 0
     @State private var greetingTimer: Timer?
     @State private var showPrivacyConfirm = false
@@ -197,8 +195,8 @@ public struct DVKCompanionHomeView: View {
         let privacyRevealed = store.privacy == .allowed
 
         ZStack {
-            // 有机渐变背景（参考壳 Mesh）
-            DVKBackgroundMeshView(mode: .home, theme: theme)
+            // 有机渐变背景（参考壳 Mesh，静态：保留颜色渐变，无 KeyframeAnimator）
+            DVKBackgroundMeshView(mode: .home, theme: theme, staticMode: true)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -229,67 +227,72 @@ public struct DVKCompanionHomeView: View {
                 Spacer(minLength: 0)
 
                 // 中央：柔光晕 + 完整形象（portrait 2:3 + 底部光斑）
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [style.roleGold.opacity(0.30), style.primarySoft.opacity(0.15), .clear],
-                                center: .center,
-                                startRadius: 50,
-                                endRadius: 200
+                // halo 直径自适应容器宽度，避免大圆环溢出屏幕形成游离圆环
+                GeometryReader { geometry in
+                    let haloDiameter = min(380, max(240, geometry.size.width))
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [style.roleGold.opacity(0.30), style.primarySoft.opacity(0.15), .clear],
+                                    center: .center,
+                                    startRadius: 50,
+                                    endRadius: 200
+                                )
                             )
-                        )
-                        .frame(width: 380, height: 380)
-                        .accessibilityHidden(true)
+                            .frame(width: haloDiameter, height: haloDiameter)
+                            .accessibilityHidden(true)
 
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [style.heroGlow, style.heroGlow.opacity(0.4), .clear],
-                                center: .center,
-                                startRadius: 10,
-                                endRadius: 140
+                        Ellipse()
+                            .fill(
+                                RadialGradient(
+                                    colors: [style.heroGlow, style.heroGlow.opacity(0.4), .clear],
+                                    center: .center,
+                                    startRadius: 10,
+                                    endRadius: 140
+                                )
                             )
-                        )
-                        .frame(width: 300, height: 60)
-                        .offset(y: heroSize * 0.55)
-                        .blur(radius: 24)
-                        .opacity(0.85)
-                        .accessibilityHidden(true)
+                            .frame(width: min(300, geometry.size.width * 0.92), height: 60)
+                            .offset(y: heroSize * 0.55)
+                            .blur(radius: 24)
+                            .opacity(0.85)
+                            .accessibilityHidden(true)
 
-                    if let profile = store.selectedProfile {
-                        DVKCatAvatarView(
-                            profile: profile,
-                            size: heroSize,
-                            revealed: privacyRevealed
-                        ) {
-                            showPrivacyConfirm = true
+                        if let profile = store.selectedProfile {
+                            DVKCatAvatarView(
+                                profile: profile,
+                                size: heroSize,
+                                revealed: privacyRevealed
+                            ) {
+                                showPrivacyConfirm = true
+                            }
+                            .scaleEffect(avatarBreath ? 1.012 : 0.988)
+                            .offset(y: avatarBreath ? -3 : 0)
+                            .animation(
+                                reduced ? nil : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
+                                value: avatarBreath
+                            )
+                            .onAppear { avatarBreath = true }
+                            .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
                         }
-                        .scaleEffect(avatarBreath ? 1.012 : 0.988)
-                        .offset(y: avatarBreath ? -3 : 0)
-                        .animation(
-                            reduced ? nil : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
-                            value: avatarBreath
-                        )
-                        .onAppear { avatarBreath = true }
-                        .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(height: heroSize * 3.0 / 2.0 + 40)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.94)
                 .animation(.spring(response: DVKCatStyle.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
 
-                // 状态点声呐 + 动态波形
+                // 状态点（静态）+ 状态文案 + 静态迷你波形（无 Timer 刷新）
                 HStack(spacing: 10) {
-                    sonarDot(style: style, reduced: reduced)
+                    sonarDot(style: style)
                     Text("正在陪你")
                         .font(style.captionFont)
                         .foregroundStyle(style.textSecondary)
                     DVKCompanionMiniWave(
                         active: true,
                         color: theme.primaryAction,
-                        reduceMotion: reduced,
+                        reduceMotion: true,
                         barCount: 5
                     )
                     .frame(width: 44, height: 16)
@@ -302,16 +305,10 @@ public struct DVKCompanionHomeView: View {
                 .accessibilityIdentifier(DVKCompanionAccessibilityID.homeStatus)
 
                 if let profile = store.selectedProfile {
-                    // 宋体角色名（letter-spacing 呼吸，跟随预览角色）
+                    // 宋体角色名（静态，跟随预览角色；无 tracking 呼吸动画）
                     Text(DVKCatStyle.displayName(for: profile))
                         .font(style.title1Font)
                         .foregroundStyle(style.textPrimary)
-                        .tracking(nameBreath ? 2.5 : 0.5)
-                        .animation(
-                            reduced ? nil : .easeInOut(duration: 8).repeatForever(autoreverses: true),
-                            value: nameBreath
-                        )
-                        .onAppear { nameBreath = true }
                         .padding(.top, 12)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 10)
@@ -360,11 +357,11 @@ public struct DVKCompanionHomeView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 60)
                         .contentShape(Capsule())
+                        .background(style.primary, in: Capsule())
+                        .shadow(color: style.ctaShadow.opacity(0.35), radius: 18, x: 0, y: 8)
+                        .shadow(color: theme.primaryAction.opacity(0.18), radius: 6, x: 0, y: 2)
                     }
                     .buttonStyle(DVKCatPressableButtonStyle())
-                    .dvkGlassControl(theme: theme, prominent: true)
-                    .shadow(color: style.ctaShadow.opacity(0.35), radius: 18, x: 0, y: 8)
-                    .shadow(color: theme.primaryAction.opacity(0.18), radius: 6, x: 0, y: 2)
                     .padding(.horizontal, 40)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 14)
@@ -404,16 +401,12 @@ public struct DVKCompanionHomeView: View {
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
 
-    // MARK: 状态点声呐
-    private func sonarDot(style: DVKCatStyle, reduced: Bool) -> some View {
+    // MARK: 静态状态点（无声呐扩散动画，避免游离图层与持续刷新）
+    private func sonarDot(style: DVKCatStyle) -> some View {
         ZStack {
             Circle()
                 .stroke(style.online.opacity(0.5), lineWidth: 1.5)
                 .frame(width: 18, height: 18)
-                .scaleEffect(sonarPulse ? 2.2 : 0.8)
-                .opacity(sonarPulse ? 0 : 0.7)
-                .animation(reduced ? nil : .easeOut(duration: DVKCatStyle.sonarDuration).repeatForever(autoreverses: false), value: sonarPulse)
-                .onAppear { sonarPulse = true }
             Circle()
                 .fill(style.online)
                 .frame(width: 7, height: 7)
@@ -491,18 +484,18 @@ public struct DVKCompanionProfilesView: View {
         let reduced = systemReduceMotion || store.reduceMotionPreview
 
         ZStack {
-            DVKBackgroundMeshView(mode: .home, theme: theme)
+            DVKBackgroundMeshView(mode: .home, theme: theme, staticMode: true)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 标题区（宋体大标题 + 单行副标题）
+                // 标题区（宋体大标题 + 单行副标题，副标题做最小对比度增强）
                 VStack(alignment: .leading, spacing: 6) {
                     Text("当前陪伴角色")
                         .font(style.title1Font)
                         .foregroundStyle(style.textPrimary)
                     Text("左右滑动查看，确认后开始聊天")
                         .font(style.subheadFont)
-                        .foregroundStyle(style.textSecondary)
+                        .foregroundStyle(style.textPrimary.opacity(0.85))
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -720,15 +713,13 @@ public struct DVKCompanionProfilesView: View {
         let isCurrent = profile.id == store.selectedProfileID
         return AnyView(
             HStack(spacing: 14) {
-                // 小头像（52pt 缩略图，固定容器内不溢出）
-                DVKCatAvatarView(
+                // 小头像（52pt 专用：小猫用 AI 缩略图，其他角色用程序化圆形头像，非画布裁切）
+                DVKCatCompactAvatar(
                     profile: profile,
                     size: 52,
-                    style: .thumbnail,
                     revealed: store.privacy == .allowed
                 )
                 .frame(width: 52, height: 52)
-                .clipped()
 
                 // 角色信息：名称单行 + 最多两标签单行
                 VStack(alignment: .leading, spacing: 4) {
