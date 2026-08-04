@@ -161,8 +161,22 @@ private struct DVKHomeCharacterCanvas: View {
 public struct DVKCompanionHomeView: View {
     @ObservedObject private var adapter: DVKCompanionStoreAdapter
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    @State private var nameBreath = false
     private let openConversation: () -> Void
+
+    @State private var appeared = false
+    @State private var nameBreath = false
+    @State private var avatarBreath = false
+    @State private var sonarPulse = false
+    @State private var greetingIndex = 0
+    @State private var greetingTimer: Timer?
+    @State private var showPrivacyConfirm = false
+
+    private let greetings: [(text: String, icon: String)] = [
+        ("在呢", "sun.max.fill"),
+        ("想你了", "moon.stars.fill"),
+        ("一直在", "star.fill")
+    ]
+    private let heroSize: CGFloat = 200
 
     public init(
         adapter: DVKCompanionStoreAdapter,
@@ -178,184 +192,241 @@ public struct DVKCompanionHomeView: View {
             profile: store.selectedProfile,
             appearance: store.appearance
         )
+        let style = DVKCatStyle(theme: theme)
+        let reduced = systemReduceMotion || store.reduceMotionPreview
+        let privacyRevealed = store.privacy == .allowed
 
-        GeometryReader { geometry in
-            let availableHeight = geometry.size.height
-            let compact = store.hasActiveSession || availableHeight < 580
-            let topPadding: CGFloat = compact ? 8 : 16
-            let settingsHeight: CGFloat = compact ? 40 : 44
-            let settingsGap: CGFloat = compact ? 4 : 8
-            let statusHeight: CGFloat = compact ? 18 : 22
-            let nameHeight: CGFloat = compact ? 26 : 30
-            let readyHeight: CGFloat = compact ? 16 : 18
-            let ctaHeight: CGFloat = compact ? 48 : 54
-            let textCardHeight: CGFloat = compact ? 52 : 60
-            let innerSpacing: CGFloat = compact ? 8 : 12
-            let nonCharacterBudget = statusHeight
-                + nameHeight
-                + readyHeight
-                + ctaHeight
-                + textCardHeight
-            let characterMaxHeight: CGFloat = compact ? 200 : 290
-            let characterHeight = min(
-                characterMaxHeight,
-                max(0, availableHeight - topPadding - settingsHeight - settingsGap - nonCharacterBudget - innerSpacing * 5)
-            )
+        ZStack {
+            // 有机渐变背景（参考壳 Mesh）
+            DVKBackgroundMeshView(mode: .home, theme: theme)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // 顶栏：设置按钮（齿轮）
                 HStack {
-                    DVKHomeSettingsButton(
-                        theme: theme,
-                        height: settingsHeight
-                    ) {
+                    Button {
+                        DVKCatHaptics.action()
                         store.setSelectedTab(.settings)
                         adapter.refresh()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(style.textSecondary)
+                            .frame(width: 40, height: 40)
+                            .background(style.surface.opacity(0.7), in: Circle())
+                            .overlay(Circle().stroke(style.border, lineWidth: 1))
                     }
+                    .accessibilityLabel("设置")
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.homeSettings)
                     Spacer()
                 }
-                .frame(height: settingsHeight)
-
-                Spacer(minLength: settingsGap)
-
-                VStack(spacing: innerSpacing) {
-                    if let profile = store.selectedProfile {
-                        // 中央大人物 Hero：halo 光晕 + 呼吸人物（绝对主体）
-                        ZStack {
-                            DVKCompanionHeroHalo(
-                                color: theme.halo,
-                                diameter: characterHeight,
-                                reduceMotion: systemReduceMotion || store.reduceMotionPreview
-                            )
-                            DVKHomeCharacterCanvas(
-                                profile: profile,
-                                state: store.characterState,
-                                dimension: characterHeight,
-                                reduceMotion: systemReduceMotion || store.reduceMotionPreview,
-                                staticMode: store.presentationMode == .staticFallback,
-                                host: adapter.live2DHost
-                            )
-                        }
-                        .frame(width: characterHeight, height: characterHeight)
-                        .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
-
-                        // 状态点声呐 + 在场文案 + 迷你波形
-                        HStack(spacing: 8) {
-                            DVKCompanionSonarDot(
-                                color: theme.activeStatus,
-                                diameter: 18,
-                                reduceMotion: systemReduceMotion || store.reduceMotionPreview
-                            )
-                            Text("Here with you")
-                                .font(.footnote)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .foregroundStyle(theme.textSecondary)
-                            DVKCompanionMiniWave(
-                                active: true,
-                                color: theme.primaryAction,
-                                reduceMotion: systemReduceMotion || store.reduceMotionPreview,
-                                barCount: 5
-                            )
-                            .frame(width: 44, height: 14)
-                            .opacity(0.75)
-                        }
-                        .frame(height: statusHeight)
-                        .accessibilityIdentifier(DVKCompanionAccessibilityID.homeStatus)
-
-                        // 宋体角色名（呼吸）
-                        Text(profile.displayName)
-                            .font(DVKCompanionTypography.serifName(compact ? 26 : 30))
-                            .tracking(nameBreath ? 2.0 : 0.5)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .foregroundStyle(theme.textPrimary)
-                            .animation(
-                                (systemReduceMotion || store.reduceMotionPreview)
-                                    ? nil
-                                    : .easeInOut(duration: 8).repeatForever(autoreverses: true),
-                                value: nameBreath
-                            )
-                            .frame(height: nameHeight)
-
-                        // 简短问候
-                        Text(profile.greeting)
-                            .font(.subheadline)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .foregroundStyle(theme.textSecondary)
-                            .frame(height: readyHeight)
-
-                        // 唯一主操作：语音聊天
-                        primaryCTA(
-                            title: DVKHomePresentation.primaryCTATitle(
-                                profileName: profile.displayName,
-                                hasActiveSession: store.hasActiveSession
-                            ),
-                            theme: theme,
-                            height: ctaHeight
-                        ) {
-                            store.setMode(.voice)
-                            adapter.refresh()
-                            openConversation()
-                        }
-
-                        // 次级文字聊天入口（克制卡片，视觉层级低于语音主按钮）
-                        textChatCard(theme: theme, height: textCardHeight) {
-                            store.setMode(.text)
-                            adapter.refresh()
-                            openConversation()
-                        }
-                    } else {
-                        ContentUnavailableView(
-                            "Choose a cat",
-                            systemImage: "pawprint.fill",
-                            description: Text("Visit Cats to choose a public mock profile.")
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : -8)
+                .animation(.easeOut(duration: 0.4).delay(0.05), value: appeared)
 
                 Spacer(minLength: 0)
+
+                // 中央：柔光晕 + 完整形象（portrait 2:3 + 底部光斑）
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [style.roleGold.opacity(0.30), style.primarySoft.opacity(0.15), .clear],
+                                center: .center,
+                                startRadius: 50,
+                                endRadius: 200
+                            )
+                        )
+                        .frame(width: 380, height: 380)
+                        .accessibilityHidden(true)
+
+                    Ellipse()
+                        .fill(
+                            RadialGradient(
+                                colors: [style.heroGlow, style.heroGlow.opacity(0.4), .clear],
+                                center: .center,
+                                startRadius: 10,
+                                endRadius: 140
+                            )
+                        )
+                        .frame(width: 300, height: 60)
+                        .offset(y: heroSize * 0.55)
+                        .blur(radius: 24)
+                        .opacity(0.85)
+                        .accessibilityHidden(true)
+
+                    if let profile = store.selectedProfile {
+                        DVKCatAvatarView(
+                            profile: profile,
+                            size: heroSize,
+                            revealed: privacyRevealed
+                        ) {
+                            showPrivacyConfirm = true
+                        }
+                        .scaleEffect(avatarBreath ? 1.012 : 0.988)
+                        .offset(y: avatarBreath ? -3 : 0)
+                        .animation(
+                            reduced ? nil : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
+                            value: avatarBreath
+                        )
+                        .onAppear { avatarBreath = true }
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
+                    }
+                }
+                .frame(height: heroSize * 3.0 / 2.0 + 40)
+                .opacity(appeared ? 1 : 0)
+                .scaleEffect(appeared ? 1 : 0.94)
+                .animation(.spring(response: DVKCatStyle.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
+
+                // 状态点声呐 + 动态波形
+                HStack(spacing: 10) {
+                    sonarDot(style: style, reduced: reduced)
+                    Text("正在陪你")
+                        .font(style.captionFont)
+                        .foregroundStyle(style.textSecondary)
+                    DVKCompanionMiniWave(
+                        active: true,
+                        color: theme.primaryAction,
+                        reduceMotion: reduced,
+                        barCount: 5
+                    )
+                    .frame(width: 44, height: 16)
+                    .opacity(0.75)
+                }
+                .padding(.top, 4)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.3), value: appeared)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(DVKCompanionAccessibilityID.homeStatus)
+
+                if let profile = store.selectedProfile {
+                    // 宋体角色名（letter-spacing 呼吸，跟随预览角色）
+                    Text(DVKCatStyle.displayName(for: profile))
+                        .font(style.title1Font)
+                        .foregroundStyle(style.textPrimary)
+                        .tracking(nameBreath ? 2.5 : 0.5)
+                        .animation(
+                            reduced ? nil : .easeInOut(duration: 8).repeatForever(autoreverses: true),
+                            value: nameBreath
+                        )
+                        .onAppear { nameBreath = true }
+                        .padding(.top, 12)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 10)
+                        .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
+
+                    // 时段问候文案轮换（9s）
+                    HStack(spacing: 6) {
+                        Text(greetings[greetingIndex].text)
+                            .font(style.subheadFont)
+                            .foregroundStyle(style.textSecondary)
+                        Image(systemName: greetings[greetingIndex].icon)
+                            .font(.system(size: 13))
+                            .foregroundStyle(style.roleGold)
+                    }
+                    .padding(.top, 6)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
+                    .onAppear {
+                        guard !reduced else { return }
+                        greetingTimer?.invalidate()
+                        greetingTimer = Timer.scheduledTimer(withTimeInterval: 9, repeats: true) { _ in
+                            withAnimation(.easeInOut(duration: 0.6)) {
+                                greetingIndex = (greetingIndex + 1) % greetings.count
+                            }
+                        }
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                if let profile = store.selectedProfile {
+                    // 唯一主操作：语音聊天（大胶囊 CTA）
+                    Button(action: {
+                        DVKCatHaptics.comfort()
+                        store.setMode(.voice)
+                        adapter.refresh()
+                        openConversation()
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 17, weight: .medium))
+                            Text(DVKCatStyle.introCopy(for: profile))
+                                .font(style.headlineFont)
+                        }
+                        .foregroundStyle(style.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 60)
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(DVKCatPressableButtonStyle())
+                    .dvkGlassControl(theme: theme, prominent: true)
+                    .shadow(color: style.ctaShadow.opacity(0.35), radius: 18, x: 0, y: 8)
+                    .shadow(color: theme.primaryAction.opacity(0.18), radius: 6, x: 0, y: 2)
+                    .padding(.horizontal, 40)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 14)
+                    .animation(.spring(response: DVKCatStyle.entranceDuration, dampingFraction: 0.75).delay(0.5), value: appeared)
+                    .accessibilityLabel(DVKCatStyle.introCopy(for: profile))
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.homePrimaryCTA)
+
+                    // 文字聊天入口（克制次级卡片，替代原“陪伴记录”卡位置）
+                    textChatCard(style: style, theme: theme) {
+                        store.setMode(.text)
+                        adapter.refresh()
+                        openConversation()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .padding(.bottom, 12)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 12)
+                    .animation(.easeOut(duration: 0.4).delay(0.7), value: appeared)
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, topPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
-        .background(DVKBackgroundMeshView(mode: .home, theme: theme))
+        .sheet(isPresented: $showPrivacyConfirm) {
+            DVKCatPrivacyConfirmView(
+                onAgree: { store.reauthorize(); adapter.refresh() },
+                onDecline: { store.setPrivacy(.limited); adapter.refresh() }
+            )
+            .presentationDetents([.medium])
+        }
+        .onAppear { appeared = true }
+        .onDisappear {
+            greetingTimer?.invalidate()
+            greetingTimer = nil
+        }
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { nameBreath = true }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.home)
     }
 
-    private func primaryCTA(
-        title: String,
-        theme: DVKCompanionTheme,
-        height: CGFloat,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 17, weight: .medium))
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
+    // MARK: 状态点声呐
+    private func sonarDot(style: DVKCatStyle, reduced: Bool) -> some View {
+        ZStack {
+            Circle()
+                .stroke(style.online.opacity(0.5), lineWidth: 1.5)
+                .frame(width: 18, height: 18)
+                .scaleEffect(sonarPulse ? 2.2 : 0.8)
+                .opacity(sonarPulse ? 0 : 0.7)
+                .animation(reduced ? nil : .easeOut(duration: DVKCatStyle.sonarDuration).repeatForever(autoreverses: false), value: sonarPulse)
+                .onAppear { sonarPulse = true }
+            Circle()
+                .fill(style.online)
+                .frame(width: 7, height: 7)
         }
-        .dvkGlassControl(theme: theme, prominent: true)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier(DVKCompanionAccessibilityID.homePrimaryCTA)
+        .frame(width: 20, height: 20)
+        .accessibilityHidden(true)
     }
 
     /// 次级文字聊天入口：克制卡片（气泡图标 + 标题 + 副标题 + chevron），
     /// 视觉层级明显低于语音主按钮。
     private func textChatCard(
+        style: DVKCatStyle,
         theme: DVKCompanionTheme,
-        height: CGFloat,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -380,13 +451,15 @@ public struct DVKCompanionHomeView: View {
                     .foregroundStyle(theme.textSecondary)
             }
             .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .frame(height: height)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .dvkGlassSurface(theme: theme)
-        .dvkCardTopHighlight()
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous).stroke(theme.border, lineWidth: 1))
+        .dvkCatCardTopHighlight()
+        .shadow(color: theme.shadow.opacity(0.5), radius: 10, x: 0, y: 3)
         .accessibilityLabel("文字聊天，安静地打字聊聊")
         .accessibilityIdentifier("companion.home.textChat")
     }
@@ -397,6 +470,7 @@ public struct DVKCompanionProfilesView: View {
     @ObservedObject private var adapter: DVKCompanionStoreAdapter
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var scrollPosition: String?
+    @State private var showPrivacyConfirm = false
     private let openConversation: () -> Void
 
     public init(
@@ -413,55 +487,41 @@ public struct DVKCompanionProfilesView: View {
             profile: store.previewProfile,
             appearance: store.appearance
         )
+        let style = DVKCatStyle(theme: theme)
+        let reduced = systemReduceMotion || store.reduceMotionPreview
 
-        GeometryReader { geometry in
-            let usableHeight = max(
-                0,
-                geometry.size.height - dvkTabBarBottomContentPadding
-            )
-            // 标题区（含副标题）约占 92pt；操作条（含间距）约 96pt；
-            // 其余全部高度归主卡，不设 400pt 上限，大屏主卡接近原版比例。
-            let headerBudget: CGFloat = 92
-            let footerBudget: CGFloat = store.canSelectProfiles ? 96 : 124
-            let availableHeroHeight = max(
-                0,
-                usableHeight - headerBudget - footerBudget
-            )
-            let cardHeight = max(280, availableHeroHeight)
-            // 卡片宽度：屏幕宽度 - 左右页边距 - 相邻轻微露出
-            let cardWidth = max(
-                260,
-                geometry.size.width - 20 * 2 - 28
-            )
+        ZStack {
+            DVKBackgroundMeshView(mode: .home, theme: theme)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 页面主标题 + 简短副标题（单行，不抢主标题）
+                // 标题区（宋体大标题 + 单行副标题）
                 VStack(alignment: .leading, spacing: 6) {
                     Text("当前陪伴角色")
-                        .font(DVKCompanionTypography.serifDisplay(32))
-                        .foregroundStyle(theme.textPrimary)
+                        .font(style.title1Font)
+                        .foregroundStyle(style.textPrimary)
                     Text("左右滑动查看，确认后开始聊天")
-                        .font(.subheadline)
-                        .foregroundStyle(theme.textSecondary)
+                        .font(style.subheadFont)
+                        .foregroundStyle(style.textSecondary)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
 
-                // 可左右分页滑动的大角色主卡（紧跟副标题，间距 24–32pt）
+                // 可左右分页滑动的大角色主卡（原版角色卡结构，外层多卡滑动）
                 roleSwipeCarousel(
                     store: store,
                     theme: theme,
-                    cardWidth: cardWidth,
-                    cardHeight: cardHeight
+                    style: style,
+                    reduced: reduced
                 )
-                .padding(.bottom, 12)
 
-                // 底部固定角色操作条（头像 + 名称 + 标签 + 主按钮）
-                roleActionBar(store: store, theme: theme)
+                // 底部固定角色摘要操作条（原版 startBar）
+                roleActionBar(store: store, theme: theme, style: style)
                     .padding(.horizontal, 20)
+                    .padding(.top, 16)
 
                 if !store.canSelectProfiles {
                     Text("会话进行中，暂不能切换角色。")
@@ -470,59 +530,65 @@ public struct DVKCompanionProfilesView: View {
                         .padding(.top, 6)
                         .lineLimit(2)
                 }
+                Spacer(minLength: 0)
             }
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-                alignment: .top
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .foregroundStyle(theme.textPrimary)
-        .background(DVKBackgroundMeshView(mode: .home, theme: theme))
         .tint(theme.primaryAction)
         .animation(store.reduceMotionPreview ? nil : .easeInOut(duration: 0.25), value: store.previewProfileID)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showPrivacyConfirm) {
+            DVKCatPrivacyConfirmView(
+                onAgree: { store.reauthorize(); adapter.refresh() },
+                onDecline: { store.setPrivacy(.limited); adapter.refresh() }
+            )
+            .presentationDetents([.medium])
+        }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.profiles)
     }
 
-    // MARK: 左右滑动角色主卡（分页停靠，相邻轻微露出）
+    // MARK: 左右滑动角色主卡（分页停靠，相邻轻微露出；滑动只更新预览，不直接确认）
     @MainActor
     private func roleSwipeCarousel(
         store: DVKCompanionStore,
         theme: DVKCompanionTheme,
-        cardWidth: CGFloat,
-        cardHeight: CGFloat
+        style: DVKCatStyle,
+        reduced: Bool
     ) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 16) {
-                ForEach(store.profiles) { profile in
-                    roleHeroCard(
-                        profile: profile,
-                        store: store,
-                        theme: theme,
-                        isPreview: profile.id == store.previewProfileID
-                    )
-                    .frame(width: cardWidth, height: cardHeight)
-                    .id(profile.id)
+        GeometryReader { geometry in
+            let cardWidth = max(260, geometry.size.width - 20 * 2 - 28)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 16) {
+                    ForEach(store.profiles) { profile in
+                        roleHeroCard(
+                            profile: profile,
+                            store: store,
+                            style: style,
+                            isPreview: profile.id == store.previewProfileID
+                        )
+                        .frame(width: cardWidth)
+                        .id(profile.id)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollClipDisabled()
-        .contentMargins(.horizontal, 20, for: .scrollContent)
-        .scrollPosition(id: $scrollPosition)
-        .accessibilityIdentifier(DVKCompanionAccessibilityID.profileCarousel)
-        .accessibilityActions {
-            Button("上一位角色") { movePreview(offset: -1, store: store) }
-            Button("下一位角色") { movePreview(offset: 1, store: store) }
-        }
-        .onAppear { scrollPosition = store.previewProfileID }
-        .onChange(of: scrollPosition) { _, id in
-            guard store.canSelectProfiles, let id else { return }
-            store.selectPreviewProfile(id: id)
-            adapter.refresh()
+            .scrollTargetBehavior(.viewAligned)
+            .scrollClipDisabled()
+            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .scrollPosition(id: $scrollPosition)
+            .accessibilityIdentifier(DVKCompanionAccessibilityID.profileCarousel)
+            .accessibilityActions {
+                Button("上一位角色") { movePreview(offset: -1, store: store) }
+                Button("下一位角色") { movePreview(offset: 1, store: store) }
+            }
+            .onAppear { scrollPosition = store.previewProfileID }
+            .onChange(of: scrollPosition) { _, id in
+                guard store.canSelectProfiles, let id else { return }
+                store.selectPreviewProfile(id: id)
+                adapter.refresh()
+            }
         }
     }
 
@@ -538,204 +604,191 @@ public struct DVKCompanionProfilesView: View {
         adapter.refresh()
     }
 
-    // MARK: 大人物主卡（当前预览角色：badge + 渐变 + halo + 大人物 + 名字 + chips + 通话胶囊）
+    // MARK: 大人物主卡（原版角色卡：badge + 渐变 + halo + 大人物 + 名字 + chips + 简介 + 通话胶囊）
     @MainActor
     private func roleHeroCard(
         profile: DVKCompanionProfile,
         store: DVKCompanionStore,
-        theme: DVKCompanionTheme,
+        style: DVKCatStyle,
         isPreview: Bool
     ) -> some View {
         let profileTheme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: store.appearance)
-        let reduced = systemReduceMotion || store.reduceMotionPreview
-        return VStack(spacing: 10) {
+        let profileStyle = DVKCatStyle(theme: profileTheme)
+        let privacyRevealed = store.privacy == .allowed
+        return VStack(spacing: 12) {
             Text("当前角色")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(profileTheme.primaryAction)
+                .font(style.captionFont)
+                .foregroundStyle(profileStyle.primary700)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .background(profileTheme.primaryAction.opacity(0.10), in: Capsule())
-                .padding(.top, 12)
+                .background(profileStyle.primary100, in: Capsule())
+                .padding(.top, 14)
 
-            // 人物区域：占据卡片剩余高度，大屏下人物主体更大
+            // 大尺寸人物（完整形象；点击：未解锁 → 隐私确认）
             ZStack {
                 // 角色渐变背景（上半）
-                profileTheme.primaryAction.opacity(0.12)
-                    .frame(height: 160)
+                profileStyle.charWarmGradient
+                    .opacity(0.16)
+                    .frame(height: 140)
                     .frame(maxWidth: .infinity)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                // halo 光晕
+                    .clipShape(RoundedRectangle(cornerRadius: DVKCatStyle.Radius.characterCard, style: .continuous))
+
+                // 角色卡 halo 光晕
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [profileTheme.primaryAction.opacity(0.26), profileTheme.halo.opacity(0.14), .clear],
+                            colors: [profileStyle.roleGold.opacity(0.28), profileStyle.primarySoft.opacity(0.12), .clear],
                             center: .center,
                             startRadius: 40,
-                            endRadius: 130
+                            endRadius: 110
                         )
                     )
-                    .frame(width: 270, height: 270)
-                // 程序化 Mock 猫（固定容器内，不裁切不溢出）
-                DVKCharacterPresentationView(
+                    .frame(width: 240, height: 240)
+
+                DVKCatAvatarView(
                     profile: profile,
-                    state: .idle,
-                    reduceMotion: reduced,
-                    staticMode: true,
-                    host: nil
-                )
-                .frame(width: 224, height: 224)
+                    size: 190,
+                    revealed: privacyRevealed
+                ) {
+                    if store.privacy == .limited {
+                        showPrivacyConfirm = true
+                    }
+                }
             }
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: .infinity)
-            .padding(.top, 2)
+            .padding(.top, 4)
 
-            Text(profile.displayName)
-                .font(DVKCompanionTypography.serifName(25))
-                .foregroundStyle(profileTheme.textPrimary)
-                .lineLimit(1)
+            Text(DVKCatStyle.displayName(for: profile))
+                .font(style.title2Font)
+                .foregroundStyle(profileStyle.textPrimary)
 
-            // 标签：最多两个，单行，不逐字断行
             HStack(spacing: 6) {
                 ForEach(profile.personalityTags.prefix(2), id: \.self) { tag in
                     Text(tag)
-                        .font(.caption.weight(.medium))
-                        .lineLimit(1)
-                        .padding(.horizontal, 9)
+                        .font(style.captionFont)
+                        .foregroundStyle(profileStyle.primary700)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(profileTheme.primaryAction.opacity(0.10), in: Capsule())
-                        .foregroundStyle(profileTheme.primaryAction)
+                        .background(profileStyle.primary100, in: Capsule())
                 }
             }
-            .frame(maxWidth: .infinity)
 
             Text(profile.shortSummary)
-                .font(.subheadline)
-                .foregroundStyle(profileTheme.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .font(style.subheadFont)
+                .foregroundStyle(profileStyle.textSecondary)
+                .padding(.top, 2)
 
+            // 支持实时通话
             HStack(spacing: 5) {
                 Image(systemName: "waveform")
                     .font(.system(size: 11))
                 Text(profile.capabilities.contains(.voice) ? "支持实时通话" : "文字陪伴")
-                    .font(.caption)
+                    .font(style.captionFont)
             }
-            .foregroundStyle(profileTheme.primaryAction)
+            .foregroundStyle(profileStyle.primary700)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(profileTheme.primaryAction.opacity(0.10), in: Capsule())
-            .padding(.bottom, 10)
+            .background(profileStyle.primary100.opacity(0.7), in: Capsule())
+            .padding(.bottom, 16)
         }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(profileTheme.surface, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .frame(maxWidth: 340)
+        .frame(maxWidth: .infinity)
+        .background(profileStyle.surface, in: RoundedRectangle(cornerRadius: DVKCatStyle.Radius.characterCard, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(isPreview ? profileTheme.primaryAction.opacity(0.7) : profileTheme.border.opacity(0.5), lineWidth: isPreview ? 2 : 1)
+            RoundedRectangle(cornerRadius: DVKCatStyle.Radius.characterCard, style: .continuous)
+                .stroke(isPreview ? profileTheme.primaryAction.opacity(0.7) : profileStyle.border, lineWidth: isPreview ? 2 : 1)
         )
-        .dvkCardTopHighlight()
-        .shadow(color: profileTheme.shadow.opacity(0.16), radius: 18, y: 8)
+        .dvkCatCardTopHighlight()
+        .shadow(color: profileStyle.shadowFloating, radius: 20, x: 0, y: 8)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(profile.accessibilityDescription)
         .accessibilityIdentifier("companion.profile.hero.\(profile.id)")
     }
 
-    // MARK: 底部固定角色操作条（小头像 + 名称 + 最多两标签 + 主按钮，无可见切换按钮）
+    // MARK: 底部固定角色摘要操作条（原版 startBar：小头像 + 名称/标签 + 主按钮）
     @MainActor
     private func roleActionBar(
         store: DVKCompanionStore,
-        theme: DVKCompanionTheme
+        theme: DVKCompanionTheme,
+        style: DVKCatStyle
     ) -> some View {
         guard let profile = store.previewProfile else {
             return AnyView(EmptyView())
         }
         let profileTheme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: store.appearance)
+        let profileStyle = DVKCatStyle(theme: profileTheme)
         let isCurrent = profile.id == store.selectedProfileID
         return AnyView(
-            HStack(spacing: 12) {
-                // 小头像（52pt 专用 compact avatar，固定容器内绘制，非画布裁切）
-                DVKCompanionCompactAvatar(profile: profile, size: 52)
-                    .frame(width: 52, height: 52)
+            HStack(spacing: 14) {
+                // 小头像（52pt 缩略图，固定容器内不溢出）
+                DVKCatAvatarView(
+                    profile: profile,
+                    size: 52,
+                    style: .thumbnail,
+                    revealed: store.privacy == .allowed
+                )
+                .frame(width: 52, height: 52)
+                .clipped()
 
                 // 角色信息：名称单行 + 最多两标签单行
-                ViewThatFits(in: .horizontal) {
-                    // 宽屏：头像 + 名称/标签 + 主按钮
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(profile.displayName)
-                                .font(.headline)
-                                .foregroundStyle(theme.textPrimary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(DVKCatStyle.displayName(for: profile))
+                        .font(style.headlineFont)
+                        .foregroundStyle(profileStyle.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        ForEach(profile.personalityTags.prefix(2), id: \.self) { tag in
+                            Text(tag)
+                                .font(style.captionFont)
+                                .foregroundStyle(profileStyle.primary700)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(profileStyle.primary100, in: Capsule())
                                 .lineLimit(1)
-                            HStack(spacing: 6) {
-                                ForEach(profile.personalityTags.prefix(2), id: \.self) { tag in
-                                    Text(tag)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(profileTheme.primaryAction.opacity(0.10), in: Capsule())
-                                        .foregroundStyle(profileTheme.primaryAction)
-                                }
-                            }
                         }
-                        Spacer(minLength: 4)
-                        primaryBarButton(store: store, profile: profile, isCurrent: isCurrent, theme: theme, profileTheme: profileTheme)
-                    }
-                    // 窄屏：头像 + 名称 + 主按钮（省略标签）
-                    HStack(spacing: 10) {
-                        Text(profile.displayName)
-                            .font(.headline)
-                            .foregroundStyle(theme.textPrimary)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        primaryBarButton(store: store, profile: profile, isCurrent: isCurrent, theme: theme, profileTheme: profileTheme)
                     }
                 }
+                Spacer(minLength: 0)
+
+                // 主按钮：使用此角色 / 开始聊天
+                Button {
+                    if isCurrent {
+                        openConversation()
+                    } else {
+                        store.confirmProfileSelection()
+                        adapter.refresh()
+                    }
+                } label: {
+                    Text(isCurrent ? "开始聊天" : "使用此角色")
+                        .font(style.headlineFont)
+                        .foregroundStyle(profileStyle.onPrimary)
+                        .padding(.horizontal, 20)
+                        .frame(height: 48)
+                        .background(profileStyle.primary, in: Capsule())
+                        .shadow(color: profileStyle.ctaShadow, radius: 10, x: 0, y: 5)
+                }
+                .buttonStyle(DVKCatPressableButtonStyle())
+                .lineLimit(1)
+                .disabled(
+                    isCurrent
+                        ? store.selectedProfile == nil
+                        : !store.canConfirmProfileSelection
+                )
+                .accessibilityLabel(
+                    DVKRoleSelectionActionPresentation.title(
+                        previewProfileID: profile.id,
+                        selectedProfileID: store.selectedProfileID
+                    )
+                )
+                .accessibilityIdentifier(DVKCompanionAccessibilityID.profileConfirm)
             }
-            .padding(12)
-            .background(profileTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(profileTheme.border.opacity(0.5), lineWidth: 1)
-            )
-            .dvkCardTopHighlight()
+            .padding(14)
+            .background(profileTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous).stroke(profileStyle.border, lineWidth: 1))
+            .dvkCatCardTopHighlight()
+            .shadow(color: profileStyle.shadowRaised, radius: 12, x: 0, y: 4)
             .accessibilityIdentifier(DVKCompanionAccessibilityID.profilePreview)
         )
-    }
-
-    @MainActor
-    private func primaryBarButton(
-        store: DVKCompanionStore,
-        profile: DVKCompanionProfile,
-        isCurrent: Bool,
-        theme: DVKCompanionTheme,
-        profileTheme: DVKCompanionTheme
-    ) -> some View {
-        Button {
-            if isCurrent {
-                openConversation()
-            } else {
-                store.confirmProfileSelection()
-                adapter.refresh()
-            }
-        } label: {
-            Text(isCurrent ? "开始聊天" : "使用此角色")
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .dvkGlassControl(theme: profileTheme, prominent: true)
-        .disabled(
-            isCurrent
-                ? store.selectedProfile == nil
-                : !store.canConfirmProfileSelection
-        )
-        .accessibilityLabel(
-            DVKRoleSelectionActionPresentation.title(
-                previewProfileID: profile.id,
-                selectedProfileID: store.selectedProfileID
-            )
-        )
-        .accessibilityIdentifier(DVKCompanionAccessibilityID.profileConfirm)
     }
 }
 
@@ -1257,26 +1310,9 @@ public struct DVKTextConversation: View {
         let store=adapter.store
         let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance)
         VStack(spacing:0){
-            // 顶部轻量状态区（mock 离线提示）
-            HStack(spacing:6){
-                DVKCompanionSonarDot(
-                    color: theme.activeStatus,
-                    diameter: 12,
-                    reduceMotion: store.reduceMotionPreview
-                )
-                Text("本地文字陪伴 · 离线")
-                    .font(.caption)
-                    .foregroundStyle(theme.textSecondary)
-            }
-            .padding(.horizontal,12)
-            .padding(.vertical,6)
-            .background(theme.surface.opacity(0.55),in:Capsule())
-            .accessibilityElement(children:.combine)
-            .padding(.top,8)
-
-            // 完整消息滚动区
+            // 完整消息滚动区（参考壳聊天页比例：气泡 + 用户右/助手左）
             ScrollView(showsIndicators:false){
-                LazyVStack(spacing:12){
+                LazyVStack(alignment:.leading,spacing:10){
                     if store.messages.isEmpty{
                         // 诚实空状态
                         VStack(spacing:10){
@@ -1299,13 +1335,11 @@ public struct DVKTextConversation: View {
                         }
                     }
                 }
-                .padding(.horizontal,20)
-                .padding(.top,12)
-                .padding(.bottom,12)
+                .padding()
             }
             .frame(maxWidth:.infinity,maxHeight:.infinity)
 
-            // 固定底部输入区
+            // 固定底部输入区（参考壳 HStack + 发送按钮）
             HStack(alignment:.bottom){
                 TextField("说点什么",text:Binding(get:{store.draft},set:{store.setDraft($0);adapter.refresh()}),axis:.vertical)
                     .textFieldStyle(.roundedBorder)
@@ -1328,7 +1362,7 @@ public struct DVKTextConversation: View {
             .padding(.bottom,10)
             .background(theme.navigationSurface.opacity(0.9))
 
-            // 辅助调试区（弱化，不抢主界面）
+            // 低层级辅助调试区（Mock 失败控制，不抢主界面观感）
             if store.sending{
                 HStack(spacing:8){
                     ProgressView().controlSize(.small)
@@ -1393,6 +1427,15 @@ public struct DVKTextConversation: View {
 public struct DVKVoiceConversation: View {
     @ObservedObject var adapter: DVKCompanionStoreAdapter
     private let onEnded: () -> Void
+    @State private var isMuted = false
+    @State private var showHangupConfirm = false
+    @State private var topicIndex = 0
+    private let topics = [
+        "今天过得怎么样？",
+        "最近有没有什么开心的小事？",
+        "周末想怎么安排？",
+        "有没有什么想聊又没处说的话题？"
+    ]
     public init(adapter: DVKCompanionStoreAdapter, onEnded:@escaping () -> Void = {}) { self.adapter = adapter; self.onEnded = onEnded }
 
     public var body: some View {
@@ -1407,6 +1450,7 @@ public struct DVKVoiceConversation: View {
 
     @ViewBuilder
     private func mockPane(store: DVKCompanionStore, theme: DVKCompanionTheme) -> some View {
+        let style = DVKCatStyle(theme: theme)
         let ripplePresentation = DVKCharacterVoiceRipplePresentation(
             amplitude: store.playbackAmplitude,
             voiceState: store.voiceState,
@@ -1414,134 +1458,339 @@ public struct DVKVoiceConversation: View {
             staticMode: store.presentationMode == .staticFallback,
             hasError: store.voiceError != nil
         )
-        VStack(spacing: 12) {
-            // 顶部状态区
-            HStack(spacing: 6) {
-                DVKCompanionSonarDot(
-                    color: theme.activeStatus,
-                    diameter: 12,
-                    reduceMotion: store.reduceMotionPreview
-                )
-                Text("语音陪伴 · 本地演示")
-                    .font(.caption)
-                    .foregroundStyle(theme.textSecondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(theme.surface.opacity(0.55), in: Capsule())
-            .accessibilityElement(children: .combine)
-            .padding(.top, 4)
+        ZStack {
+            DVKBackgroundMeshView(mode: .call, theme: theme)
+                .ignoresSafeArea()
 
-            Spacer(minLength: 0)
-
-            if let profile = store.selectedProfile {
-                // 中央大人物 Hero（呼吸辉光 + 波纹 + 人物占比）
-                VStack(spacing: 6) {
-                    ZStack {
-                        DVKCompanionHeroHalo(
-                            color: theme.halo,
-                            diameter: 220,
-                            reduceMotion: store.reduceMotionPreview
-                        )
-                        DVKCharacterVoiceRipple(presentation: ripplePresentation, theme: theme)
-                        DVKCharacterPresentationView(
-                            profile: profile,
-                            state: store.characterState,
-                            reduceMotion: store.reduceMotionPreview,
-                            staticMode: store.presentationMode == .staticFallback,
-                            host: store.presentationMode == .staticFallback ? nil : adapter.live2DHost
-                        )
-                        .frame(height: 220)
+            VStack(spacing: 0) {
+                // 顶部：关闭（xmark → 挂断确认）+ 状态行
+                HStack {
+                    Button {
+                        DVKCatHaptics.action()
+                        withAnimation(.easeOut(duration: 0.28)) { showHangupConfirm = true }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(style.textSecondary)
+                            .frame(width: 40, height: 40)
+                            .background(style.surface.opacity(0.7), in: Circle())
+                            .overlay(Circle().stroke(style.border, lineWidth: 1))
                     }
-                    .frame(height: 286)
-                    // 名字（宋体）
-                    Text(profile.displayName)
-                        .font(DVKCompanionTypography.serifName(26))
-                        .foregroundStyle(theme.textPrimary)
+                    .accessibilityLabel("结束通话")
+                    .accessibilityIdentifier("call.close")
+                    Spacer()
+                    Color.clear.frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+
+                // 状态行（状态点 + 状态文案）
+                HStack {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(callStatusColor(store: store, style: style))
+                            .frame(width: 7, height: 7)
+                        Text(callStatusText(store: store, style: style))
+                            .font(style.captionFont)
+                            .foregroundStyle(style.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(.top, 8)
+                .padding(.horizontal, 20)
+
+                Text("直接说话就好，小猫在听")
+                    .font(style.captionFont)
+                    .foregroundStyle(style.textTertiary)
+                    .padding(.top, 6)
+
+                Spacer(minLength: 0)
+
+                if let profile = store.selectedProfile {
+                    // 中央形象（halo + 公共波纹 + AI 人物 portrait）
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [style.roleGold.opacity(0.26), style.primarySoft.opacity(0.12), .clear],
+                                    center: .center,
+                                    startRadius: 40,
+                                    endRadius: 150
+                                )
+                            )
+                            .frame(width: 300, height: 300)
+                        DVKCharacterVoiceRipple(presentation: ripplePresentation, theme: theme)
+                        DVKCatAvatarView(
+                            profile: profile,
+                            size: 220,
+                            revealed: store.privacy == .allowed
+                        )
+                    }
+                    .frame(height: 220 * 3.0 / 2.0 + 16)
+
+                    Text(DVKCatStyle.displayName(for: profile))
+                        .font(style.title3Font)
+                        .foregroundStyle(style.textPrimary)
+                        .padding(.top, 4)
+
                     // 状态区
                     Text(ripplePresentation.statusText)
-                        .font(.headline)
-                        .foregroundStyle(theme.textSecondary)
+                        .font(style.subheadFont)
+                        .foregroundStyle(style.textSecondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 8)
                         .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
-                    // 波形（播放振幅驱动）
-                    DVKCompanionMiniWave(
-                        active: store.voiceState == .speaking,
-                        color: theme.primaryAction,
-                        reduceMotion: store.reduceMotionPreview,
-                        barCount: 7
-                    )
-                    .frame(width: 120, height: 20)
-                    .opacity(0.8)
+                } else {
+                    Text(ripplePresentation.statusText)
+                        .font(.headline)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
                 }
-            } else {
-                Text(ripplePresentation.statusText)
-                    .font(.headline)
-                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceState)
-            }
-            if let error = store.voiceError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceError)
-            }
+                if let error = store.voiceError {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 6)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceError)
+                }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            // 底部控制区：结束通话（产品主按钮）
-            DVKIOS26GlassEffectContainer {
-                HStack(spacing: 14) {
-                    Button(role: .destructive) {
+                // 底部控制区（参考壳：聊天提示 + 波形 + 三按钮：静音 / 挂断 / 换个提示）
+                VStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        Text("聊天提示")
+                            .font(style.captionFont)
+                            .foregroundStyle(style.textTertiary)
+                        Text(topics[topicIndex])
+                            .font(style.captionFont)
+                            .foregroundStyle(style.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(style.surface.opacity(0.6), in: Capsule())
+
+                    // 波形（真实 playbackAmplitude 驱动）
+                    DVKCatVoiceWaveform(
+                        active: isVoiceActive(store.voiceState),
+                        level: Double(store.playbackAmplitude)
+                    )
+                    .frame(height: 36)
+                    .accessibilityHidden(true)
+
+                    // 三按钮
+                    HStack(spacing: 36) {
+                        controlButton(
+                            icon: isMuted ? "mic.slash.fill" : "mic.fill",
+                            title: isMuted ? "取消静音" : "静音",
+                            color: isMuted ? style.primaryPressed : style.textPrimary,
+                            background: style.surface.opacity(0.8),
+                            identifier: DVKCompanionAccessibilityID.voiceMute,
+                            style: style
+                        ) {
+                            DVKCatHaptics.action()
+                            withAnimation(.easeInOut(duration: 0.2)) { isMuted.toggle() }
+                        }
+
+                        controlButton(
+                            icon: "phone.down.fill",
+                            title: "挂断",
+                            color: .white,
+                            background: style.danger,
+                            identifier: DVKCompanionAccessibilityID.voiceEnd,
+                            style: style
+                        ) {
+                            DVKCatHaptics.action()
+                            withAnimation(.easeOut(duration: 0.28)) { showHangupConfirm = true }
+                        }
+
+                        controlButton(
+                            icon: "lightbulb",
+                            title: "换个提示",
+                            color: style.textPrimary,
+                            background: style.surface.opacity(0.8),
+                            identifier: "call.topic",
+                            style: style
+                        ) {
+                            DVKCatHaptics.action()
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                topicIndex = (topicIndex + 1) % topics.count
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 14)
+                .layoutPriority(1)
+
+                // 低层级调试区（Mock Start/Advance，不抢产品主界面）
+                HStack(spacing: 10) {
+                    Button {
+                        adapter.refresh()
+                        Task { await store.beginVoiceDemo(); adapter.refresh() }
+                    } label: {
+                        Label("开始", systemImage: "mic.fill")
+                    }
+                    .disabled(!store.canStartVoice)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceStart)
+                    .dvkGlassControl(theme: theme)
+
+                    Button {
+                        store.advanceVoiceDemo()
+                        adapter.refresh()
+                    } label: {
+                        Label("推进状态", systemImage: "arrow.right.circle.fill")
+                    }
+                    .disabled(store.voiceState == .idle || store.voiceState == .ended)
+                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceAdvance)
+                    .dvkGlassControl(theme: theme)
+
+                    if store.generating == .failed {
+                        Button("重试回顾") {
+                            Task { await store.retryReviewGeneration(); adapter.refresh() }
+                        }
+                        .dvkGlassControl(theme: theme)
+                    }
+                }
+                .font(.caption)
+                .opacity(0.85)
+                .padding(.bottom, 8)
+            }
+        }
+        .overlay {
+            if showHangupConfirm {
+                hangupConfirmOverlay(store: store, style: style)
+            }
+        }
+        .onAppear {
+            // Mock 下进入页面自动开始演示（模拟参考壳“进入即连接”的节奏）
+            if store.voiceState == .idle {
+                Task { await store.beginVoiceDemo(); adapter.refresh() }
+            }
+        }
+    }
+
+    private func isVoiceActive(_ state: DVKCompanionVoiceState) -> Bool {
+        switch state {
+        case .idle, .ended: return false
+        default: return true
+        }
+    }
+
+    // MARK: 通话状态文案（纯 UI 映射，Mock 状态）
+    private func callStatusText(store: DVKCompanionStore, style: DVKCatStyle) -> String {
+        switch store.voiceState {
+        case .idle: return "等待开始"
+        case .connecting: return "正在连接"
+        case .listening: return "小猫正在听你说话"
+        case .processing: return "小猫正在想"
+        case .speaking: return "小猫正在说话"
+        case .ended: return "已结束"
+        }
+    }
+
+    // MARK: 通话状态点颜色
+    private func callStatusColor(store: DVKCompanionStore, style: DVKCatStyle) -> Color {
+        switch store.voiceState {
+        case .idle, .ended: return style.textTertiary
+        case .connecting, .processing: return style.textSecondary
+        case .listening, .speaking: return style.online
+        }
+    }
+
+    // MARK: 控制圆钮（参考壳 controlButton）
+    private func controlButton(
+        icon: String,
+        title: String,
+        color: Color,
+        background: Color,
+        identifier: String,
+        style: DVKCatStyle,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 6) {
+            Button(action: action) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(color)
+                    .frame(width: 60, height: 60)
+                    .background(background, in: Circle())
+                    .overlay(Circle().stroke(style.border, lineWidth: 1))
+                    .shadow(color: style.shadowRaised, radius: 8, x: 0, y: 3)
+            }
+            .buttonStyle(DVKCatPressableButtonStyle())
+            .accessibilityLabel(title)
+            .accessibilityIdentifier(identifier)
+            Text(title)
+                .font(style.captionFont)
+                .foregroundStyle(style.textSecondary)
+        }
+    }
+
+    // MARK: 挂断确认浮层（参考壳视觉：再聊一会儿 / 结束通话）
+    private func hangupConfirmOverlay(store: DVKCompanionStore, style: DVKCatStyle) -> some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeIn(duration: 0.2)) { showHangupConfirm = false }
+                }
+            VStack(spacing: 18) {
+                Text("确定要结束这次陪伴吗？")
+                    .font(style.title3Font)
+                    .foregroundStyle(style.textPrimary)
+                Text("今天聊得刚刚好，随时回来找我。")
+                    .font(style.subheadFont)
+                    .foregroundStyle(style.textSecondary)
+                HStack(spacing: 12) {
+                    Button {
+                        withAnimation(.easeIn(duration: 0.2)) { showHangupConfirm = false }
+                    } label: {
+                        Text("再聊一会儿")
+                            .font(style.subheadFont)
+                            .foregroundStyle(style.textPrimary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(style.surface, in: Capsule())
+                            .overlay(Capsule().stroke(style.border, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("hangup.cancel")
+
+                    Button {
+                        DVKCatHaptics.action()
+                        withAnimation(.easeIn(duration: 0.2)) { showHangupConfirm = false }
                         Task {
                             await store.endVoiceDemo()
                             adapter.refresh()
                             onEnded()
                         }
                     } label: {
-                        Label("结束通话", systemImage: "phone.down.fill")
+                        Text("结束通话")
+                            .font(style.subheadFont)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(style.danger, in: Capsule())
+                            .shadow(color: style.danger.opacity(0.30), radius: 14, x: 0, y: 6)
+                            .shadow(color: style.danger.opacity(0.15), radius: 5, x: 0, y: 2)
                     }
-                    .disabled(!store.canEndVoice)
-                    .accessibilityLabel("结束通话")
-                    .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceEnd)
-                    .dvkGlassControl(theme: theme, prominent: true)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("hangup.confirm")
                 }
             }
-
-            // 调试区（Start / Advance 不抢产品主界面）
-            HStack(spacing: 10) {
-                Button {
-                    adapter.refresh()
-                    Task { await store.beginVoiceDemo(); adapter.refresh() }
-                } label: {
-                    Label("开始", systemImage: "mic.fill")
-                }
-                .disabled(!store.canStartVoice)
-                .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceStart)
-                .dvkGlassControl(theme: theme)
-
-                Button {
-                    store.advanceVoiceDemo()
-                    adapter.refresh()
-                } label: {
-                    Label("推进状态", systemImage: "arrow.right.circle.fill")
-                }
-                .disabled(store.voiceState == .idle || store.voiceState == .ended)
-                .accessibilityIdentifier(DVKCompanionAccessibilityID.voiceAdvance)
-                .dvkGlassControl(theme: theme)
-
-                if store.generating == .failed {
-                    Button("重试回顾") {
-                        Task { await store.retryReviewGeneration(); adapter.refresh() }
-                    }
-                    .dvkGlassControl(theme: theme)
-                }
-            }
-            .font(.caption)
-            .opacity(0.85)
-            .padding(.bottom, 8)
+            .padding(24)
+            .background(style.surface, in: RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous))
+            .dvkCatCardTopHighlight()
+            .shadow(color: style.shadowOverlay, radius: 32, x: 0, y: 12)
+            .padding(.horizontal, 40)
+            .transition(.scale(scale: 0.94).combined(with: .opacity))
         }
-        .padding(.horizontal, 20)
+        .transition(.opacity)
+        .accessibilityIdentifier("hangup.overlay")
     }
 }
 
@@ -1651,108 +1900,290 @@ public struct DVKLiveVoiceConversation: View {
 @MainActor
 public struct DVKCompanionSettingsView: View {
     @ObservedObject var adapter:DVKCompanionStoreAdapter
+    @State private var showAboutSheet = false
+    @State private var showHelpSheet = false
+    @State private var showPrivacySheet = false
+
     public init(adapter:DVKCompanionStoreAdapter){self.adapter=adapter}
     public var body: some View {
         let store=adapter.store
         let theme=DVKCompanionThemeResolver.resolve(profile:store.selectedProfile, appearance:store.appearance)
-        Form {
-            // 用户行（程序化猫头像 + 名字 + 副标题）
-            Section {
-                if let profile = store.selectedProfile {
-                    HStack(spacing: 14) {
-                        DVKCharacterPresentationView(
-                            profile: profile,
-                            state: .idle,
-                            reduceMotion: true,
-                            staticMode: true,
-                            host: nil
-                        )
-                        .frame(width: 56, height: 56)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(profile.displayName)
-                                .font(DVKCompanionTypography.serifName(20))
-                                .foregroundStyle(theme.textPrimary)
-                            Text("你的本地陪伴角色")
-                                .font(.caption)
-                                .foregroundStyle(theme.textSecondary)
+        let style=DVKCatStyle(theme: theme)
+        ZStack {
+            theme.pageBackground
+                .ignoresSafeArea()
+
+            ScrollView(showsIndicators:false){
+                VStack(alignment:.leading,spacing:0){
+                    // 用户行（参考壳：AI 缩略头像 + 名字 + 副标题）
+                    if let profile = store.selectedProfile {
+                        HStack(spacing:14){
+                            DVKCatAvatarView(
+                                profile: profile,
+                                size: 56,
+                                revealed: store.privacy == .allowed
+                            )
+                            VStack(alignment:.leading,spacing:4){
+                                Text(DVKCatStyle.displayName(for: profile))
+                                    .font(style.title3Font)
+                                    .foregroundStyle(style.textPrimary)
+                                Text("随时回来和小猫说说话")
+                                    .font(style.captionFont)
+                                    .foregroundStyle(style.textSecondary)
+                                    .fixedSize(horizontal:false,vertical:true)
+                            }
+                            Spacer(minLength:0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.horizontal,20)
+                        .padding(.top,20)
                     }
-                    .padding(.vertical, 4)
+
+                    // 默认角色卡
+                    settingsCard(style: style) {
+                        settingsRow(icon: "pawprint.fill", title: "默认角色", detail: DVKCatStyle.displayName(for: store.selectedProfile ?? store.previewProfile ?? store.profiles[0]), style: style)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        Picker("角色", selection: Binding(get: { store.selectedProfileID ?? "" }, set: { store.selectPreviewProfile(id: $0); store.confirmProfileSelection(); adapter.refresh() })) {
+                            ForEach(store.profiles) { Text(DVKCatStyle.displayName(for: $0)).tag($0.id) }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(theme.primaryAction)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 52)
+                        .accessibilityIdentifier("settings.defaultRole")
+                    }
+                    .padding(.top, 20)
+
+                    // 外观卡
+                    settingsCard(style: style) {
+                        settingsRow(icon: "paintbrush.fill", title: "外观主题", detail: store.appearance.rawValue.capitalized, style: style)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        Picker("主题", selection: Binding(get: { store.appearance }, set: { store.setAppearance($0); adapter.refresh() })) {
+                            ForEach(DVKCompanionAppearance.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(theme.primaryAction)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 52)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        Toggle("减少动态效果", isOn: Binding(get: { store.reduceMotionPreview }, set: { store.setReduceMotionPreview($0); adapter.refresh() }))
+                            .tint(theme.primaryAction)
+                            .padding(.horizontal, 18)
+                            .frame(minHeight: 52)
+                            .accessibilityIdentifier("settings.reduceMotion")
+                    }
+                    .padding(.top, 16)
+
+                    // 连接卡（参考壳 statsCard 样式 + 公共连接能力）
+                    settingsCard(style: style) {
+                        VStack(alignment:.leading,spacing:6){
+                            HStack(alignment:.top,spacing:12){
+                                Image(systemName:"antenna.radiowaves.left.and.right")
+                                    .font(.system(size:20))
+                                    .foregroundStyle(style.primary)
+                                    .padding(.top,2)
+                                VStack(alignment:.leading,spacing:6){
+                                    Text(adapter.runtimeConfiguration.statusDescription)
+                                        .font(style.subheadFont)
+                                        .foregroundStyle(style.textPrimary)
+                                    Text(adapter.hasLiveToken
+                                         ? "安全存储中已有私有令牌。"
+                                         : "未存储令牌。实时对话需要令牌与实时构建配置。")
+                                        .font(style.captionFont)
+                                        .foregroundStyle(style.textSecondary)
+                                        .lineSpacing(3)
+                                }
+                                Spacer(minLength:0)
+                            }
+                        }
+                        .padding(18)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsConnection)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        NavigationLink("设备绑定") {
+                            DVKDeviceBindingView(
+                                configuration: adapter.runtimeConfiguration,
+                                tokenStore: adapter.tokenStore
+                            )
+                        }
+                        .foregroundStyle(style.textPrimary)
+                        .font(style.bodyFont)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 52)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        Button("清除已存令牌") {
+                            try? adapter.tokenStore.clear()
+                            adapter.refresh()
+                        }
+                        .disabled(!adapter.hasLiveToken)
+                        .foregroundStyle(adapter.hasLiveToken ? style.textPrimary : style.textTertiary)
+                        .font(style.bodyFont)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 52)
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsTokenClear)
+                        if !adapter.runtimeConfiguration.buildSHA.isEmpty {
+                            Text("构建 \(adapter.runtimeConfiguration.buildSHA) · \(adapter.runtimeConfiguration.buildTime)")
+                                .font(style.captionFont)
+                                .foregroundStyle(style.textTertiary)
+                                .padding(.horizontal, 18)
+                                .padding(.bottom, 14)
+                        }
+                    }
+                    .padding(.top, 16)
+
+                    // 隐私与授权（参考壳 privacyGroup）
+                    Text("隐私与授权")
+                        .font(style.title3Font)
+                        .foregroundStyle(style.textPrimary)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                    settingsCard(style: style) {
+                        Toggle("显示角色形象", isOn: Binding(
+                            get: { store.privacy == .allowed },
+                            set: { newValue in
+                                if newValue { store.reauthorize() } else { store.setPrivacy(.limited) }
+                                adapter.refresh()
+                            }
+                        ))
+                        .tint(theme.primaryAction)
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 60)
+                        .accessibilityLabel("显示角色形象")
+                        .accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyAllowed : DVKCompanionAccessibilityID.privacyLimited)
+                        Divider().overlay(style.border).padding(.leading, 60)
+                        HStack(spacing:14){
+                            Image(systemName:"waveform.and.mic")
+                                .font(.system(size:20))
+                                .foregroundStyle(style.info)
+                                .frame(width:36)
+                            VStack(alignment:.leading,spacing:3){
+                                Text("实时语音服务")
+                                    .font(style.bodyFont)
+                                    .foregroundStyle(style.textPrimary)
+                                Text("关闭形象显示后，所有头像会保持模糊。")
+                                    .font(style.captionFont)
+                                    .foregroundStyle(style.textSecondary)
+                            }
+                            Spacer(minLength:0)
+                        }
+                        .padding(.horizontal,18)
+                        .frame(minHeight:60)
+                    }
+                    .padding(.horizontal,20)
+                    .padding(.top,12)
+
+                    // 模拟实验室
+                    Text("模拟实验室")
+                        .font(style.title3Font)
+                        .foregroundStyle(style.textPrimary)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                    settingsCard(style: style) {
+                        DVKMockLabView(adapter: adapter)
+                            .padding(18)
+                    }
+                    .padding(.horizontal,20)
+                    .padding(.top,12)
+
+                    // 关于（参考壳 aboutGroup，接入公共彩蛋卡）
+                    Text("关于")
+                        .font(style.title3Font)
+                        .foregroundStyle(style.textPrimary)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                    settingsCard(style: style) {
+                        aboutRow(title: "关于本展示", detail: "DVK Companion 版本 1.0 (0)", style: style) { showAboutSheet = true }
+                        Divider().overlay(style.border).padding(.leading, 20)
+                        aboutRow(title: "帮助与反馈", detail: nil, style: style) { showHelpSheet = true }
+                        Divider().overlay(style.border).padding(.leading, 20)
+                        aboutRow(title: "隐私政策", detail: nil, style: style) { showPrivacySheet = true }
+                    }
+                    .padding(.horizontal,20)
+                    .padding(.top,12)
+                    .padding(.bottom,40)
                 }
-            }
-            // 分组卡片：默认角色
-            Section("默认角色") {
-                Picker("角色", selection: Binding(get: { store.selectedProfileID ?? "" }, set: { store.selectPreviewProfile(id: $0); store.confirmProfileSelection(); adapter.refresh() })) {
-                    ForEach(store.profiles) { Text($0.displayName).tag($0.id) }
-                }
-            }
-            // 分组卡片：外观
-            Section("外观") {
-                Picker("主题", selection: Binding(get: { store.appearance }, set: { store.setAppearance($0); adapter.refresh() })) {
-                    ForEach(DVKCompanionAppearance.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-                }
-                Toggle("减少动态效果", isOn: Binding(get: { store.reduceMotionPreview }, set: { store.setReduceMotionPreview($0); adapter.refresh() }))
-                Text("支持动态字体、旁白与减少动态效果。").font(.footnote)
-            }
-            // 分组卡片：连接
-            Section("连接") {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(adapter.runtimeConfiguration.statusDescription)
-                        .font(.subheadline)
-                        .foregroundStyle(theme.textPrimary)
-                    Text(adapter.hasLiveToken
-                         ? "安全存储中已有私有令牌。"
-                         : "未存储令牌。实时对话需要令牌与实时构建配置。")
-                        .font(.caption)
-                        .foregroundStyle(theme.textSecondary)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsConnection)
-                NavigationLink("设备绑定") {
-                    DVKDeviceBindingView(
-                        configuration: adapter.runtimeConfiguration,
-                        tokenStore: adapter.tokenStore
-                    )
-                }
-                Button("清除已存令牌") {
-                    try? adapter.tokenStore.clear()
-                    adapter.refresh()
-                }
-                .disabled(!adapter.hasLiveToken)
-                .accessibilityIdentifier(DVKCompanionAccessibilityID.settingsTokenClear)
-                if !adapter.runtimeConfiguration.buildSHA.isEmpty {
-                    Text("构建 \(adapter.runtimeConfiguration.buildSHA) · \(adapter.runtimeConfiguration.buildTime)")
-                        .font(.caption2)
-                        .foregroundStyle(theme.textSecondary)
-                }
-            }
-            // 分组卡片：隐私
-            Section("隐私") {
-                Button(store.privacy == .allowed ? "预览受限隐私" : "重新授权") {
-                    if store.privacy == .allowed { store.setPrivacy(.limited) } else { store.reauthorize() }
-                    adapter.refresh()
-                }
-                .accessibilityIdentifier(store.privacy == .allowed ? DVKCompanionAccessibilityID.privacyLimited : DVKCompanionAccessibilityID.reauthorize)
-            }
-            // 分组卡片：模拟实验室
-            Section("模拟实验室") {
-                DVKMockLabView(adapter: adapter)
-            }
-            // 分组卡片：关于
-            Section("关于") {
-                Text("DVK Companion 仅本地运行、与供应商无关，使用四只虚构的公共角色。不含任何生产身份、提示词、令牌或资源。")
             }
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(theme.surface)
         .foregroundStyle(theme.textPrimary)
         .tint(theme.primaryAction)
-        .background(theme.pageBackground)
         .dvkIOS26NavigationChrome(theme: theme)
         .navigationTitle("我的")
+        .sheet(isPresented: $showAboutSheet) {
+            DVKEasterEggCard(egg: .about, onClose: { showAboutSheet = false })
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showHelpSheet) {
+            DVKEasterEggCard(egg: .help, onClose: { showHelpSheet = false })
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showPrivacySheet) {
+            DVKEasterEggCard(egg: .privacy, onClose: { showPrivacySheet = false })
+                .presentationDetents([.medium])
+        }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.settings)
+    }
+
+    // MARK: 通用分组卡片（参考壳卡片质感：圆角 + 顶部高光 + 阴影）
+    @ViewBuilder
+    private func settingsCard<Content: View>(style: DVKCatStyle, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .background(style.surface, in: RoundedRectangle(cornerRadius: DVKCatStyle.Radius.card, style: .continuous))
+            .dvkCatCardTopHighlight()
+            .shadow(color: style.shadowRaised, radius: 12, x: 0, y: 3)
+            .padding(.horizontal, 20)
+    }
+
+    // MARK: 图标 + 标题 + 说明行
+    @ViewBuilder
+    private func settingsRow(icon: String, title: String, detail: String, style: DVKCatStyle) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundStyle(style.info)
+                .frame(width: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(style.bodyFont)
+                    .foregroundStyle(style.textPrimary)
+                Text(detail)
+                    .font(style.captionFont)
+                    .foregroundStyle(style.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .frame(minHeight: 60)
+    }
+
+    // MARK: 关于行（参考壳 aboutRow）
+    @ViewBuilder
+    private func aboutRow(title: String, detail: String?, style: DVKCatStyle, action: @escaping () -> Void) -> some View {
+        Button {
+            DVKCatHaptics.action()
+            action()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(style.bodyFont)
+                    .foregroundStyle(style.textPrimary)
+                Spacer()
+                if let detail {
+                    Text(detail)
+                        .font(style.captionFont)
+                        .foregroundStyle(style.textTertiary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(style.textTertiary)
+            }
+            .padding(.horizontal, 20)
+            .frame(minHeight: 56)
+        }
+        .buttonStyle(DVKCatPressableCardStyle())
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("settings.about.\(title)")
     }
 }
 
@@ -1802,86 +2233,88 @@ public struct DVKReviewListView: View {
     public var body: some View {
         let store = adapter.store
         let theme = DVKCompanionThemeResolver.resolve(profile: store.selectedProfile, appearance: store.appearance)
-        VStack(spacing: 0) {
-            // 页面标题区（宋体大标题 + 副标题）
-            VStack(alignment: .leading, spacing: 6) {
-                Text("陪伴回顾")
-                    .font(DVKCompanionTypography.serifDisplay(32))
-                    .foregroundStyle(theme.textPrimary)
-                Text("每一次对话，都值得被记住。")
-                    .font(.subheadline)
-                    .foregroundStyle(theme.textSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+        let style = DVKCatStyle(theme: theme)
+        ZStack {
+            theme.pageBackground
+                .ignoresSafeArea()
 
-            if store.reviews.isEmpty {
-                // 诚实空状态（程序化头像 + 标题 + 说明，不伪造记录）
-                Spacer(minLength: 24)
-                VStack(spacing: 16) {
-                    if let profile = store.selectedProfile {
-                        DVKCharacterPresentationView(
-                            profile: profile,
-                            state: .idle,
-                            reduceMotion: true,
-                            staticMode: true,
-                            host: nil
-                        )
-                        .frame(width: 96, height: 96)
-                    }
-                    Text("陪伴记录尚未开放")
-                        .font(DVKCompanionTypography.serifName(22))
-                        .foregroundStyle(theme.textPrimary)
-                        .multilineTextAlignment(.center)
-                    Text("完成一次本地会话后，回顾会显示在这里。")
-                        .font(.subheadline)
-                        .foregroundStyle(theme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 280)
+            VStack(spacing: 0) {
+                // 顶部标题（参考壳 ReviewView：标题 + 副标题）
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("陪伴回顾")
+                        .font(style.title1Font)
+                        .foregroundStyle(style.textPrimary)
+                    Text("每一次对话，都值得被记住。")
+                        .font(style.subheadFont)
+                        .foregroundStyle(style.textSecondary)
                 }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("companion.reviews.empty")
-                Spacer(minLength: 80)
-            } else {
-                // 回顾卡片列表
-                List(store.reviews) { review in
-                    Button {
-                        store.selectReview(id: review.id)
-                        adapter.refresh()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: review.source == .voice ? "waveform" : "bubble.left.fill")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(theme.primaryAction)
-                                .frame(width: 36, height: 36)
-                                .background(theme.primaryAction.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(review.title).font(.headline).lineLimit(2)
-                                Text(review.profileSnapshot?.displayName ?? "Mock cat").font(.caption)
-                                Text(review.source.rawValue.capitalized).font(.caption2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+
+                if store.reviews.isEmpty {
+                    // 诚实空状态（头像 + 标题 + 说明，不伪造聊天/情绪/音频记录）
+                    Spacer(minLength: 24)
+                    VStack(spacing: 16) {
+                        if let profile = store.selectedProfile {
+                            DVKCatAvatarView(
+                                profile: profile,
+                                size: 96,
+                                revealed: store.privacy == .allowed
+                            )
+                        }
+                        Text("陪伴记录尚未开放")
+                            .font(style.title3Font)
+                            .foregroundStyle(style.textPrimary)
+                            .multilineTextAlignment(.center)
+                        Text("当前版本暂不展示聊天或录音历史。")
+                            .font(style.subheadFont)
+                            .foregroundStyle(style.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 280)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 60)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("companion.reviews.empty")
+                    Spacer(minLength: 80)
+                } else {
+                    // 回顾卡片列表
+                    List(store.reviews) { review in
+                        Button {
+                            store.selectReview(id: review.id)
+                            adapter.refresh()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: review.source == .voice ? "waveform" : "bubble.left.fill")
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundStyle(theme.primaryAction)
+                                    .frame(width: 36, height: 36)
+                                    .background(theme.primaryAction.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(review.title).font(.headline).lineLimit(2)
+                                    Text(review.profileSnapshot?.displayName ?? "Mock cat").font(.caption)
+                                    Text(review.source.rawValue.capitalized).font(.caption2)
+                                        .foregroundStyle(theme.textSecondary)
+                                }
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(theme.textSecondary)
                             }
-                            Spacer(minLength: 4)
-                            Image(systemName: "chevron.forward")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(theme.textSecondary)
+                            .padding(.vertical, 6)
                         }
-                        .padding(.vertical, 6)
+                        .listRowBackground(theme.surface)
+                        .foregroundStyle(theme.textPrimary)
+                        .accessibilityIdentifier("companion.review.\(review.id)")
                     }
-                    .listRowBackground(theme.surface)
-                    .foregroundStyle(theme.textPrimary)
-                    .accessibilityIdentifier("companion.review.\(review.id)")
+                    .listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .scrollContentBackground(.hidden)
-        .background(theme.pageBackground)
         .foregroundStyle(theme.textPrimary)
         .dvkIOS26NavigationChrome(theme: theme)
         .navigationTitle("回顾")
@@ -1910,6 +2343,7 @@ public struct DVKReviewListView: View {
                 )
             }
         }
+        .accessibilityIdentifier(DVKCompanionAccessibilityID.reviews)
     }
 }
 @MainActor
