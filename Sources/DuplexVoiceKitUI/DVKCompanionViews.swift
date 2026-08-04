@@ -101,7 +101,7 @@ public struct DVKCompanionShellView: View {
             adapter.refresh()
         }
         .accessibilityIdentifier(DVKCompanionAccessibilityID.tabs)
-        .sheet(isPresented:$conversation){NavigationStack{DVKCompanionConversationView(adapter:adapter, onClose: { conversation = false })}}
+        .fullScreenCover(isPresented:$conversation){NavigationStack{DVKCompanionConversationView(adapter:adapter, onClose: { conversation = false })}.interactiveDismissDisabled(store.hasActiveSession)}
     }
 }
 
@@ -175,7 +175,7 @@ public struct DVKCompanionHomeView: View {
         ("想你了", "moon.stars.fill"),
         ("一直在", "star.fill")
     ]
-    private let heroSize: CGFloat = 170
+    private let heroSize: CGFloat = 200
 
     public init(
         adapter: DVKCompanionStoreAdapter,
@@ -275,7 +275,7 @@ public struct DVKCompanionHomeView: View {
                         .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
                     }
                 }
-                .frame(height: 330)
+                .frame(height: heroSize * 3.0 / 2.0 + 40)
                 .frame(maxWidth: .infinity)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.94)
@@ -307,7 +307,7 @@ public struct DVKCompanionHomeView: View {
                     Text(DVKCatStyle.displayName(for: profile))
                         .font(style.title1Font)
                         .foregroundStyle(style.textPrimary)
-                        .padding(.top, 14)
+                        .padding(.top, 12)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 10)
                         .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
@@ -321,7 +321,7 @@ public struct DVKCompanionHomeView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(style.roleGold)
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 6)
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
                     .onAppear {
@@ -335,7 +335,7 @@ public struct DVKCompanionHomeView: View {
                     }
                 }
 
-                Spacer(minLength: 10)
+                Spacer(minLength: 4)
 
                 if let profile = store.selectedProfile {
                     // 唯一主操作：语音聊天（大胶囊 CTA）

@@ -469,8 +469,8 @@ def main() -> None:
         failures.append("Showcase must use generated system Launch Screen metadata")
     if "private let dvkTabBarBottomContentPadding" not in views_text:
         failures.append("bottom Tab Bar content spacing must use a named private constant")
-    if views_text.count("safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)") < 3:
-        failures.append("at least the Cats, Reviews and Settings tab roots must use the named bottom content spacing constant (Home relies on the native TabView safe area)")
+    if views_text.count("safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)") != 3:
+        failures.append("exactly the Cats, Reviews and Settings tab roots must use the named bottom content spacing constant (Home relies on the native TabView safe area)")
     if ".scrollClipDisabled()" not in views_text:
         failures.append("Cats Carousel must not clip scaled cards or shadows")
     if "ViewThatFits(in: .horizontal)" not in views_text or 'Button("Use this cat")' not in views_text:
@@ -497,7 +497,13 @@ def main() -> None:
     if "End" in accessory_text or "Mute" in accessory_text or "Advance" in accessory_text:
         failures.append("active voice accessory must expose only return-to-conversation behavior")
     if "setMode(.voice)" not in views_text or "conversation = true" not in views_text:
-        failures.append("active voice accessory must reuse the existing Conversation Sheet")
+        failures.append("active voice accessory must reuse the existing full-screen Conversation")
+    if ".fullScreenCover(isPresented:$conversation)" not in views_text:
+        failures.append("Conversation must be presented as a full-screen cover")
+    if ".sheet(isPresented:$conversation)" in views_text:
+        failures.append("Conversation must not be presented as a sheet")
+    if ".interactiveDismissDisabled(store.hasActiveSession)" not in views_text:
+        failures.append("active voice Conversation must disable interactive dismissal")
     if "chevron.down" not in views_text or "收起语音会话" not in views_text:
         failures.append("active voice sheet collapse affordance is missing")
     if "phone.down.fill" not in views_text or "结束通话" not in views_text:
