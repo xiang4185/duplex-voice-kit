@@ -553,14 +553,19 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 1. deployment target 26.0
         XCTAssertTrue(project.contains("iOS: \"26.0\""), "project.yml 必须部署 iOS 26.0")
 
-        // 2. 两个 workflow 都选择 Xcode 26 + 写入 DEVELOPER_DIR + 验证 Xcode/SDK
+        // 2. 两个 workflow 都选择 Xcode 26 + 写入 DEVELOPER_DIR。
+        // CI 通过 iOS 26 Simulator runtime 约束 SDK，IPA 额外做 iphoneos 26.x 显式校验。
         for wf in [ci, ipa] {
             XCTAssertTrue(wf.contains("Xcode_26*.app"), "workflow 必须发现 Xcode_26.app")
             XCTAssertTrue(wf.contains("DEVELOPER_DIR"), "workflow 必须写入 DEVELOPER_DIR")
             XCTAssertTrue(wf.contains("$GITHUB_ENV"), "DEVELOPER_DIR 必须写入 GITHUB_ENV")
-            XCTAssertTrue(wf.contains("\"Xcode 26\"*)"), "必须验证 xcodebuild 以 Xcode 26 开头")
-            XCTAssertTrue(wf.contains("show-sdk-version"), "必须验证 iphoneos SDK 版本")
+            XCTAssertTrue(wf.contains("xcodebuild -version"), "workflow 必须输出实际 Xcode 版本")
         }
+        XCTAssertTrue(ci.contains("version[0] != 26"), "CI 必须只选择 iOS 26 Simulator runtime")
+        XCTAssertTrue(ci.contains("xcodebuild -showsdks"), "CI 必须输出可用 SDK")
+        XCTAssertTrue(ipa.contains("\"Xcode 26\"*)"), "IPA 必须显式验证 xcodebuild 以 Xcode 26 开头")
+        XCTAssertTrue(ipa.contains("show-sdk-version"), "IPA 必须显式验证 iphoneos SDK 版本")
+        XCTAssertTrue(ipa.contains("26*)"), "IPA 必须拒绝非 26.x iphoneos SDK")
 
         // 3. 无第三方 setup-xcode Action
         XCTAssertFalse(ci.lowercased().contains("setup-xcode"), "不得引入第三方 setup-xcode Action")
@@ -679,25 +684,27 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(avatar.contains("avatar.locked"))
         XCTAssertTrue(avatar.contains("avatar.revealed"))
 
-        // Simulator 只从最高可用 iOS 26.x runtime 中选择可用 iPhone
+        // Simulator 只从最高可用 iOS 26.x runtime 中选择可用 iPhone。
+        // 这里校验行为，不绑定旧私有 workflow 的变量名或 Python 写法。
         XCTAssertTrue(ci.contains("version[0] != 26"))
-        XCTAssertTrue(ci.contains("device.get(\"isAvailable\") is True"))
-        XCTAssertTrue(ci.contains("name.startswith(\"iPhone\")"))
-        XCTAssertTrue(ci.contains("max(candidates, key=lambda item: item[0])"))
-        XCTAssertTrue(ci.contains("echo \"udid=${DEVICE_UDID}\" >> \"$GITHUB_OUTPUT\""))
-        XCTAssertTrue(ci.contains("xcrun simctl bootstatus \"$DEVICE_UDID\" -b"))
+        XCTAssertTrue(ci.contains("device.get(\"isAvailable\")"))
+        XCTAssertTrue(ci.contains("startswith(\"iPhone\")"))
+        XCTAssertTrue(ci.contains("candidates.sort(reverse=True)"))
+        XCTAssertTrue(ci.contains("print(candidates[0][2])"))
+        XCTAssertTrue(ci.contains("echo \"udid=${SIMULATOR_UDID}\" >> \"$GITHUB_OUTPUT\""))
         XCTAssertTrue(ci.contains("steps.simulator.outputs.udid"))
-        XCTAssertTrue(ci.contains("-destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'"))
+        XCTAssertTrue(ci.contains("xcrun simctl bootstatus \"${{ steps.simulator.outputs.udid }}\" -b"))
+        XCTAssertTrue(ci.contains("-destination \"platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}\""))
         XCTAssertFalse(ci.contains("platform=iOS Simulator,OS=26.0"))
         XCTAssertNil(ci.range(of: #"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"#,
                                   options: .regularExpression),
                      "workflow 不得硬编码具体 Simulator UDID")
 
-        // Xcode 26 与 SDK 26 门禁保持不变
+        // Xcode 26 与 iOS 26 runtime 门禁保持不变
         XCTAssertTrue(ci.contains("Xcode_26*.app"))
-        XCTAssertTrue(ci.contains("\"Xcode 26\"*)"))
-        XCTAssertTrue(ci.contains("show-sdk-version"))
-        XCTAssertTrue(ci.contains("26*)"))
+        XCTAssertTrue(ci.contains("xcodebuild -version"))
+        XCTAssertTrue(ci.contains("xcodebuild -showsdks"))
+        XCTAssertTrue(ci.contains("version[0] != 26"))
     }
 
     // MARK: P2.7B-FINAL-MESH 有机渐变背景契约
