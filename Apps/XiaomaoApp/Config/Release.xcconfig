@@ -1,0 +1,11 @@
+BUNDLE_ID = com.example.xiaomao
+APP_ENVIRONMENT = release
+API_BASE_URL =
+VOICE_WS_URL =
+DEVICE_ID =
+ENABLE_MOCK_VOICE = NO
+ENABLE_MEMORY = NO
+DEFAULT_VOICE_ROUTE = b
+APP_BUILD_SHA = unknown
+APP_BUILD_TIME = unknown
+#include? "Secrets.xcconfig"

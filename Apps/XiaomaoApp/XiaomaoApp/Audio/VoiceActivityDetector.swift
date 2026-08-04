@@ -1,0 +1,10 @@
+import DuplexVoiceKit
+import Foundation
+
+typealias VoiceActivityMode = DVKVoiceActivityMode
+typealias VoiceActivityState = DVKVoiceActivityState
+typealias VoiceActivityCommitReason = DVKVoiceActivityCommitReason
+typealias VoiceActivityConfiguration = DVKVoiceActivityConfiguration
+typealias VoiceActivityAction = DVKVoiceActivityAction
+typealias VoiceActivityAnalysis = DVKVoiceActivityAnalysis
+typealias VoiceActivityDetector = DVKVoiceActivityDetector

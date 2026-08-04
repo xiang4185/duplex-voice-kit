@@ -19,6 +19,14 @@ REQUIRED = [
     "CHANGELOG.md",
     ".gitignore",
     ".github/workflows/ci.yml",
+    ".github/workflows/xiaomao-unsigned-ipa.yml",
+    "Apps/XiaomaoApp/README.md",
+    "Apps/XiaomaoApp/project.yml",
+    "Apps/XiaomaoApp/Scripts/static_check.py",
+    "Apps/XiaomaoApp/XiaomaoApp/App/XiaomaoApp.swift",
+    "Apps/XiaomaoApp/XiaomaoApp/SmallThings/SmallThingsRootView.swift",
+    "Apps/XiaomaoApp/XiaomaoAppTests/ChatViewModelTests.swift",
+    "Apps/XiaomaoApp/XiaomaoAppTests/SmallThingsStoreTests.swift",
     "Examples/README.md",
     "docs/architecture.md",
     "docs/provider-integration.md",
@@ -69,12 +77,9 @@ FORBIDDEN_REPOSITORY_TERMS = (
     "/srv/yusuan",
     "memory-v2.db",
     "wechat-52-ledger",
-    "Xiaomao",
-    "xiaomao",
     "VOLC_",
     "SpeakerID=",
     "api.openai",
-    "wss://",
 )
 
 SECRET_ASSIGNMENT_PATTERN = re.compile(
@@ -137,28 +142,14 @@ def main() -> None:
             path.suffix.lower() in {".md", ".py", ".swift", ".yml", ".yaml"}
             or path.name in {"LICENSE", "Package.swift"}
         )
-        if scans_as_text and relative.as_posix() != "Scripts/static_check.py":
+        if scans_as_text and path.name != "static_check.py":
             text = path.read_text(encoding="utf-8")
-            allowed_reference_doc = (
-                relative.as_posix() in {
-                    "README.md",
-                    "Examples/README.md",
-                    "Examples/DVKCompanionShowcase/README.md",
-                    "CHANGELOG.md",
-                    "docs/architecture.md",
-                    "docs/security-and-privacy.md",
-                    "docs/live2d-boundary.md",
-                    "docs/profile-routing.md",
-                }
-            )
             for forbidden in FORBIDDEN_REPOSITORY_TERMS:
-                if forbidden in text and not (
-                    allowed_reference_doc and forbidden in {"Xiaomao", "xiaomao"}
-                ):
+                if forbidden in text:
                     failures.append(
                         f"forbidden private/provider term {forbidden!r}: {relative}"
                     )
-            is_negative_test_fixture = TESTS in path.parents
+            is_negative_test_fixture = any(part.endswith("Tests") for part in relative.parts)
             if (
                 not is_negative_test_fixture
                 and (SECRET_ASSIGNMENT_PATTERN.search(text) or "-----BEGIN PRIVATE KEY-----" in text)
@@ -194,7 +185,7 @@ def main() -> None:
 
     workflow_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     for expected in (
-        "runs-on: macos-latest",
+        "runs-on: macos-15",
         "xcrun simctl list devices available -j",
         "platform=iOS Simulator",
         "xcodebuild",
@@ -202,9 +193,20 @@ def main() -> None:
         "xcodegen generate",
         "DVKCompanionShowcase.xcodeproj",
         "scheme DVKCompanionShowcase",
+        "Apps/XiaomaoApp",
+        "XiaomaoApp.xcodeproj",
+        "scheme XiaomaoApp",
     ):
         if expected not in workflow_text:
             failures.append("CI workflow missing: " + expected)
+
+    app_project = (ROOT / "Apps/XiaomaoApp/project.yml").read_text(encoding="utf-8")
+    for expected in ("DuplexVoiceKit:", "path: ../..", "- package: DuplexVoiceKit"):
+        if expected not in app_project:
+            failures.append("Xiaomao app must use the local DVK package: " + expected)
+    for forbidden in ("revision:", "branch: main", "url: https://github.com/xiang4185/duplex-voice-kit.git"):
+        if forbidden in app_project:
+            failures.append("Xiaomao app contains a remote DVK dependency: " + forbidden)
 
     test_method_count = 0
     for test_path in TESTS.glob("*.swift"):
@@ -606,33 +608,38 @@ def main() -> None:
         if not (ROOT / relative).is_file():
             failures.append("missing V7.0 required file: " + relative)
 
-    v70_private_terms = (
-        "xiaomao-api.xiangpt.ltd",
-        "xiaomao-voice.xiangpt.ltd",
-        "xiang4185@gmail.com",
-        "com.xiang4185",
-        "ios-owner-01",
-        "ios-owner-dev",
-        "/srv/yusuan/",
-        "owner-token.txt",
-        "xiaomao-app-backend.service",
-        "xiaomao-app-voice.service",
-        "xiaomao-app-test-tunnel",
-        "SC2.0",
-        "路线 B",
-        "sc2.0",
+    allowed_url_hosts = {
+        "127.0.0.1",
+        "api.example.test",
+        "example.invalid",
+        "github.com",
+        "img.shields.io",
+        "voice.example.test",
+        "www.apache.org",
+        "www.apple.com",
+    }
+    url_pattern = re.compile(r"(?i)\b(?:https?|wss?)://([^/:\s`\"']+)")
+    private_patterns = (
+        ("absolute server path", re.compile(r"/srv/")),
+        ("personal bundle identifier", re.compile(r"\bcom\.(?!example\b)[A-Za-z0-9-]+\.[A-Za-z0-9.-]+\b")),
+        ("owner device identifier", re.compile(r"\bios-owner-(?:[0-9]+|dev)\b", re.I)),
+        ("private token filename", re.compile(r"\b(?:owner|production|prod)[-_]?token(?:\.[A-Za-z0-9]+)?\b", re.I)),
+        ("personal email address", re.compile(r"\b(?!git@)[A-Z0-9._%+-]+@(?!example\.(?:com|test)\b)[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
     )
     v70_text_extensions = {".md", ".py", ".swift", ".yml", ".yaml"}
     for path in files:
         relative = path.relative_to(ROOT)
         if path.suffix.lower() not in v70_text_extensions:
             continue
-        if relative.as_posix() == "Scripts/static_check.py":
+        if path.name == "static_check.py":
             continue
         text = path.read_text(encoding="utf-8")
-        for term in v70_private_terms:
-            if term in text:
-                failures.append(f"V7.0 forbidden private term {term!r}: {relative}")
+        for host in url_pattern.findall(text):
+            if host.lower() not in allowed_url_hosts:
+                failures.append(f"V7.0 non-public URL host {host!r}: {relative}")
+        for label, pattern in private_patterns:
+            if pattern.search(text):
+                failures.append(f"V7.0 forbidden {label}: {relative}")
 
     v70_bearer_pattern = re.compile(
         r"Authorization:\s*Bearer\s+[A-Za-z0-9._\-]{12,}"
@@ -644,7 +651,7 @@ def main() -> None:
         relative = path.relative_to(ROOT)
         if path.suffix.lower() not in v70_text_extensions:
             continue
-        if relative.as_posix() == "Scripts/static_check.py":
+        if path.name == "static_check.py":
             continue
         text = path.read_text(encoding="utf-8")
         if v70_bearer_pattern.search(text):

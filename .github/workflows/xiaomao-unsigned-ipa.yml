@@ -1,0 +1,294 @@
+name: Xiaomao Unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: HTTPS API base URL (no token)
+        required: false
+        type: string
+      voice_ws_url:
+        description: WSS voice WebSocket URL (no token)
+        required: false
+        type: string
+      device_id:
+        description: Runtime device ID (not stored by the repository)
+        required: false
+        type: string
+      bundle_id:
+        description: Bundle ID used for this unsigned build
+        required: false
+        default: com.example.xiaomao.sideload
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xiaomao-unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-iphoneos:
+    name: Build unsigned iphoneos IPA
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    env:
+      API_BASE_URL: ${{ inputs.api_base_url }}
+      VOICE_WS_URL: ${{ inputs.voice_ws_url }}
+      DEVICE_ID: ${{ inputs.device_id }}
+      BUNDLE_ID: ${{ inputs.bundle_id || 'com.example.xiaomao.sideload' }}
+
+    defaults:
+      run:
+        working-directory: Apps/XiaomaoApp
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_26_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | head -n 1)"
+          test -n "$XCODE_26_APP" || { echo '::error::Xcode 26 not found in /Applications'; exit 1; }
+          export DEVELOPER_DIR="$XCODE_26_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          XCODE_VERSION_LINE="$(xcodebuild -version | head -n 1)"
+          echo "xcodebuild: $XCODE_VERSION_LINE"
+          case "$XCODE_VERSION_LINE" in
+            "Xcode 26"*) ;;
+            *) echo '::error::xcodebuild is not reporting Xcode 26'; exit 1 ;;
+          esac
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iphoneos SDK: $SDK_VERSION"
+          case "$SDK_VERSION" in
+            26*) ;;
+            *) echo '::error::iphoneos SDK is not 26.x'; exit 1 ;;
+          esac
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Set non-sensitive build metadata
+        run: |
+          set -euo pipefail
+          echo "APP_BUILD_SHA=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
+          echo "APP_BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Run privacy-safe static checks
+        run: |
+          set -euo pipefail
+          python3 ../../Scripts/static_check.py
+          python3 Scripts/static_check.py
+          test ! -e Config/Secrets.xcconfig
+          SENSITIVE_PATH="$(find . -path './.git' -prune -o -type f \( \
+            -name '.env' -o -name 'Secrets.xcconfig' \
+            -o -name '*.p12' -o -name '*.pfx' -o -name '*.pem' -o -name '*.key' \
+            -o -name '*.cer' -o -name '*.crt' -o -name '*.mobileprovision' \
+            -o -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \
+            -o -name '*.db-wal' -o -name '*.db-shm' \
+            -o -name '*.wav' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.pcm' \
+          \) -print -quit)"
+          test -z "$SENSITIVE_PATH"
+
+      - name: Validate non-sensitive runtime inputs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ipaddress
+          import os
+          import re
+          from urllib.parse import urlparse
+
+          api = os.environ.get("API_BASE_URL", "").strip()
+          voice = os.environ.get("VOICE_WS_URL", "").strip()
+          device = os.environ.get("DEVICE_ID", "").strip()
+          configured = [bool(api), bool(voice), bool(device)]
+          if any(configured) and not all(configured):
+              raise SystemExit("api_base_url, voice_ws_url and device_id must be supplied together")
+
+          def validate_url(value: str, expected_scheme: str) -> None:
+              parsed = urlparse(value)
+              if parsed.scheme.lower() != expected_scheme or not parsed.hostname:
+                  raise SystemExit(f"endpoint must use {expected_scheme.upper()}")
+              host = parsed.hostname.lower()
+              if host == "localhost" or host.endswith(".localhost"):
+                  raise SystemExit("loopback endpoint is not allowed")
+              try:
+                  if ipaddress.ip_address(host).is_loopback:
+                      raise SystemExit("loopback endpoint is not allowed")
+              except ValueError:
+                  pass
+
+          if all(configured):
+              validate_url(api, "https")
+              validate_url(voice, "wss")
+              if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", device):
+                  raise SystemExit("device_id format is invalid")
+          bundle_id = os.environ.get("BUNDLE_ID", "").strip()
+          if not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", bundle_id):
+              raise SystemExit("bundle_id format is invalid")
+          print(f"runtime_endpoints_configured={str(all(configured)).lower()}")
+          PY
+
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          test -d XiaomaoApp.xcodeproj
+
+      - name: Build generic iOS Device without signing
+        run: |
+          set -uo pipefail
+          BUILD_LOG="$RUNNER_TEMP/xcodebuild-device.log"
+          xcodebuild \
+            -project XiaomaoApp.xcodeproj \
+            -scheme XiaomaoApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-device" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ENABLE_MOCK_VOICE=NO \
+            ENABLE_MEMORY=NO \
+            DEFAULT_VOICE_ROUTE=b \
+            BUNDLE_ID="$BUNDLE_ID" \
+            API_BASE_URL="$API_BASE_URL" \
+            VOICE_WS_URL="$VOICE_WS_URL" \
+            DEVICE_ID="$DEVICE_ID" \
+            APP_BUILD_SHA="$APP_BUILD_SHA" \
+            APP_BUILD_TIME="$APP_BUILD_TIME" \
+            build 2>&1 | tee "$BUILD_LOG"
+          STATUS=${PIPESTATUS[0]}
+          if [[ "$STATUS" -ne 0 ]]; then
+            echo '::group::Condensed device build errors'
+            grep -nE '(^|[[:space:]])(error:|fatal error:)|BUILD FAILED|The following build commands failed' "$BUILD_LOG" | tail -160 || true
+            echo '::endgroup::'
+            exit "$STATUS"
+          fi
+
+      - name: Package and verify unsigned IPA
+        id: package
+        run: |
+          set -euo pipefail
+          DERIVED_DATA="$RUNNER_TEMP/DerivedData-device"
+          APP_PATH="$(find "$DERIVED_DATA/Build/Products" -type d -name 'XiaomaoApp.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+
+          EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
+          BUNDLE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          test "$BUNDLE_IDENTIFIER" = "$BUNDLE_ID"
+          ARCHS="$(lipo -archs "$APP_PATH/$EXECUTABLE_NAME")"
+          grep -Eq '(^|[[:space:]])arm64($|[[:space:]])' <<< "$ARCHS"
+
+          rm -rf "$APP_PATH/_CodeSignature"
+          rm -f "$APP_PATH/embedded.mobileprovision"
+          test ! -e "$APP_PATH/_CodeSignature"
+          test ! -e "$APP_PATH/embedded.mobileprovision"
+          if codesign -dv "$APP_PATH" >/dev/null 2>&1; then
+            echo 'App unexpectedly contains a code signature' >&2
+            exit 1
+          fi
+
+          APP_SENSITIVE_PATH="$(find "$APP_PATH" -type f \( \
+            -name '.env' -o -name 'Secrets.xcconfig' \
+            -o -name '*.p12' -o -name '*.pfx' -o -name '*.pem' -o -name '*.key' \
+            -o -name '*.cer' -o -name '*.crt' -o -name '*.mobileprovision' \
+            -o -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \
+            -o -name '*.db-wal' -o -name '*.db-shm' \
+            -o -name '*.wav' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.pcm' \
+          \) -print -quit)"
+          test -z "$APP_SENSITIVE_PATH"
+
+          PACKAGE_ROOT="$RUNNER_TEMP/unsigned-package"
+          ARTIFACT_DIR="$RUNNER_TEMP/unsigned-artifact"
+          rm -rf "$PACKAGE_ROOT" "$ARTIFACT_DIR"
+          mkdir -p "$PACKAGE_ROOT/Payload" "$ARTIFACT_DIR"
+          ditto "$APP_PATH" "$PACKAGE_ROOT/Payload/XiaomaoApp.app"
+          (
+            cd "$PACKAGE_ROOT"
+            /usr/bin/zip -qry "$ARTIFACT_DIR/XiaomaoApp-unsigned.ipa" Payload
+          )
+
+          IPA="$ARTIFACT_DIR/XiaomaoApp-unsigned.ipa"
+          test -s "$IPA"
+          unzip -Z1 "$IPA" | grep -q '^Payload/XiaomaoApp.app/'
+          if unzip -Z1 "$IPA" | grep -Eq '(^|/)(_CodeSignature|embedded\.mobileprovision|Secrets\.xcconfig)($|/)'; then
+            echo 'IPA contains a prohibited signing or secret path' >&2
+            exit 1
+          fi
+          if unzip -Z1 "$IPA" | grep -Ei '\.(p12|pfx|pem|key|cer|crt|mobileprovision|db|sqlite|sqlite3|db-wal|db-shm|wav|mp3|m4a|pcm)$'; then
+            echo 'IPA contains a prohibited file extension' >&2
+            exit 1
+          fi
+
+          (
+            cd "$ARTIFACT_DIR"
+            shasum -a 256 XiaomaoApp-unsigned.ipa > XiaomaoApp-unsigned.ipa.sha256
+            shasum -a 256 -c XiaomaoApp-unsigned.ipa.sha256
+          )
+
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ' | sed -E 's/[[:space:]]+$//')"
+          BUILD_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          cat > "$ARTIFACT_DIR/build-manifest.txt" <<MANIFEST
+          Git Commit SHA: $GITHUB_SHA
+          Git Branch: $GITHUB_REF_NAME
+          Build Time: $BUILD_TIME
+          Xcode Version: $XCODE_VERSION
+          Bundle ID: $BUNDLE_ID
+          Build Configuration: Release
+          SDK: iphoneos
+          Signed: false
+          Default Voice Route: b
+          Memory Realtime Path: disabled
+          Mock Voice: disabled
+          MANIFEST
+
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          SHA256="$(awk '{print $1}' "$ARTIFACT_DIR/XiaomaoApp-unsigned.ipa.sha256")"
+          IPA_SIZE="$(stat -f '%z' "$IPA")"
+          echo "artifact_name=xiaomao-ios-unsigned-$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "ipa_size=$IPA_SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "arm64=true" >> "$GITHUB_OUTPUT"
+          echo "unsigned=true" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Unsigned IPA verification'
+            echo "- Artifact: xiaomao-ios-unsigned-$SHORT_SHA"
+            echo "- IPA bytes: $IPA_SIZE"
+            echo "- SHA256: $SHA256"
+            echo '- arm64: true'
+            echo '- signed: false'
+            echo '- retention: 1 day'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            ${{ runner.temp }}/unsigned-artifact/XiaomaoApp-unsigned.ipa
+            ${{ runner.temp }}/unsigned-artifact/XiaomaoApp-unsigned.ipa.sha256
+            ${{ runner.temp }}/unsigned-artifact/build-manifest.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0

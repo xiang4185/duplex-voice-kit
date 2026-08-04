@@ -57,4 +57,10 @@ The existing security guidance above remains in force. The Showcase adds no cred
 
 The four Showcase cats are fictional and local. The public repository contains no real persona ID, private prompt, production address, token credential, database, audio asset, font, or third-party character model. A selected public profile is resolved by a host-provided neutral resolver into an opaque route token. That token is deliberately absent from ordinary logs, UI, message text, and review models.
 
-Limited privacy is explicit: the Showcase allows its configured local text demo while disabling voice, and the page explains the difference. XiaomaoApp remains a private host concern and can supply its own persistence, route mapping, and final assets without changing the public Core boundary.
+Limited privacy is explicit: the Showcase allows its configured local text demo while disabling voice, and the page explains the difference.
+
+## Public application boundary
+
+The complete Xiaomao application lives under `Apps/XiaomaoApp` in this repository. Its presence does not relax the Core boundary: `Sources/DuplexVoiceKit` remains provider-neutral and contains no product UI, production address, credential, user record, or private deployment material.
+
+The application defaults to loopback/offline Mock in Debug and empty runtime endpoints in Release. A real token is entered at runtime and stored in Keychain. Manual IPA builds may accept endpoints, a device identifier, and a bundle identifier as ephemeral workflow inputs; those values are not committed to the repository or uploaded as separate artifacts.

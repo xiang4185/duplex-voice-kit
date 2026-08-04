@@ -34,9 +34,9 @@ jobs:
         run: swift test -c release
 
   ios-simulator:
-    name: iOS Simulator tests
-    runs-on: macos-latest
-    timeout-minutes: 30
+    name: iOS 26 package, showcase, and app
+    runs-on: macos-15
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -45,13 +45,21 @@ jobs:
       - name: Show toolchain
         run: |
           set -euo pipefail
+          XCODE_26_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | head -n 1)"
+          test -n "$XCODE_26_APP" || { echo '::error::Xcode 26 not found'; exit 1; }
+          export DEVELOPER_DIR="$XCODE_26_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
           sw_vers
           xcodebuild -version
           swift --version
           xcodebuild -showsdks
 
       - name: Run static checks
-        run: python3 Scripts/static_check.py
+        run: |
+          set -euo pipefail
+          python3 Scripts/static_check.py
+          python3 Apps/XiaomaoApp/Scripts/static_check.py
+          test ! -e Apps/XiaomaoApp/Config/Secrets.xcconfig
 
       - name: Select an available iPhone Simulator
         id: simulator
@@ -60,19 +68,24 @@ jobs:
           set -euo pipefail
           SIMULATOR_UDID="$({ xcrun simctl list devices available -j; } | python3 -c '
           import json
+          import re
           import sys
 
           payload = json.load(sys.stdin)
           candidates = []
           for runtime, devices in payload.get("devices", {}).items():
-              if "iOS" not in runtime:
+              match = re.search(r"\.iOS-(\d+)(?:-(\d+))?(?:-(\d+))?$", runtime)
+              if not match:
+                  continue
+              version = tuple(int(part) if part is not None else 0 for part in match.groups())
+              if version[0] != 26:
                   continue
               for device in devices:
                   if device.get("isAvailable") and device.get("name", "").startswith("iPhone"):
-                      candidates.append((runtime, device["name"], device["udid"]))
+                      candidates.append((version, device["name"], device["udid"]))
 
           if not candidates:
-              raise SystemExit("No available iPhone Simulator found")
+              raise SystemExit("No available iOS 26 iPhone Simulator found")
 
           candidates.sort(reverse=True)
           print(candidates[0][2])
@@ -118,3 +131,25 @@ jobs:
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Generate Xiaomao app project
+        working-directory: Apps/XiaomaoApp
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          test -d XiaomaoApp.xcodeproj
+
+      - name: Build and test Xiaomao app
+        working-directory: Apps/XiaomaoApp
+        env:
+          NSUnbufferedIO: "YES"
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project XiaomaoApp.xcodeproj \
+            -scheme XiaomaoApp \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/XiaomaoDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            test

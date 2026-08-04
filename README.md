@@ -164,8 +164,8 @@ swift test -c release
 
 - 不包含任何具体语音 Provider 实现。
 - 不包含认证服务、Voice Gateway 或服务端部署方案。
-- Core Target contains no product UI; the optional DuplexVoiceKitUI Target provides public components and the Showcase, but not a complete call product flow or background-call promise.
-- 不包含 Live2D 集成和人物资产。
+- Core Target contains no product UI; the optional DuplexVoiceKitUI Target provides public components and the Showcase. The complete runnable application is kept separately under `Apps/XiaomaoApp` and consumes Core through a local package dependency.
+- 不包含 Live2D SDK、第三方模型或来源不明的字体与人物资产。
 - 尚未发布稳定版本 Tag 或 Release。
 
 ## 参与贡献
@@ -186,4 +186,10 @@ The R2 public experience includes text success/failure/retry, deterministic voic
 
 The R3A Showcase expands the optional public layer into four fictional mock cats: Mellow, Sunny, Sage, and Luna. It provides Home, Cats, Conversation, Reviews, Settings, a deterministic Mock Lab, a horizontal snapping profile carousel, accessibility identifiers, Dynamic Type, dark mode, VoiceOver, and Reduce Motion paths.
 
-The public route boundary carries a selected public profile ID into an opaque host-resolved route token. The token is never shown or written to reviews. The public repository contains no real persona ID, private prompt, production address, credential, or character asset. XiaomaoApp may later replace the public theme, copy, catalog, resolver, and final character presentation in its private integration layer.
+The public route boundary carries a selected public profile ID into an opaque host-resolved route token. The token is never shown or written to reviews. The public repository contains no real persona ID, private prompt, production address, or credential.
+
+## Single-source Xiaomao app
+
+`Apps/XiaomaoApp` is the complete iOS application target, including the current chat tab, offline small-things tab, voice UI, Widget, tests, and unsigned IPA packaging. It consumes this checkout through `path: ../..`; no second DVK copy or pinned remote revision is used.
+
+The committed Release configuration contains empty endpoint and device values. Debug uses loopback-only endpoints and offline mock voice. Runtime credentials are entered by the user and stored in Keychain, while CI may receive non-secret endpoint and device values only as manual workflow inputs. See [`Apps/XiaomaoApp/README.md`](Apps/XiaomaoApp/README.md).
