@@ -199,4 +199,93 @@ public struct DVKPressableButtonStyle: ButtonStyle {
             )
     }
 }
+
+/// Compact programmatic cat avatar for small fixed containers (e.g. 52pt
+/// role action bar). Draws the face, ears, eyes and mouth inside the given
+/// container so the result is a real avatar, not a clipped full canvas.
+@MainActor
+public struct DVKCompanionCompactAvatar: View {
+    public let profile: DVKCompanionProfile
+    public let size: CGFloat
+
+    public init(profile: DVKCompanionProfile, size: CGFloat = 52) {
+        self.profile = profile
+        self.size = size
+    }
+
+    private var accent: Color {
+        switch profile.themeKey {
+        case .warmCreamRose: return Color(hex: 0xD9486B)
+        case .coralGold: return Color(hex: 0xE36C4D)
+        case .mistBlue: return Color(hex: 0x7897AC)
+        case .lavenderNight: return Color(hex: 0xA58BC4)
+        }
+    }
+    private var fur: Color {
+        switch profile.characterVisualKey {
+        case "coral-gold": return Color(hex: 0xF2B58D)
+        case "silver-mist": return Color(hex: 0xBCC8D0)
+        case "lavender-night": return Color(hex: 0xC8B4D7)
+        default: return Color(hex: 0xF6E4D7)
+        }
+    }
+    private var earMark: Color {
+        switch profile.characterVisualKey {
+        case "coral-gold": return Color(hex: 0xC65A42)
+        case "silver-mist": return Color(hex: 0x6C8EA4)
+        case "lavender-night": return Color(hex: 0x6E568E)
+        default: return Color(hex: 0xC87886)
+        }
+    }
+
+    public var body: some View {
+        ZStack {
+            // 圆脸
+            Circle()
+                .fill(fur)
+                .frame(width: size * 0.82, height: size * 0.82)
+            // 耳朵
+            HStack(spacing: size * 0.62) {
+                CompactEar()
+                    .fill(earMark)
+                    .frame(width: size * 0.20, height: size * 0.26)
+                CompactEar()
+                    .fill(earMark)
+                    .frame(width: size * 0.20, height: size * 0.26)
+            }
+            .offset(y: -size * 0.30)
+            // 眼睛
+            HStack(spacing: size * 0.26) {
+                Circle().fill(Color.black.opacity(0.72)).frame(width: size * 0.07, height: size * 0.10)
+                Circle().fill(Color.black.opacity(0.72)).frame(width: size * 0.07, height: size * 0.10)
+            }
+            .offset(y: -size * 0.02)
+            // 嘴
+            Capsule()
+                .fill(earMark)
+                .frame(width: size * 0.16, height: size * 0.05)
+                .offset(y: size * 0.24)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+}
+
+private struct CompactEar: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private extension Color {
+    init(hex: UInt32) {
+        self.init(.sRGB, red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255)
+    }
+}
 #endif

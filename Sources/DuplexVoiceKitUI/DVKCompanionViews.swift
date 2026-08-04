@@ -419,13 +419,15 @@ public struct DVKCompanionProfilesView: View {
                 0,
                 geometry.size.height - dvkTabBarBottomContentPadding
             )
-            let headerBudget: CGFloat = 84
-            let footerBudget: CGFloat = store.canSelectProfiles ? 112 : 142
+            // 标题区（含副标题）约占 92pt；操作条（含间距）约 96pt；
+            // 其余全部高度归主卡，不设 400pt 上限，大屏主卡接近原版比例。
+            let headerBudget: CGFloat = 92
+            let footerBudget: CGFloat = store.canSelectProfiles ? 96 : 124
             let availableHeroHeight = max(
                 0,
                 usableHeight - headerBudget - footerBudget
             )
-            let cardHeight = max(250, min(400, availableHeroHeight * 0.86))
+            let cardHeight = max(280, availableHeroHeight)
             // 卡片宽度：屏幕宽度 - 左右页边距 - 相邻轻微露出
             let cardWidth = max(
                 260,
@@ -446,20 +448,20 @@ public struct DVKCompanionProfilesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
-                .padding(.bottom, 8)
+                .padding(.bottom, 12)
 
-                // 可左右分页滑动的大角色主卡
+                // 可左右分页滑动的大角色主卡（紧跟副标题，间距 24–32pt）
                 roleSwipeCarousel(
                     store: store,
                     theme: theme,
                     cardWidth: cardWidth,
                     cardHeight: cardHeight
                 )
+                .padding(.bottom, 12)
 
                 // 底部固定角色操作条（头像 + 名称 + 标签 + 主按钮）
                 roleActionBar(store: store, theme: theme)
                     .padding(.horizontal, 20)
-                    .padding(.top, 10)
 
                 if !store.canSelectProfiles {
                     Text("会话进行中，暂不能切换角色。")
@@ -469,7 +471,11 @@ public struct DVKCompanionProfilesView: View {
                         .lineLimit(2)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .top
+            )
         }
         .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .foregroundStyle(theme.textPrimary)
@@ -502,7 +508,6 @@ public struct DVKCompanionProfilesView: View {
                 }
             }
             .scrollTargetLayout()
-            .padding(.vertical, 12)
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollClipDisabled()
@@ -543,7 +548,6 @@ public struct DVKCompanionProfilesView: View {
     ) -> some View {
         let profileTheme = DVKCompanionThemeResolver.resolve(profile: profile, appearance: store.appearance)
         let reduced = systemReduceMotion || store.reduceMotionPreview
-        let avatarDimension: CGFloat = 190
         return VStack(spacing: 10) {
             Text("当前角色")
                 .font(.caption.weight(.semibold))
@@ -553,10 +557,11 @@ public struct DVKCompanionProfilesView: View {
                 .background(profileTheme.primaryAction.opacity(0.10), in: Capsule())
                 .padding(.top, 12)
 
+            // 人物区域：占据卡片剩余高度，大屏下人物主体更大
             ZStack {
                 // 角色渐变背景（上半）
                 profileTheme.primaryAction.opacity(0.12)
-                    .frame(height: avatarDimension * 0.62)
+                    .frame(height: 160)
                     .frame(maxWidth: .infinity)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
@@ -570,7 +575,7 @@ public struct DVKCompanionProfilesView: View {
                             endRadius: 130
                         )
                     )
-                    .frame(width: avatarDimension * 1.2, height: avatarDimension * 1.2)
+                    .frame(width: 270, height: 270)
                 // 程序化 Mock 猫（固定容器内，不裁切不溢出）
                 DVKCharacterPresentationView(
                     profile: profile,
@@ -579,9 +584,10 @@ public struct DVKCompanionProfilesView: View {
                     staticMode: true,
                     host: nil
                 )
-                .frame(width: avatarDimension, height: avatarDimension)
+                .frame(width: 224, height: 224)
             }
-            .frame(height: avatarDimension * 1.02)
+            .frame(maxWidth: .infinity)
+            .frame(maxHeight: .infinity)
             .padding(.top, 2)
 
             Text(profile.displayName)
@@ -647,16 +653,9 @@ public struct DVKCompanionProfilesView: View {
         let isCurrent = profile.id == store.selectedProfileID
         return AnyView(
             HStack(spacing: 12) {
-                // 小头像（48–56 pt 固定 Frame + clipped，不溢出）
-                DVKCharacterPresentationView(
-                    profile: profile,
-                    state: .idle,
-                    reduceMotion: true,
-                    staticMode: true,
-                    host: nil
-                )
-                .frame(width: 52, height: 52)
-                .clipped()
+                // 小头像（52pt 专用 compact avatar，固定容器内绘制，非画布裁切）
+                DVKCompanionCompactAvatar(profile: profile, size: 52)
+                    .frame(width: 52, height: 52)
 
                 // 角色信息：名称单行 + 最多两标签单行
                 ViewThatFits(in: .horizontal) {
