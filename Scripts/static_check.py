@@ -469,8 +469,8 @@ def main() -> None:
         failures.append("Showcase must use generated system Launch Screen metadata")
     if "private let dvkTabBarBottomContentPadding" not in views_text:
         failures.append("bottom Tab Bar content spacing must use a named private constant")
-    if views_text.count("safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)") != 4:
-        failures.append("all four Tab roots must use the named bottom content spacing constant")
+    if views_text.count("safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)") < 3:
+        failures.append("at least the Cats, Reviews and Settings tab roots must use the named bottom content spacing constant (Home relies on the native TabView safe area)")
     if ".scrollClipDisabled()" not in views_text:
         failures.append("Cats Carousel must not clip scaled cards or shadows")
     if "ViewThatFits(in: .horizontal)" not in views_text or 'Button("Use this cat")' not in views_text:

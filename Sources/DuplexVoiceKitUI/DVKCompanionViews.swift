@@ -175,7 +175,7 @@ public struct DVKCompanionHomeView: View {
         ("想你了", "moon.stars.fill"),
         ("一直在", "star.fill")
     ]
-    private let heroSize: CGFloat = 200
+    private let heroSize: CGFloat = 170
 
     public init(
         adapter: DVKCompanionStoreAdapter,
@@ -227,60 +227,56 @@ public struct DVKCompanionHomeView: View {
 
                 Spacer(minLength: 0)
 
-                // 中央：柔光晕 + 完整形象（portrait 2:3 + 底部光斑）
-                // halo 直径自适应容器宽度，避免大圆环溢出屏幕形成游离圆环
-                GeometryReader { geometry in
-                    let haloDiameter = min(380, max(240, geometry.size.width))
-                    ZStack {
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [style.roleGold.opacity(0.30), style.primarySoft.opacity(0.15), .clear],
-                                    center: .center,
-                                    startRadius: 50,
-                                    endRadius: 200
-                                )
+                // 中央：柔光晕 + 完整形象（原版固定结构：ZStack 居中 + avatar 170 + frame height 330）
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [style.roleGold.opacity(0.30), style.primarySoft.opacity(0.15), .clear],
+                                center: .center,
+                                startRadius: 50,
+                                endRadius: 200
                             )
-                            .frame(width: haloDiameter, height: haloDiameter)
-                            .accessibilityHidden(true)
+                        )
+                        .frame(width: 380, height: 380)
+                        .accessibilityHidden(true)
 
-                        Ellipse()
-                            .fill(
-                                RadialGradient(
-                                    colors: [style.heroGlow, style.heroGlow.opacity(0.4), .clear],
-                                    center: .center,
-                                    startRadius: 10,
-                                    endRadius: 140
-                                )
+                    Ellipse()
+                        .fill(
+                            RadialGradient(
+                                colors: [style.heroGlow, style.heroGlow.opacity(0.4), .clear],
+                                center: .center,
+                                startRadius: 10,
+                                endRadius: 140
                             )
-                            .frame(width: min(300, geometry.size.width * 0.92), height: 60)
-                            .offset(y: heroSize * 0.55)
-                            .blur(radius: 24)
-                            .opacity(0.85)
-                            .accessibilityHidden(true)
+                        )
+                        .frame(width: 300, height: 60)
+                        .offset(y: heroSize * 0.55)
+                        .blur(radius: 24)
+                        .opacity(0.85)
+                        .accessibilityHidden(true)
 
-                        if let profile = store.selectedProfile {
-                            DVKCatAvatarView(
-                                profile: profile,
-                                size: heroSize,
-                                revealed: privacyRevealed
-                            ) {
-                                showPrivacyConfirm = true
-                            }
-                            .scaleEffect(avatarBreath ? 1.012 : 0.988)
-                            .offset(y: avatarBreath ? -3 : 0)
-                            .animation(
-                                (reduced || !isHomeVisible)
-                                    ? nil
-                                    : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
-                                value: avatarBreath
-                            )
-                            .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
+                    if let profile = store.selectedProfile {
+                        DVKCatAvatarView(
+                            profile: profile,
+                            size: heroSize,
+                            revealed: privacyRevealed
+                        ) {
+                            showPrivacyConfirm = true
                         }
+                        .scaleEffect(avatarBreath ? 1.012 : 0.988)
+                        .offset(y: avatarBreath ? -3 : 0)
+                        .animation(
+                            (reduced || !isHomeVisible)
+                                ? nil
+                                : .easeInOut(duration: DVKCatStyle.avatarBreathDuration).repeatForever(autoreverses: true),
+                            value: avatarBreath
+                        )
+                        .accessibilityIdentifier(DVKCompanionAccessibilityID.characterPresentation)
                     }
-                    .frame(maxWidth: .infinity)
                 }
-                .frame(height: heroSize * 3.0 / 2.0 + 40)
+                .frame(height: 330)
+                .frame(maxWidth: .infinity)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.94)
                 .animation(.spring(response: DVKCatStyle.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
@@ -311,7 +307,7 @@ public struct DVKCompanionHomeView: View {
                     Text(DVKCatStyle.displayName(for: profile))
                         .font(style.title1Font)
                         .foregroundStyle(style.textPrimary)
-                        .padding(.top, 12)
+                        .padding(.top, 14)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 10)
                         .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
@@ -325,7 +321,7 @@ public struct DVKCompanionHomeView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(style.roleGold)
                     }
-                    .padding(.top, 6)
+                    .padding(.top, 8)
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
                     .onAppear {
@@ -339,7 +335,7 @@ public struct DVKCompanionHomeView: View {
                     }
                 }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 10)
 
                 if let profile = store.selectedProfile {
                     // 唯一主操作：语音聊天（大胶囊 CTA）
@@ -371,14 +367,22 @@ public struct DVKCompanionHomeView: View {
                     .accessibilityLabel(DVKCatStyle.introCopy(for: profile))
                     .accessibilityIdentifier(DVKCompanionAccessibilityID.homePrimaryCTA)
 
-                    // 文字聊天入口（克制次级卡片，替代原“陪伴记录”卡位置）
+                    // 连接说明占位行（原版纵向槽位）
+                    Text("连接后即可开始陪伴")
+                        .font(style.footnoteFont)
+                        .foregroundStyle(style.textTertiary)
+                        .padding(.top, 12)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.4).delay(0.6), value: appeared)
+
+                    // 文字聊天入口（克制次级卡片，替代原“陪伴记录”卡位置，槽位与间距同原版）
                     textChatCard(style: style, theme: theme) {
                         store.setMode(.text)
                         adapter.refresh()
                         openConversation()
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 14)
+                    .padding(.top, 16)
                     .padding(.bottom, 12)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 12)
@@ -386,7 +390,6 @@ public struct DVKCompanionHomeView: View {
                 }
             }
         }
-        .safeAreaPadding(.bottom, dvkTabBarBottomContentPadding)
         .sheet(isPresented: $showPrivacyConfirm) {
             DVKCatPrivacyConfirmView(
                 onAgree: { store.reauthorize(); adapter.refresh() },
