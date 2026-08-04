@@ -32,6 +32,16 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
+    private func publicRepositorySource(_ relativePath: String) throws -> String {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot.appendingPathComponent(relativePath)
+        return try String(contentsOf: sourceURL, encoding: .utf8)
+    }
+
     // P2.6C-REPAIR C: 通话结束统一走 finishCall 单路径关闭 Live Activity
     func testVoiceCallTeardownEndsLiveActivityThroughSinglePath() throws {
         let source = try voiceCallViewSource()
@@ -532,8 +542,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
     func testIOS26NativeGlassContract() throws {
         let project = try source("project.yml")
-        let ci = try source(".github/workflows/ios-ci.yml")
-        let ipa = try source(".github/workflows/ios-unsigned-ipa.yml")
+        let ci = try publicRepositorySource(".github/workflows/ci.yml")
+        let ipa = try publicRepositorySource(".github/workflows/xiaomao-unsigned-ipa.yml")
         let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
         let characters = try source("XiaomaoApp/App/CharacterSelectView.swift")
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
@@ -632,7 +642,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
     func testP27AUnlockAndSimulatorFixContract() throws {
         let avatar = try source("XiaomaoApp/Design/Components/PrivacyAvatar.swift")
-        let ci = try source(".github/workflows/ios-ci.yml")
+        let ci = try publicRepositorySource(".github/workflows/ci.yml")
 
         // 头像解锁必须绑定到刚点击的本地实例
         XCTAssertTrue(avatar.contains("@State private var requestedUnlock = false"))
