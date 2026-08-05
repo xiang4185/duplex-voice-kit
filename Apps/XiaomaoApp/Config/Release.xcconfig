@@ -1,5 +1,6 @@
 BUNDLE_ID = com.example.xiaomao
 APP_ENVIRONMENT = release
+HOST_ADAPTER_MODE = empty
 API_BASE_URL =
 VOICE_WS_URL =
 DEVICE_ID =

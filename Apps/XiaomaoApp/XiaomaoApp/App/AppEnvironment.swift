@@ -10,6 +10,7 @@ struct AppEnvironment: Sendable {
     let defaultVoiceRoute: VoiceRoute
     let appBuildSHA: String
     let appBuildTime: String
+    let requestedHostAdapterMode: HostAdapterMode
     let hostAdapters: HostAdapterDependencies
 
     init(
@@ -22,6 +23,7 @@ struct AppEnvironment: Sendable {
         defaultVoiceRoute: VoiceRoute,
         appBuildSHA: String,
         appBuildTime: String,
+        requestedHostAdapterMode: HostAdapterMode? = nil,
         hostAdapters: HostAdapterDependencies = .empty
     ) {
         self.apiBaseURL = apiBaseURL
@@ -33,12 +35,20 @@ struct AppEnvironment: Sendable {
         self.defaultVoiceRoute = defaultVoiceRoute
         self.appBuildSHA = appBuildSHA
         self.appBuildTime = appBuildTime
+        self.requestedHostAdapterMode = requestedHostAdapterMode
+            ?? (enableMockVoice ? .mock : .empty)
         self.hostAdapters = hostAdapters
     }
 
     var isRuntimeConfigurationReady: Bool {
-        if enableMockVoice { return true }
-        return isBackendConfigurationReady && isVoiceConfigurationReady
+        switch hostAdapters.mode {
+        case .empty:
+            return false
+        case .mock:
+            return true
+        case .production:
+            return isBackendConfigurationReady && isVoiceConfigurationReady
+        }
     }
 
     var isBackendConfigurationReady: Bool {
@@ -46,16 +56,18 @@ struct AppEnvironment: Sendable {
     }
 
     var isVoiceConfigurationReady: Bool {
-        if enableMockVoice { return true }
+        if hostAdapters.mode == .mock { return true }
         return Self.isAllowedRemoteURL(voiceWebSocketURL, scheme: "wss") && hasDeviceID
     }
 
     func canStartBackendRequest(hasToken: Bool) -> Bool {
-        isBackendConfigurationReady && hasToken
+        hostAdapters.mode == .production && isBackendConfigurationReady && hasToken
     }
 
     func canStartVoiceConnection(hasToken: Bool) -> Bool {
-        enableMockVoice || (isVoiceConfigurationReady && hasToken)
+        hostAdapters.mode == .mock || (
+            hostAdapters.mode == .production && isVoiceConfigurationReady && hasToken
+        )
     }
 
     private var hasDeviceID: Bool {
@@ -63,10 +75,10 @@ struct AppEnvironment: Sendable {
     }
 
     var runtimeConfigurationMessage: String {
-        if enableMockVoice || isRuntimeConfigurationReady {
+        if isRuntimeConfigurationReady {
             return "服务器配置已就绪"
         }
-        return "此安装包尚未配置 HTTPS API、WSS 语音地址或设备 ID。请使用手动 Actions 构建参数重新生成测试包。"
+        return "此安装包未启用完整的安全运行配置。请在可信构建环境中注入 HTTPS、WSS、设备绑定与凭据材料。"
     }
 
     static func fromBundle(
@@ -74,17 +86,38 @@ struct AppEnvironment: Sendable {
         hostAdapters: HostAdapterDependencies = .empty
     ) -> AppEnvironment {
         func value(_ key: String) -> String { bundle.object(forInfoDictionaryKey: key) as? String ?? "" }
+        let enableMockVoice = value("ENABLE_MOCK_VOICE").uppercased() == "YES"
         return AppEnvironment(
             apiBaseURL: URL(string: value("API_BASE_URL")),
             voiceWebSocketURL: URL(string: value("VOICE_WS_URL")),
             deviceID: value("DEVICE_ID"),
             appEnvironment: value("APP_ENVIRONMENT"),
-            enableMockVoice: value("ENABLE_MOCK_VOICE").uppercased() == "YES",
+            enableMockVoice: enableMockVoice,
             enableMemory: value("ENABLE_MEMORY").uppercased() == "YES",
             defaultVoiceRoute: VoiceRoute(rawValue: value("DEFAULT_VOICE_ROUTE")) ?? .b,
             appBuildSHA: value("APP_BUILD_SHA"),
             appBuildTime: value("APP_BUILD_TIME"),
+            requestedHostAdapterMode: HostAdapterMode.requested(
+                value("HOST_ADAPTER_MODE"),
+                enableMock: enableMockVoice
+            ),
             hostAdapters: hostAdapters
+        )
+    }
+
+    func replacingHostAdapters(_ dependencies: HostAdapterDependencies) -> AppEnvironment {
+        AppEnvironment(
+            apiBaseURL: apiBaseURL,
+            voiceWebSocketURL: voiceWebSocketURL,
+            deviceID: deviceID,
+            appEnvironment: appEnvironment,
+            enableMockVoice: enableMockVoice,
+            enableMemory: enableMemory,
+            defaultVoiceRoute: defaultVoiceRoute,
+            appBuildSHA: appBuildSHA,
+            appBuildTime: appBuildTime,
+            requestedHostAdapterMode: requestedHostAdapterMode,
+            hostAdapters: dependencies
         )
     }
 

@@ -14,7 +14,7 @@ final class DeveloperDiagnosticsTests: XCTestCase {
             defaultVoiceRoute: .b,
             appBuildSHA: "abc123",
             appBuildTime: "build-time",
-            hostAdapters: .empty
+            hostAdapters: .mock
         )
 
         let snapshot = DeveloperDiagnosticsSnapshot.make(
@@ -30,8 +30,8 @@ final class DeveloperDiagnosticsTests: XCTestCase {
         XCTAssertEqual(snapshot.deviceStatus, "Unbound")
         XCTAssertEqual(snapshot.mockStatus, "Enabled")
         XCTAssertEqual(snapshot.launchRouteStatus, "Home")
-        XCTAssertEqual(snapshot.backendAdapterStatus, "Empty")
-        XCTAssertEqual(snapshot.voiceAdapterStatus, "Empty")
+        XCTAssertEqual(snapshot.backendAdapterStatus, "Mock")
+        XCTAssertEqual(snapshot.voiceAdapterStatus, "Mock")
     }
 
     func testProductionFailureSnapshotShowsConfigurationErrorAndSafeBuildPlaceholders() {
@@ -101,6 +101,7 @@ final class DeveloperDiagnosticsTests: XCTestCase {
 
     func testMockAdaptersAreDisplayedAsMock() {
         let adapters = HostAdapterDependencies(
+            mode: .mock,
             backend: MockBackendAdapter(),
             voice: MockVoiceAdapter(),
             credentials: MockCredentialProvider(),

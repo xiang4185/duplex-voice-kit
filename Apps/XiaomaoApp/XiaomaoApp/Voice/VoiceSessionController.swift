@@ -49,8 +49,7 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var lastEndingSilenceMilliseconds = 0
 
     private let environment: AppEnvironment
-    private let tokenStore: AuthTokenStoring
-    private let socket: VoiceWebSocketClient
+    private let socket: any VoiceAdapter
     private let capture: AudioCapturing
     private let playback: AudioPlaying
     private let audioSession: AudioSessionControlling
@@ -104,8 +103,7 @@ final class VoiceSessionController: ObservableObject {
 
     init(
         environment: AppEnvironment,
-        tokenStore: AuthTokenStoring,
-        socket: VoiceWebSocketClient,
+        socket: any VoiceAdapter,
         capture: AudioCapturing,
         playback: AudioPlaying,
         audioSession: AudioSessionControlling,
@@ -124,7 +122,6 @@ final class VoiceSessionController: ObservableObject {
         maxCaptureRecoveryAttempts: Int = 2
     ) {
         self.environment = environment
-        self.tokenStore = tokenStore
         self.socket = socket
         self.capture = capture
         self.playback = playback
@@ -190,7 +187,7 @@ final class VoiceSessionController: ObservableObject {
             appBuildTime: environment.appBuildTime,
             state: state,
             webSocketState: webSocketState,
-            wssHost: environment.voiceWebSocketURL?.host ?? "",
+            adapterMode: environment.hostAdapters.mode.diagnosticLabel,
             sessionHash: VoiceDiagnosticSnapshot.shortHash(sessionID),
             lastCloseCode: lastCloseCode,
             lastErrorCategory: lastErrorCategory,
@@ -499,20 +496,11 @@ final class VoiceSessionController: ObservableObject {
     }
 
     private func establishNewSession() async {
-        guard let credentials = connectionCredentials() else {
-            state = .failed
-            errorMessage = "设备绑定信息不完整。"
-            return
-        }
         state = .connecting
         expectedReadyEvent = .sessionReady
         lastReadyEvent = nil
         do {
-            try await socket.connect(
-                url: credentials.url,
-                token: credentials.token,
-                deviceID: environment.deviceID
-            )
+            try await socket.connect()
             markWebSocketConnected()
             try await audioUploader.openConnection(
                 sessionID: sessionID,
@@ -543,11 +531,6 @@ final class VoiceSessionController: ObservableObject {
     }
 
     private func runReconnectLoop(immediate: Bool) async {
-        guard let credentials = connectionCredentials() else {
-            state = .failed
-            errorMessage = "设备绑定信息不完整。"
-            return
-        }
         for (index, delay) in reconnectDelays.enumerated() {
             guard callIsActive, !suspendedForBackground, !Task.isCancelled else { return }
             reconnectAttempt = index + 1
@@ -560,11 +543,7 @@ final class VoiceSessionController: ObservableObject {
             expectedReadyEvent = .sessionResumed
             lastReadyEvent = nil
             do {
-                try await socket.connect(
-                    url: credentials.url,
-                    token: credentials.token,
-                    deviceID: environment.deviceID
-                )
+                try await socket.connect()
                 markWebSocketConnected()
                 try await audioUploader.openConnection(
                     sessionID: sessionID,
@@ -615,14 +594,6 @@ final class VoiceSessionController: ObservableObject {
             try await Task.sleep(for: .milliseconds(50))
         }
         throw VoiceSessionClientError.protocolReadyTimedOut
-    }
-
-    private func connectionCredentials() -> (url: URL, token: String)? {
-        guard let url = environment.voiceWebSocketURL,
-              let token = tokenStore.load(),
-              !token.isEmpty,
-              !environment.deviceID.isEmpty else { return nil }
-        return (url, token)
     }
 
     private func startReceiveLoop() async {

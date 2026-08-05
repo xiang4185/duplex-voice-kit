@@ -1746,7 +1746,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         )
         let capture = TestCapture()
         let playback = TestPlayback()
-        let tokenStore = TestTokenStore(token: token)
+        _ = token
         let audioSession = TestAudioSession(permission: audioPermission)
         let controller = VoiceSessionController(
             environment: AppEnvironment(
@@ -1760,7 +1760,6 @@ final class VoiceSessionControllerTests: XCTestCase {
                 appBuildSHA: "test-sha",
                 appBuildTime: "2026-07-30T00:00:00Z"
             ),
-            tokenStore: tokenStore,
             socket: socket,
             capture: capture,
             playback: playback,
@@ -1789,7 +1788,6 @@ final class VoiceSessionControllerTests: XCTestCase {
             autoLifecycleConnected: true
         )
         let audio = TestRealtimeAudioIO()
-        let tokenStore = TestTokenStore(token: "synthetic-token")
         let audioSession = TestAudioSession(permission: .granted)
         let controller = VoiceSessionController(
             environment: AppEnvironment(
@@ -1803,7 +1801,6 @@ final class VoiceSessionControllerTests: XCTestCase {
                 appBuildSHA: "test-sha",
                 appBuildTime: "2026-07-30T00:00:00Z"
             ),
-            tokenStore: tokenStore,
             socket: socket,
             capture: audio,
             playback: audio,
@@ -2203,7 +2200,7 @@ private final class TestNetworkMonitor: NetworkMonitoring {
     func stop() {}
 }
 
-private actor TestVoiceWebSocketClient: VoiceWebSocketClient {
+private actor TestVoiceWebSocketClient: VoiceAdapter {
     nonisolated let lifecycleEvents: AsyncStream<VoiceWebSocketLifecycleEvent>
     private nonisolated let eventBroadcaster = BoundedAsyncStreamBroadcaster<VoiceEvent>(bufferLimit: 256)
     private let lifecycleContinuation: AsyncStream<VoiceWebSocketLifecycleEvent>.Continuation
@@ -2235,10 +2232,7 @@ private actor TestVoiceWebSocketClient: VoiceWebSocketClient {
         eventBroadcaster.makeStream()
     }
 
-    func connect(url: URL, token: String, deviceID: String) async throws {
-        _ = url
-        _ = token
-        _ = deviceID
+    func connect() async throws {
         connectCount += 1
         connected = true
         lifecycleContinuation.yield(.connecting)
@@ -2246,6 +2240,13 @@ private actor TestVoiceWebSocketClient: VoiceWebSocketClient {
             lifecycleContinuation.yield(.connected)
         }
         resumeConnectWaiters()
+    }
+
+    func connect(url: URL, token: String, deviceID: String) async throws {
+        _ = url
+        _ = token
+        _ = deviceID
+        try await connect()
     }
 
     func send(_ event: VoiceEvent) async throws {
@@ -2302,6 +2303,17 @@ private actor TestVoiceWebSocketClient: VoiceWebSocketClient {
     }
 
     func isConnected() async -> Bool { connected }
+
+    func snapshot() async -> VoiceAdapterSnapshot {
+        VoiceAdapterSnapshot(
+            mode: .mock,
+            isConnected: connected,
+            connectCallCount: connectCount,
+            sendCallCount: sentEvents.count,
+            disconnectCallCount: 0,
+            networkConnectionCount: 0
+        )
+    }
 
     func simulateDisconnect(_ info: VoiceWebSocketDisconnectInfo) {
         connected = false

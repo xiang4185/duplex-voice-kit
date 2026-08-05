@@ -26,22 +26,12 @@ protocol ChatServicing: Sendable {
 }
 
 struct ChatService: ChatServicing {
-    private struct DeviceRequest: Encodable {
-        let deviceID: String
-
-        enum CodingKeys: String, CodingKey {
-            case deviceID = "device_id"
-        }
-    }
-
     private struct SendRequest: Encodable {
-        let deviceID: String
         let sessionID: String
         let requestID: String
         let message: String
 
         enum CodingKeys: String, CodingKey {
-            case deviceID = "device_id"
             case sessionID = "session_id"
             case requestID = "request_id"
             case message
@@ -49,12 +39,10 @@ struct ChatService: ChatServicing {
     }
 
     private struct ClearRequest: Encodable {
-        let deviceID: String
         let sessionID: String
         let requestID: String
 
         enum CodingKeys: String, CodingKey {
-            case deviceID = "device_id"
             case sessionID = "session_id"
             case requestID = "request_id"
         }
@@ -98,13 +86,16 @@ struct ChatService: ChatServicing {
         }
     }
 
-    let client: APIClient
-    let environment: AppEnvironment
+    let backend: any BackendAdapter
+
+    init(backend: any BackendAdapter) {
+        self.backend = backend
+    }
 
     func loadHistory() async throws -> ChatHistoryResult {
-        let response: HistoryResponse = try await client.post(
-            "/v1/chat/history",
-            body: DeviceRequest(deviceID: environment.deviceID)
+        let response: HistoryResponse = try await execute(
+            route: "/v1/chat/history",
+            body: EmptyRequest()
         )
         return ChatHistoryResult(
             sessionID: response.sessionID,
@@ -117,10 +108,9 @@ struct ChatService: ChatServicing {
         sessionID: String,
         requestID: String
     ) async throws -> ChatSendResult {
-        let response: SendResponse = try await client.post(
-            "/v1/chat",
+        let response: SendResponse = try await execute(
+            route: "/v1/chat",
             body: SendRequest(
-                deviceID: environment.deviceID,
                 sessionID: sessionID,
                 requestID: requestID,
                 message: message
@@ -137,14 +127,33 @@ struct ChatService: ChatServicing {
     }
 
     func clear(sessionID: String, requestID: String) async throws -> ChatClearResult {
-        let response: ClearResponse = try await client.post(
-            "/v1/chat/clear",
+        let response: ClearResponse = try await execute(
+            route: "/v1/chat/clear",
             body: ClearRequest(
-                deviceID: environment.deviceID,
                 sessionID: sessionID,
                 requestID: requestID
             )
         )
         return ChatClearResult(sessionID: response.sessionID, cleared: response.cleared)
+    }
+
+    private struct EmptyRequest: Encodable {}
+
+    private func execute<Input: Encodable, Output: Decodable>(
+        route: String,
+        body: Input
+    ) async throws -> Output {
+        let payload = try JSONEncoder().encode(body)
+        let response = try await backend.execute(
+            BackendAdapterRequest(route: route, payload: payload)
+        )
+        guard 200..<300 ~= response.statusCode else {
+            throw AppError.server("http_\(response.statusCode)")
+        }
+        do {
+            return try JSONDecoder().decode(Output.self, from: response.payload)
+        } catch {
+            throw AppError.protocolError("invalid_response")
+        }
     }
 }

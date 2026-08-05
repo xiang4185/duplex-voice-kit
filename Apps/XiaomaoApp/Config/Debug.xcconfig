@@ -1,5 +1,6 @@
 BUNDLE_ID = com.example.xiaomao.debug
 APP_ENVIRONMENT = debug
+HOST_ADAPTER_MODE = mock
 API_BASE_URL = http://127.0.0.1:18080
 VOICE_WS_URL = ws://127.0.0.1:18881/v1/voice/ws
 DEVICE_ID =

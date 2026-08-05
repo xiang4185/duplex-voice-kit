@@ -6,7 +6,6 @@ import SwiftUI
 
 struct MainTabView: View {
     let environment: AppEnvironment
-    let tokenStore: AuthTokenStoring
     let startCall: () -> Void
 
     @StateObject private var chatViewModel: ChatViewModel
@@ -36,33 +35,14 @@ struct MainTabView: View {
 
     init(
         environment: AppEnvironment,
-        tokenStore: AuthTokenStoring,
-        startCall: @escaping () -> Void
-    ) {
-        self.init(
-            environment: environment,
-            tokenStore: tokenStore,
-            startCall: startCall,
-            chatService: Self.publicDefaultChatService()
-        )
-    }
-
-    init(
-        environment: AppEnvironment,
-        tokenStore: AuthTokenStoring,
         startCall: @escaping () -> Void,
         chatService: any ChatServicing
     ) {
         self.environment = environment
-        self.tokenStore = tokenStore
         self.startCall = startCall
         _chatViewModel = StateObject(
             wrappedValue: ChatViewModel(service: chatService)
         )
-    }
-
-    static func publicDefaultChatService() -> any ChatServicing {
-        MockChatService()
     }
 
     var body: some View {
@@ -100,7 +80,7 @@ struct MainTabView: View {
 #Preview {
     MainTabView(
         environment: .fromBundle(),
-        tokenStore: MemoryAuthTokenStore(),
-        startCall: {}
+        startCall: {},
+        chatService: MockChatService()
     )
 }

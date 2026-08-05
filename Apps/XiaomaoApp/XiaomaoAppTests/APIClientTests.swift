@@ -80,8 +80,15 @@ final class APIClientTests: XCTestCase {
             }
             return try Self.response(for: request, statusCode: 200, data: data)
         }
-        let environment = syntheticEnvironment()
-        let service = ChatService(client: client, environment: environment)
+        let credentials = KeychainCredentialProviderAdapter(tokenStore: client.tokenStore)
+        let deviceBinding = InjectedDeviceBindingProviderAdapter(deviceID: client.deviceID)
+        let backend = try ProductionBackendAdapter(
+            baseURL: client.baseURL,
+            credentials: credentials,
+            deviceBinding: deviceBinding,
+            session: client.session
+        )
+        let service = ChatService(backend: backend)
 
         let history = try await service.loadHistory()
         let sent = try await service.send(

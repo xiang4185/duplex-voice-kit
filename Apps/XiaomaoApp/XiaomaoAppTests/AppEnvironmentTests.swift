@@ -70,6 +70,7 @@ final class AppEnvironmentTests: XCTestCase {
         deviceID: String,
         enableMockVoice: Bool = false
     ) -> AppEnvironment {
+        let mode: HostAdapterMode = enableMockVoice ? .mock : .production
         AppEnvironment(
             apiBaseURL: api.flatMap(URL.init(string:)),
             voiceWebSocketURL: voice.flatMap(URL.init(string:)),
@@ -79,7 +80,11 @@ final class AppEnvironmentTests: XCTestCase {
             enableMemory: false,
             defaultVoiceRoute: .b,
             appBuildSHA: "test",
-            appBuildTime: "test"
+            appBuildTime: "test",
+            requestedHostAdapterMode: mode,
+            hostAdapters: enableMockVoice
+                ? .mock
+                : HostAdapterDependencies(mode: .production)
         )
     }
 }

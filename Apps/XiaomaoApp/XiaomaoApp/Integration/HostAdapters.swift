@@ -1,13 +1,30 @@
 import Foundation
 
-enum HostAdapterMode: Equatable, Sendable {
+enum HostAdapterMode: String, Equatable, Sendable {
     case empty
     case mock
+    case production
+
+    static func requested(_ rawValue: String, enableMock: Bool) -> HostAdapterMode {
+        if enableMock { return .mock }
+        return HostAdapterMode(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ?? .empty
+    }
+
+    var diagnosticLabel: String {
+        switch self {
+        case .empty: "Empty"
+        case .mock: "Mock"
+        case .production: "Production"
+        }
+    }
 }
 
 enum HostAdapterError: Error, Equatable, Sendable {
     case unavailable
     case notConnected
+    case invalidConfiguration
+    case unsupportedOperation
+    case invalidResponse
 }
 
 struct BackendAdapterRequest: Equatable, Sendable {
@@ -84,24 +101,49 @@ struct VoiceAdapterSnapshot: Equatable, Sendable {
     let networkConnectionCount: Int
 }
 
-protocol VoiceAdapter: Sendable {
+protocol VoiceAdapter: VoiceWebSocketClient {
     func connect() async throws
-    func send(_ payload: Data) async throws
-    func disconnect() async
     func snapshot() async -> VoiceAdapterSnapshot
 }
 
-struct EmptyVoiceAdapter: VoiceAdapter {
+actor EmptyVoiceAdapter: VoiceAdapter {
+    nonisolated let lifecycleEvents: AsyncStream<VoiceWebSocketLifecycleEvent>
+
+    init() {
+        lifecycleEvents = AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    nonisolated func makeEventStream() -> AsyncStream<VoiceEvent> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
     func connect() async throws {
         throw HostAdapterError.unavailable
     }
 
-    func send(_ payload: Data) async throws {
-        _ = payload
+    func connect(url: URL, token: String, deviceID: String) async throws {
+        _ = url
+        _ = token
+        _ = deviceID
+        try await connect()
+    }
+
+    func send(_ event: VoiceEvent) async throws {
+        _ = event
+        throw HostAdapterError.unavailable
+    }
+
+    func ping() async throws {
         throw HostAdapterError.unavailable
     }
 
     func disconnect() async {}
+
+    func isConnected() async -> Bool { false }
 
     func snapshot() async -> VoiceAdapterSnapshot {
         VoiceAdapterSnapshot(
@@ -116,31 +158,67 @@ struct EmptyVoiceAdapter: VoiceAdapter {
 }
 
 actor MockVoiceAdapter: VoiceAdapter {
-    private var isConnected = false
+    nonisolated let lifecycleEvents: AsyncStream<VoiceWebSocketLifecycleEvent>
+
+    private nonisolated let client: MockWebSocketClient
+    private var connected = false
     private var connectCallCount = 0
     private var sendCallCount = 0
     private var disconnectCallCount = 0
 
-    func connect() async throws {
-        connectCallCount += 1
-        isConnected = true
+    init(client: MockWebSocketClient = MockWebSocketClient()) {
+        self.client = client
+        lifecycleEvents = client.lifecycleEvents
     }
 
-    func send(_ payload: Data) async throws {
-        _ = payload
-        guard isConnected else { throw HostAdapterError.notConnected }
+    nonisolated func makeEventStream() -> AsyncStream<VoiceEvent> {
+        client.makeEventStream()
+    }
+
+    func connect() async throws {
+        connectCallCount += 1
+        try await client.connect(
+            url: URL(fileURLWithPath: "/"),
+            token: "",
+            deviceID: ""
+        )
+        connected = true
+    }
+
+    func connect(url: URL, token: String, deviceID: String) async throws {
+        _ = url
+        _ = token
+        _ = deviceID
+        try await connect()
+    }
+
+    func send(_ event: VoiceEvent) async throws {
+        guard connected else { throw HostAdapterError.notConnected }
+        try await client.send(event)
         sendCallCount += 1
+    }
+
+    func ping() async throws {
+        guard connected else { throw HostAdapterError.notConnected }
+        try await client.ping()
     }
 
     func disconnect() async {
         disconnectCallCount += 1
-        isConnected = false
+        connected = false
+        await client.disconnect()
+    }
+
+    func isConnected() async -> Bool {
+        let clientConnected = await client.isConnected()
+        return connected && clientConnected
     }
 
     func snapshot() async -> VoiceAdapterSnapshot {
+        let clientConnected = await client.isConnected()
         VoiceAdapterSnapshot(
             mode: .mock,
-            isConnected: isConnected,
+            isConnected: connected && clientConnected,
             connectCallCount: connectCallCount,
             sendCallCount: sendCallCount,
             disconnectCallCount: disconnectCallCount,
@@ -160,17 +238,20 @@ extension EmptyDeviceBindingProvider: DeviceBindingProviderAdapter {}
 extension MockDeviceBindingProvider: DeviceBindingProviderAdapter {}
 
 struct HostAdapterDependencies: Sendable {
+    let mode: HostAdapterMode
     let backend: any BackendAdapter
     let voice: any VoiceAdapter
     let credentials: any CredentialProviderAdapter
     let deviceBinding: any DeviceBindingProviderAdapter
 
     init(
+        mode: HostAdapterMode = .empty,
         backend: any BackendAdapter = EmptyBackendAdapter(),
         voice: any VoiceAdapter = EmptyVoiceAdapter(),
         credentials: any CredentialProviderAdapter = EmptyCredentialProvider(),
         deviceBinding: any DeviceBindingProviderAdapter = EmptyDeviceBindingProvider()
     ) {
+        self.mode = mode
         self.backend = backend
         self.voice = voice
         self.credentials = credentials
@@ -179,5 +260,19 @@ struct HostAdapterDependencies: Sendable {
 
     static var empty: HostAdapterDependencies {
         HostAdapterDependencies()
+    }
+
+    static var mock: HostAdapterDependencies {
+        HostAdapterDependencies(
+            mode: .mock,
+            backend: MockBackendAdapter(),
+            voice: MockVoiceAdapter(),
+            credentials: MockCredentialProvider(
+                credentials: AuthCredentials(accessToken: "mock", refreshToken: nil)
+            ),
+            deviceBinding: MockDeviceBindingProvider(
+                state: .bound(deviceID: "mock-device")
+            )
+        )
     }
 }
