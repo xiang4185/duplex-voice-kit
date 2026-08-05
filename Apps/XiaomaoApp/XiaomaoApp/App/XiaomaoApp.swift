@@ -44,6 +44,14 @@ private struct RootView: View {
             case .launch:
                 ProgressView("正在启动…")
                     .tint(Theme.primary)
+            case .configurationError:
+                DeviceBindingView(
+                    deviceID: coordinator.environment.deviceID,
+                    configurationReady: false,
+                    configurationMessage: coordinator.environment.runtimeConfigurationMessage,
+                    tokenStore: coordinator.tokenStore,
+                    completed: {}
+                )
             case .binding:
                 DeviceBindingView(
                     deviceID: coordinator.environment.deviceID,
