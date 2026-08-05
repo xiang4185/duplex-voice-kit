@@ -2,24 +2,6 @@ name: Xiaomao Unsigned IPA
 
 on:
   workflow_dispatch:
-    inputs:
-      api_base_url:
-        description: HTTPS API base URL (no token)
-        required: false
-        type: string
-      voice_ws_url:
-        description: WSS voice WebSocket URL (no token)
-        required: false
-        type: string
-      device_id:
-        description: Runtime device ID (not stored by the repository)
-        required: false
-        type: string
-      bundle_id:
-        description: Bundle ID used for this unsigned build
-        required: false
-        default: com.example.xiaomao.sideload
-        type: string
 
 permissions:
   contents: read
@@ -35,10 +17,12 @@ jobs:
     timeout-minutes: 30
 
     env:
-      API_BASE_URL: ${{ inputs.api_base_url }}
-      VOICE_WS_URL: ${{ inputs.voice_ws_url }}
-      DEVICE_ID: ${{ inputs.device_id }}
-      BUNDLE_ID: ${{ inputs.bundle_id || 'com.example.xiaomao.sideload' }}
+      # Public Actions must never receive or embed production endpoints,
+      # device identifiers, credentials, or private bundle identifiers.
+      API_BASE_URL: ""
+      VOICE_WS_URL: ""
+      DEVICE_ID: ""
+      BUNDLE_ID: com.example.xiaomao.sideload
 
     defaults:
       run:
@@ -100,44 +84,26 @@ jobs:
           \) -print -quit)"
           test -z "$SENSITIVE_PATH"
 
-      - name: Validate non-sensitive runtime inputs
+      - name: Enforce public empty runtime configuration
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import ipaddress
           import os
           import re
-          from urllib.parse import urlparse
 
           api = os.environ.get("API_BASE_URL", "").strip()
           voice = os.environ.get("VOICE_WS_URL", "").strip()
           device = os.environ.get("DEVICE_ID", "").strip()
-          configured = [bool(api), bool(voice), bool(device)]
-          if any(configured) and not all(configured):
-              raise SystemExit("api_base_url, voice_ws_url and device_id must be supplied together")
-
-          def validate_url(value: str, expected_scheme: str) -> None:
-              parsed = urlparse(value)
-              if parsed.scheme.lower() != expected_scheme or not parsed.hostname:
-                  raise SystemExit(f"endpoint must use {expected_scheme.upper()}")
-              host = parsed.hostname.lower()
-              if host == "localhost" or host.endswith(".localhost"):
-                  raise SystemExit("loopback endpoint is not allowed")
-              try:
-                  if ipaddress.ip_address(host).is_loopback:
-                      raise SystemExit("loopback endpoint is not allowed")
-              except ValueError:
-                  pass
-
-          if all(configured):
-              validate_url(api, "https")
-              validate_url(voice, "wss")
-              if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", device):
-                  raise SystemExit("device_id format is invalid")
+          if api or voice or device:
+              raise SystemExit(
+                  "public unsigned IPA builds must use empty endpoint and device configuration"
+              )
           bundle_id = os.environ.get("BUNDLE_ID", "").strip()
+          if bundle_id != "com.example.xiaomao.sideload":
+              raise SystemExit("public unsigned IPA must use the public example bundle identifier")
           if not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", bundle_id):
-              raise SystemExit("bundle_id format is invalid")
-          print(f"runtime_endpoints_configured={str(all(configured)).lower()}")
+              raise SystemExit("public example bundle identifier is invalid")
+          print("runtime_endpoints_configured=false")
           PY
 
       - name: Install XcodeGen
