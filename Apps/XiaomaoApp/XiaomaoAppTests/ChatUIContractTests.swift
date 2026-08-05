@@ -3,7 +3,7 @@ import XCTest
 @testable import XiaomaoApp
 
 final class ChatUIContractTests: XCTestCase {
-    func testChatTabOrderAndPublicMockDefaultRemainStable() throws {
+    func testChatTabOrderAndInjectedServiceBoundaryRemainStable() throws {
         let main = try source("XiaomaoApp/App/MainTabView.swift")
         let companion = try XCTUnwrap(main.range(of: "CompanionHomeView("))
         let chat = try XCTUnwrap(main.range(of: "ChatView(viewModel:"))
@@ -13,8 +13,12 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertLessThan(companion.lowerBound, chat.lowerBound)
         XCTAssertLessThan(chat.lowerBound, smallThings.lowerBound)
         XCTAssertLessThan(smallThings.lowerBound, settings.lowerBound)
-        XCTAssertTrue(main.contains("MockChatService()"))
-        XCTAssertTrue(main.contains("publicDefaultChatService"))
+        XCTAssertTrue(main.contains("chatService: any ChatServicing"))
+        let preview = try XCTUnwrap(main.range(of: "#Preview"))
+        let runtimeSource = String(main[..<preview.lowerBound])
+        let previewSource = String(main[preview.lowerBound...])
+        XCTAssertFalse(runtimeSource.contains("MockChatService()"))
+        XCTAssertTrue(previewSource.contains("MockChatService()"))
         XCTAssertFalse(main.contains("isChatConfigurationReady"))
         XCTAssertFalse(main.contains("APIClient("))
     }

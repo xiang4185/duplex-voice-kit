@@ -27,17 +27,14 @@ struct DeveloperDiagnosticsSnapshot: Equatable, Sendable {
             deviceStatus: hasBoundDevice ? "Bound" : "Unbound",
             mockStatus: environment.enableMockVoice ? "Enabled" : "Disabled",
             launchRouteStatus: launchRoute.diagnosticLabel,
-            backendAdapterStatus: adapterLabel(environment.hostAdapters.backend),
-            voiceAdapterStatus: adapterLabel(environment.hostAdapters.voice),
+            backendAdapterStatus: environment.hostAdapters.mode.diagnosticLabel,
+            voiceAdapterStatus: environment.hostAdapters.mode.diagnosticLabel,
             environmentStatus: environment.appEnvironment.isEmpty ? "Unspecified" : environment.appEnvironment,
             buildSHA: environment.appBuildSHA.isEmpty ? "Unknown" : environment.appBuildSHA,
             buildTime: environment.appBuildTime.isEmpty ? "Unknown" : environment.appBuildTime
         )
     }
 
-    private static func adapterLabel(_ adapter: Any) -> String {
-        String(describing: type(of: adapter)).hasPrefix("Mock") ? "Mock" : "Empty"
-    }
 }
 
 private extension AppCoordinator.LaunchRoute {

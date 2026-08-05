@@ -27,6 +27,7 @@
 <key>VOICE_WS_URL</key><string>$(VOICE_WS_URL)</string>
 <key>DEVICE_ID</key><string>$(DEVICE_ID)</string>
 <key>APP_ENVIRONMENT</key><string>$(APP_ENVIRONMENT)</string>
+<key>HOST_ADAPTER_MODE</key><string>$(HOST_ADAPTER_MODE)</string>
 <key>ENABLE_MOCK_VOICE</key><string>$(ENABLE_MOCK_VOICE)</string>
 <key>ENABLE_MEMORY</key><string>$(ENABLE_MEMORY)</string>
 <key>DEFAULT_VOICE_ROUTE</key><string>$(DEFAULT_VOICE_ROUTE)</string>

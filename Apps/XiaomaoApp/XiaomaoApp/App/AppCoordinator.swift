@@ -3,26 +3,62 @@ import Foundation
 
 @MainActor
 final class AppCoordinator: ObservableObject {
-    enum Screen { case launch, configurationError, binding, privacy, main }
+    enum Screen: Equatable { case launch, configurationError, binding, privacy, main }
     enum LaunchRoute: Equatable { case configurationError, binding, home }
+
     @Published var screen: Screen = .launch
+    @Published private(set) var credentialState: CredentialState = .noCredentials
+    @Published private(set) var deviceBindingState: DeviceBindingState = .unbound
+
     let environment: AppEnvironment
     let hostAdapters: HostAdapterDependencies
-    let tokenStore: AuthTokenStoring
+    let tokenStore: any AuthTokenStoring
+    let chatService: any ChatServicing
     let voiceController: VoiceSessionController
 
-    init(environment: AppEnvironment = .fromBundle()) {
-        self.environment = environment
-        self.hostAdapters = environment.hostAdapters
-        let tokenStore: AuthTokenStoring = environment.enableMockVoice
-            ? MemoryAuthTokenStore() : KeychainAuthTokenStore()
+    init(
+        environment suppliedEnvironment: AppEnvironment? = nil,
+        tokenStore suppliedTokenStore: (any AuthTokenStoring)? = nil,
+        backendSession: URLSession = .shared,
+        voiceClient: (any VoiceWebSocketClient)? = nil
+    ) {
+        let baseEnvironment = suppliedEnvironment ?? .fromBundle()
+        let tokenStore = suppliedTokenStore ?? Self.makeTokenStore(
+            for: baseEnvironment.requestedHostAdapterMode
+        )
         self.tokenStore = tokenStore
-        if environment.enableMockVoice { try? tokenStore.save("synthetic-development-token") }
-        let socket: VoiceWebSocketClient = environment.enableMockVoice
-            ? MockWebSocketClient() : URLSessionVoiceWebSocketClient()
+
+        if baseEnvironment.requestedHostAdapterMode == .mock {
+            try? tokenStore.save("mock")
+        }
+
+        let dependencies: HostAdapterDependencies
+        if suppliedEnvironment != nil {
+            dependencies = baseEnvironment.hostAdapters
+        } else {
+            dependencies = HostAdapterFactory.make(
+                mode: baseEnvironment.requestedHostAdapterMode,
+                apiBaseURL: baseEnvironment.apiBaseURL,
+                voiceWebSocketURL: baseEnvironment.voiceWebSocketURL,
+                tokenStore: tokenStore,
+                deviceID: baseEnvironment.deviceID,
+                backendSession: backendSession,
+                voiceClient: voiceClient
+            )
+        }
+
+        let environment = baseEnvironment.replacingHostAdapters(dependencies)
+        self.environment = environment
+        self.hostAdapters = dependencies
+        if dependencies.mode == .mock {
+            self.chatService = MockChatService()
+        } else {
+            self.chatService = ChatService(backend: dependencies.backend)
+        }
+
         let capture: AudioCapturing
         let playback: AudioPlaying
-        if environment.enableMockVoice {
+        if dependencies.mode == .mock {
             capture = MockAudioCapture()
             playback = MockAudioPlayback()
         } else {
@@ -30,19 +66,25 @@ final class AppCoordinator: ObservableObject {
             capture = realtimeAudio
             playback = realtimeAudio
         }
-        let audioSession: AudioSessionControlling = environment.enableMockVoice
+        let audioSession: AudioSessionControlling = dependencies.mode == .mock
             ? MockAudioSessionController() : AudioSessionController()
-        let networkMonitor: NetworkMonitoring = environment.enableMockVoice
+        let networkMonitor: NetworkMonitoring = dependencies.mode == .mock
             ? MockNetworkMonitor() : NetworkMonitor()
         self.voiceController = VoiceSessionController(
             environment: environment,
-            tokenStore: tokenStore,
-            socket: socket,
+            socket: dependencies.voice,
             capture: capture,
             playback: playback,
             audioSession: audioSession,
             networkMonitor: networkMonitor
         )
+    }
+
+    private static func makeTokenStore(for mode: HostAdapterMode) -> any AuthTokenStoring {
+        if mode == .production {
+            return KeychainAuthTokenStore()
+        }
+        return MemoryAuthTokenStore()
     }
 
     // MARK: 隐私授权持久化
@@ -55,7 +97,6 @@ final class AppCoordinator: ObservableObject {
     }
 
     func declinePrivacy() {
-        // 暂不同意: 仍可进入应用, 设置页可随时重新开启
         UserDefaults.standard.set(false, forKey: privacyKey)
         screen = .main
     }
@@ -72,18 +113,24 @@ final class AppCoordinator: ObservableObject {
         return .home
     }
 
-    func start() {
-        let credentials = tokenStore.load().map {
-            CredentialState.valid(AuthCredentials(accessToken: $0, refreshToken: nil))
-        } ?? .noCredentials
-        let bindingState: DeviceBindingState = environment.deviceID.isEmpty
-            ? .unbound : .bound(deviceID: environment.deviceID)
+    func start() async {
+        do {
+            if let credentials = try await hostAdapters.credentials.obtainCredentials(),
+               credentials.hasAccessToken {
+                credentialState = .valid(credentials)
+            } else {
+                credentialState = .noCredentials
+            }
+        } catch {
+            credentialState = .noCredentials
+        }
+        deviceBindingState = await hostAdapters.deviceBinding.currentState()
 
         switch Self.launchRoute(
             environmentReady: environment.isRuntimeConfigurationReady,
-            mockMode: environment.enableMockVoice,
-            credentialState: credentials,
-            bindingState: bindingState
+            mockMode: hostAdapters.mode == .mock,
+            credentialState: credentialState,
+            bindingState: deviceBindingState
         ) {
         case .configurationError:
             screen = .configurationError

@@ -16,6 +16,7 @@ REQUIRED = [
     "Config/Secrets.example.xcconfig",
     "XiaomaoApp/App/XiaomaoApp.swift",
     "XiaomaoApp/Integration/HostAdapters.swift",
+    "XiaomaoApp/Integration/ProductionHostAdapters.swift",
     "XiaomaoApp/Models/VoiceEvent.swift",
     "XiaomaoApp/Models/VoiceSessionState.swift",
     "XiaomaoApp/Networking/WebSocketClient.swift",
@@ -41,6 +42,7 @@ REQUIRED = [
     "XiaomaoAppTests/HandsFreeInteractionContractTests.swift",
     "XiaomaoAppTests/ChatViewModelTests.swift",
     "XiaomaoAppTests/HostAdapterTests.swift",
+    "XiaomaoAppTests/ProductionHostAdapterTests.swift",
 ]
 
 SENSITIVE_NAMES = {".env", "Secrets.xcconfig"}
@@ -114,6 +116,7 @@ def main() -> None:
     release_config = read("Config/Release.xcconfig")
     example_config = read("Config/Secrets.example.xcconfig")
     for expected in (
+        "HOST_ADAPTER_MODE = mock",
         "API_BASE_URL = http://127.0.0.1:18080",
         "VOICE_WS_URL = ws://127.0.0.1:18881/v1/voice/ws",
         "DEVICE_ID =\n",
@@ -122,6 +125,7 @@ def main() -> None:
         if expected not in debug_config:
             failures.append("Debug configuration boundary missing: " + expected.strip())
     for expected in (
+        "HOST_ADAPTER_MODE = empty",
         "API_BASE_URL =\n",
         "VOICE_WS_URL =\n",
         "DEVICE_ID =\n",
@@ -129,7 +133,12 @@ def main() -> None:
     ):
         if expected not in release_config:
             failures.append("Release fail-closed boundary missing: " + expected.strip())
-    for expected in ("API_BASE_URL =\n", "VOICE_WS_URL =\n", "DEVICE_ID =\n"):
+    for expected in (
+        "HOST_ADAPTER_MODE =\n",
+        "API_BASE_URL =\n",
+        "VOICE_WS_URL =\n",
+        "DEVICE_ID =\n",
+    ):
         if expected not in example_config:
             failures.append("Secrets example must keep empty key: " + expected.strip())
 
@@ -264,7 +273,7 @@ def main() -> None:
         "protocol CredentialProviderAdapter",
         "protocol DeviceBindingProviderAdapter",
         "struct EmptyBackendAdapter",
-        "struct EmptyVoiceAdapter",
+        "actor EmptyVoiceAdapter",
         "actor MockBackendAdapter",
         "actor MockVoiceAdapter",
         "struct HostAdapterDependencies",
@@ -289,11 +298,91 @@ def main() -> None:
     if host_adapters.count("networkConnectionCount: 0") < 2:
         failures.append("voice Empty and Mock adapters must report zero network connections")
 
+    production_adapters = read("XiaomaoApp/Integration/ProductionHostAdapters.swift")
+    for expected in (
+        "actor ProductionBackendAdapter",
+        "actor ProductionVoiceAdapter",
+        "struct KeychainCredentialProviderAdapter",
+        "struct InjectedDeviceBindingProviderAdapter",
+        "enum HostAdapterFactory",
+        'scheme: "https"',
+        'scheme: "wss"',
+        'forHTTPHeaderField: "Authorization"',
+        'forHTTPHeaderField: "X-Device-ID"',
+        'forHTTPHeaderField: "X-Protocol-Version"',
+        "HostAdapterError.unsupportedOperation",
+    ):
+        if expected not in production_adapters and expected != 'forHTTPHeaderField: "X-Protocol-Version"':
+            failures.append("production host adapter boundary missing: " + expected)
+    if 'forHTTPHeaderField: "X-Protocol-Version"' not in read("XiaomaoApp/Networking/WebSocketClient.swift"):
+        failures.append("voice production path must retain protocol version header")
+    for forbidden in (
+        "UserDefaults",
+        "Bundle.main",
+        "Info.plist",
+        "print(",
+        "debugPrint(",
+        "http://",
+        "ws://",
+    ):
+        if forbidden in production_adapters:
+            failures.append("production adapter contains unsafe configuration or logging path: " + forbidden)
+    for expected in (
+        "credential.hasAccessToken",
+        "deviceBinding.currentState()",
+        "throw AppError.unauthorized",
+        "networkRequestCount += 1",
+        "networkConnectionCount += 1",
+    ):
+        if expected not in production_adapters:
+            failures.append("production fail-closed contract missing: " + expected)
+
     environment = read("XiaomaoApp/App/AppEnvironment.swift")
     if "hostAdapters: HostAdapterDependencies = .empty" not in environment:
         failures.append("AppEnvironment must default host adapters to Empty implementations")
-    if "self.hostAdapters = environment.hostAdapters" not in coordinator:
-        failures.append("AppCoordinator must receive host adapters through AppEnvironment")
+    for expected in (
+        "HostAdapterFactory.make(",
+        "self.hostAdapters = dependencies",
+        "socket: dependencies.voice",
+        "ChatService(backend: dependencies.backend)",
+    ):
+        if expected not in coordinator:
+            failures.append("AppCoordinator host adapter wiring missing: " + expected)
+    if "URLSessionVoiceWebSocketClient()" in coordinator or "APIClient(" in coordinator:
+        failures.append("AppCoordinator must not construct a parallel production network path")
+
+    main_tab = read("XiaomaoApp/App/MainTabView.swift")
+    if "chatService: any ChatServicing" not in main_tab:
+        failures.append("MainTabView must receive the coordinator chat service")
+    if main_tab.count("MockChatService()") > 1 or "APIClient(" in main_tab:
+        failures.append("MainTabView must not select a parallel chat implementation")
+
+    if "tokenStore:" in controller or "connectionCredentials()" in controller:
+        failures.append("VoiceSessionController must receive credentials through VoiceAdapter")
+    if "socket.connect(url:" in controller:
+        failures.append("VoiceSessionController must not bypass the production VoiceAdapter")
+
+    production_tests = read("XiaomaoAppTests/ProductionHostAdapterTests.swift")
+    for expected in (
+        "testFactoryDefaultsToEmptyWithoutNetworkActivity",
+        "testFactoryMockModeRemainsOffline",
+        "testProductionBackendRejectsNonHTTPSAndHostOverrideRoutes",
+        "testBackendMissingCredentialDoesNotStartRequest",
+        "testBackendMissingDeviceDoesNotStartRequest",
+        "testBackendSyntheticRequestHasSecurityHeadersAndSnapshotIsRedacted",
+        "testBackendMapsUnauthorizedAndNonSuccessWithoutResponseBodyLeak",
+        "testProductionVoiceRejectsNonWSS",
+        "testVoiceMissingCredentialOrDeviceDoesNotConnect",
+        "testVoiceSyntheticConnectionUsesCredentialDeviceAndProtocolContract",
+        "testVoiceSendBeforeConnectFailsClosed",
+        "testCredentialProviderLoadClearAndRefreshFailClosed",
+        "testDeviceProviderBoundUnboundAndUnsupportedOperationsFailClosed",
+        "testAppCoordinatorSelectsEmptyMockAndProductionHostPaths",
+        "testChatServiceActuallyUsesBackendAdapter",
+        "testEmptyReleaseStyleEnvironmentFailsClosed",
+    ):
+        if expected not in production_tests:
+            failures.append("production adapter test missing: " + expected)
 
     call_view = read("XiaomaoApp/Call/VoiceCallView.swift")
     for forbidden_control in ("按住说话", "结束本轮", "Picker(\"路线"):

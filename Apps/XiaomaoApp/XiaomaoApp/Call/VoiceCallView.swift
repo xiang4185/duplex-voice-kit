@@ -1051,9 +1051,10 @@ struct VoiceWaveform: View {
 #Preview {
     VoiceCallView(viewModel: VoiceCallViewModel(
         controller: VoiceSessionController(
-            environment: .fromBundle(),
-            tokenStore: MemoryAuthTokenStore(),
-            socket: MockWebSocketClient(),
+            environment: AppEnvironment.fromBundle(
+                hostAdapters: .mock
+            ).replacingHostAdapters(.mock),
+            socket: MockVoiceAdapter(),
             capture: MockAudioCapture(),
             playback: MockAudioPlayback(),
             audioSession: MockAudioSessionController(),

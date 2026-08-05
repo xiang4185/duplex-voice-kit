@@ -43,7 +43,7 @@ final class HostAdapterTests: XCTestCase {
             BackendAdapterRequest(route: "mock-route", payload: Data("mock-request".utf8))
         )
         try await voice.connect()
-        try await voice.send(Data("mock-audio".utf8))
+        try await voice.send(makeVoiceEvent())
         await voice.disconnect()
 
         XCTAssertEqual(response, expected)
@@ -72,6 +72,7 @@ final class HostAdapterTests: XCTestCase {
             state: .bound(deviceID: "synthetic-device")
         )
         let dependencies = HostAdapterDependencies(
+            mode: .mock,
             backend: backend,
             voice: voice,
             credentials: credentials,
@@ -95,7 +96,7 @@ final class HostAdapterTests: XCTestCase {
 
     func testDefaultStartupUsesEmptyProviders() async throws {
         let coordinator = AppCoordinator(environment: makeEnvironment())
-        coordinator.start()
+        await coordinator.start()
 
         let credentials = try await coordinator.hostAdapters.credentials.obtainCredentials()
         let bindingState = await coordinator.hostAdapters.deviceBinding.currentState()
@@ -144,12 +145,25 @@ final class HostAdapterTests: XCTestCase {
             voiceWebSocketURL: nil,
             deviceID: "",
             appEnvironment: "test",
-            enableMockVoice: true,
+            enableMockVoice: hostAdapters.mode == .mock,
             enableMemory: false,
             defaultVoiceRoute: .b,
             appBuildSHA: "test",
             appBuildTime: "test",
             hostAdapters: hostAdapters
+        )
+    }
+
+    private func makeVoiceEvent() -> VoiceEvent {
+        VoiceEvent(
+            version: VoiceEvent.protocolVersion,
+            eventID: "mock-event",
+            traceID: "mock-trace",
+            sessionID: "mock-session",
+            sequence: 1,
+            timestamp: 1,
+            type: .ping,
+            payload: [:]
         )
     }
 }

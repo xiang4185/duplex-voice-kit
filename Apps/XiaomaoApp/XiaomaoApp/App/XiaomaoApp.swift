@@ -7,7 +7,7 @@ struct XiaomaoApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(coordinator: coordinator)
-                .task { coordinator.start() }
+                .task { await coordinator.start() }
                 .onOpenURL { url in
                     handleCallURL(url)
                 }
@@ -61,7 +61,9 @@ private struct RootView: View {
                     configurationReady: coordinator.environment.isRuntimeConfigurationReady,
                     configurationMessage: coordinator.environment.runtimeConfigurationMessage,
                     tokenStore: coordinator.tokenStore,
-                    completed: { coordinator.screen = coordinator.hasAgreedPrivacy ? .main : .privacy }
+                    completed: {
+                        Task { await coordinator.start() }
+                    }
                 )
             case .privacy:
                 PrivacyView(
@@ -71,8 +73,8 @@ private struct RootView: View {
             case .main:
                 MainTabView(
                     environment: coordinator.environment,
-                    tokenStore: coordinator.tokenStore,
-                    startCall: { requestCall() }
+                    startCall: { requestCall() },
+                    chatService: coordinator.chatService
                 )
                 .fullScreenCover(isPresented: $activeCall) {
                     VoiceCallView(
@@ -110,21 +112,16 @@ private struct RootView: View {
 
 #if DEBUG
     private var diagnosticsSnapshot: DeveloperDiagnosticsSnapshot {
-        let credentials = coordinator.tokenStore.load().map {
-            CredentialState.valid(AuthCredentials(accessToken: $0, refreshToken: nil))
-        } ?? .noCredentials
-        let device: DeviceBindingState = coordinator.environment.deviceID.isEmpty
-            ? .unbound : .bound(deviceID: coordinator.environment.deviceID)
         let route = AppCoordinator.launchRoute(
             environmentReady: coordinator.environment.isRuntimeConfigurationReady,
-            mockMode: coordinator.environment.enableMockVoice,
-            credentialState: credentials,
-            bindingState: device
+            mockMode: coordinator.hostAdapters.mode == .mock,
+            credentialState: coordinator.credentialState,
+            bindingState: coordinator.deviceBindingState
         )
         return .make(
             environment: coordinator.environment,
-            hasCredentials: credentials.allowsHome,
-            hasBoundDevice: device.allowsHome,
+            hasCredentials: coordinator.credentialState.allowsHome,
+            hasBoundDevice: coordinator.deviceBindingState.allowsHome,
             launchRoute: route
         )
     }

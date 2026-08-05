@@ -6,7 +6,7 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let appBuildTime: String
     let state: VoiceSessionState
     let webSocketState: VoiceWebSocketState
-    let wssHost: String
+    let adapterMode: String
     let sessionHash: String
     let lastCloseCode: Int?
     let lastErrorCategory: String
@@ -85,7 +85,7 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "app_build_time=\(safe(appBuildTime, fallback: "unknown"))",
             "state=\(state.rawValue)",
             "websocket_state=\(webSocketState.rawValue)",
-            "wss_host=\(safe(wssHost, fallback: "unconfigured"))",
+            "adapter_mode=\(safe(adapterMode, fallback: "Empty"))",
             "session_hash=\(sessionHash)",
             "last_close_code=\(lastCloseCode.map(String.init) ?? "none")",
             "last_error_category=\(safe(lastErrorCategory, fallback: "none"))",

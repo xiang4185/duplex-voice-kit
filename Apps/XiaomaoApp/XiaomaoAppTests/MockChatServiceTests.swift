@@ -131,13 +131,13 @@ final class MockChatServiceTests: XCTestCase {
 
     @MainActor
     func testPublicDefaultServiceIsOfflineMock() {
-        XCTAssertTrue(MainTabView.publicDefaultChatService() is MockChatService)
+        XCTAssertTrue(makeMockCoordinator().chatService is MockChatService)
     }
 
     @MainActor
     func testPublicDefaultLoadsWithoutEndpointTokenOrDeviceConfiguration() async {
         let viewModel = ChatViewModel(
-            service: MainTabView.publicDefaultChatService()
+            service: makeMockCoordinator().chatService
         )
 
         await viewModel.loadHistory()
@@ -147,6 +147,23 @@ final class MockChatServiceTests: XCTestCase {
         XCTAssertNotNil(viewModel.sessionID)
         XCTAssertFalse(viewModel.messages.isEmpty)
         XCTAssertTrue(viewModel.errorMessage.isEmpty)
+    }
+
+    @MainActor
+    private func makeMockCoordinator() -> AppCoordinator {
+        AppCoordinator(environment: AppEnvironment(
+            apiBaseURL: nil,
+            voiceWebSocketURL: nil,
+            deviceID: "",
+            appEnvironment: "test",
+            enableMockVoice: true,
+            enableMemory: false,
+            defaultVoiceRoute: .b,
+            appBuildSHA: "test",
+            appBuildTime: "test",
+            requestedHostAdapterMode: .mock,
+            hostAdapters: .mock
+        ))
     }
 
     private func assertServerError(
