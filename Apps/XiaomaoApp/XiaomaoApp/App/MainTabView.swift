@@ -39,26 +39,30 @@ struct MainTabView: View {
         tokenStore: AuthTokenStoring,
         startCall: @escaping () -> Void
     ) {
+        self.init(
+            environment: environment,
+            tokenStore: tokenStore,
+            startCall: startCall,
+            chatService: Self.publicDefaultChatService()
+        )
+    }
+
+    init(
+        environment: AppEnvironment,
+        tokenStore: AuthTokenStoring,
+        startCall: @escaping () -> Void,
+        chatService: any ChatServicing
+    ) {
         self.environment = environment
         self.tokenStore = tokenStore
         self.startCall = startCall
+        _chatViewModel = StateObject(
+            wrappedValue: ChatViewModel(service: chatService)
+        )
+    }
 
-        if Self.isChatConfigurationReady(environment) {
-            let client = APIClient(
-                baseURL: environment.apiBaseURL!,
-                tokenStore: tokenStore,
-                deviceID: environment.deviceID
-            )
-            let service = ChatService(client: client, environment: environment)
-            _chatViewModel = StateObject(wrappedValue: ChatViewModel(service: service))
-        } else {
-            _chatViewModel = StateObject(
-                wrappedValue: ChatViewModel(
-                    service: nil,
-                    configurationError: "聊天服务尚未配置 HTTPS API 地址或设备 ID。"
-                )
-            )
-        }
+    static func publicDefaultChatService() -> any ChatServicing {
+        MockChatService()
     }
 
     var body: some View {
@@ -89,20 +93,6 @@ struct MainTabView: View {
         }
         .tint(Theme.primary)
         .accessibilityIdentifier("main.tabs")
-    }
-
-    private static func isChatConfigurationReady(_ environment: AppEnvironment) -> Bool {
-        guard let url = environment.apiBaseURL,
-              url.scheme?.lowercased() == "https",
-              let host = url.host?.lowercased(),
-              !host.isEmpty,
-              host != "localhost",
-              host != "127.0.0.1",
-              host != "::1",
-              !host.hasSuffix(".localhost") else {
-            return false
-        }
-        return !environment.deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

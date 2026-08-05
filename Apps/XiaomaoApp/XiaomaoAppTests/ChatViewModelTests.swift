@@ -51,6 +51,29 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.first?.createdAt, messages.first?.createdAt)
     }
 
+    func testMockMessageIDsAndDatesEnterViewModelWithoutReplacement() async throws {
+        let timestamp = Date(timeIntervalSince1970: 1_800_000_100)
+        let service = MockChatService(
+            delays: .zero,
+            initialMessages: [],
+            now: { timestamp }
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { "view-model-mock-send" }
+        )
+        await viewModel.loadHistory()
+        viewModel.draft = "原样进入"
+
+        await viewModel.send()
+        let authoritative = try await service.loadHistory()
+
+        XCTAssertEqual(viewModel.messages, authoritative.messages)
+        XCTAssertEqual(viewModel.messages.first?.createdAt, timestamp)
+        XCTAssertTrue(viewModel.messages.first?.id.hasPrefix("mock-user-") == true)
+        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-assistant-") == true)
+    }
+
     func testHistoryFailureDoesNotCreateSessionAndCanRetry() async {
         let service = ChatServiceSpy(historyResults: [
             .failure(SyntheticError.failed),
