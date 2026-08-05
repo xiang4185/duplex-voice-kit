@@ -1780,6 +1780,9 @@ final class VoiceSessionControllerTests: XCTestCase {
             protocolReadyTimeout: protocolReadyTimeout,
             voiceActivityConfiguration: testVADConfiguration
         )
+        addTeardownBlock { [controller] in
+            await controller.endCurrentCall()
+        }
         return Fixture(
             controller: controller,
             socket: socket,
