@@ -9,10 +9,12 @@ final class AuthIntegrationShellTests: XCTestCase {
 
     func testEmptyCredentialProviderDoesNotCreateCredentials() async throws {
         let provider = EmptyCredentialProvider()
-        XCTAssertNil(try await provider.obtainCredentials())
-        XCTAssertNil(try await provider.refreshCredentials(
+        let obtained = try await provider.obtainCredentials()
+        let refreshed = try await provider.refreshCredentials(
             AuthCredentials(accessToken: "synthetic-token", refreshToken: nil)
-        ))
+        )
+        XCTAssertNil(obtained)
+        XCTAssertNil(refreshed)
         try await provider.clearCredentials()
     }
 
