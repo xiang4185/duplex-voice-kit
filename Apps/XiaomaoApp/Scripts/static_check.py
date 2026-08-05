@@ -108,6 +108,39 @@ def main() -> None:
     if "ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon" not in project:
         failures.append("XiaomaoApp target must bind the AppIcon asset catalog")
 
+    debug_config = read("Config/Debug.xcconfig")
+    release_config = read("Config/Release.xcconfig")
+    example_config = read("Config/Secrets.example.xcconfig")
+    for expected in (
+        "API_BASE_URL = http://127.0.0.1:18080",
+        "VOICE_WS_URL = ws://127.0.0.1:18881/v1/voice/ws",
+        "DEVICE_ID =\n",
+        "ENABLE_MOCK_VOICE = YES",
+    ):
+        if expected not in debug_config:
+            failures.append("Debug configuration boundary missing: " + expected.strip())
+    for expected in (
+        "API_BASE_URL =\n",
+        "VOICE_WS_URL =\n",
+        "DEVICE_ID =\n",
+        "ENABLE_MOCK_VOICE = NO",
+    ):
+        if expected not in release_config:
+            failures.append("Release fail-closed boundary missing: " + expected.strip())
+    for expected in ("API_BASE_URL =\n", "VOICE_WS_URL =\n", "DEVICE_ID =\n"):
+        if expected not in example_config:
+            failures.append("Secrets example must keep empty key: " + expected.strip())
+
+    scanned_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in files
+        if path.suffix.lower() in {".swift", ".md", ".yml", ".yaml", ".xcconfig", ".py"}
+        and path.name != Path(__file__).name
+    )
+    for forbidden in ("xiaomao-api.xiangpt.ltd", "xiaomao-voice.xiangpt.ltd", "dvk-local-device"):
+        if forbidden in scanned_text:
+            failures.append("forbidden production-like literal: " + forbidden)
+
     app_icon_contents = read(
         "XiaomaoApp/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json"
     )

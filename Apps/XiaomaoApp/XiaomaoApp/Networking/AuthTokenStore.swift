@@ -1,6 +1,50 @@
 import Foundation
 import Security
 
+struct AuthCredentials: Codable, Equatable, Sendable {
+    let accessToken: String
+    let refreshToken: String?
+
+    var hasAccessToken: Bool {
+        !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+protocol CredentialProviding: Sendable {
+    func obtainCredentials() async throws -> AuthCredentials?
+    func refreshCredentials(_ credentials: AuthCredentials) async throws -> AuthCredentials?
+    func clearCredentials() async throws
+}
+
+struct EmptyCredentialProvider: CredentialProviding {
+    func obtainCredentials() async throws -> AuthCredentials? { nil }
+    func refreshCredentials(_ credentials: AuthCredentials) async throws -> AuthCredentials? {
+        _ = credentials
+        return nil
+    }
+    func clearCredentials() async throws {}
+}
+
+enum DeviceBindingState: Equatable, Sendable {
+    case unbound
+    case binding
+    case bound(deviceID: String)
+    case invalid
+    case unbinding
+}
+
+protocol DeviceBindingProviding: Sendable {
+    func currentState() async -> DeviceBindingState
+    func bind() async throws -> DeviceBindingState
+    func unbind() async throws -> DeviceBindingState
+}
+
+struct EmptyDeviceBindingProvider: DeviceBindingProviding {
+    func currentState() async -> DeviceBindingState { .unbound }
+    func bind() async throws -> DeviceBindingState { .unbound }
+    func unbind() async throws -> DeviceBindingState { .unbound }
+}
+
 protocol AuthTokenStoring: Sendable {
     func load() -> String?
     func save(_ token: String) throws
