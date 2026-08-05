@@ -216,7 +216,7 @@ actor MockVoiceAdapter: VoiceAdapter {
 
     func snapshot() async -> VoiceAdapterSnapshot {
         let clientConnected = await client.isConnected()
-        VoiceAdapterSnapshot(
+        return VoiceAdapterSnapshot(
             mode: .mock,
             isConnected: connected && clientConnected,
             connectCallCount: connectCallCount,

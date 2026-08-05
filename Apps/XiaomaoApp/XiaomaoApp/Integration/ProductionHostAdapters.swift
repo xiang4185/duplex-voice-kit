@@ -218,7 +218,7 @@ actor ProductionVoiceAdapter: VoiceAdapter {
 
     func snapshot() async -> VoiceAdapterSnapshot {
         let connected = await client.isConnected()
-        VoiceAdapterSnapshot(
+        return VoiceAdapterSnapshot(
             mode: .production,
             isConnected: connected,
             connectCallCount: connectCallCount,
