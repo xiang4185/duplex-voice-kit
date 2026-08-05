@@ -16,15 +16,15 @@ struct DeveloperDiagnosticsSnapshot: Equatable, Sendable {
 
     static func make(
         environment: AppEnvironment,
-        credentialState: CredentialState,
-        deviceState: DeviceBindingState,
+        hasCredentials: Bool,
+        hasBoundDevice: Bool,
         launchRoute: AppCoordinator.LaunchRoute
     ) -> DeveloperDiagnosticsSnapshot {
         DeveloperDiagnosticsSnapshot(
             backendStatus: environment.isBackendConfigurationReady ? "Configured" : "Not Configured",
             voiceStatus: environment.isVoiceConfigurationReady ? "Configured" : "Not Configured",
-            credentialStatus: credentialState.diagnosticLabel,
-            deviceStatus: deviceState.diagnosticLabel,
+            credentialStatus: hasCredentials ? "Valid" : "Missing",
+            deviceStatus: hasBoundDevice ? "Bound" : "Unbound",
             mockStatus: environment.enableMockVoice ? "Enabled" : "Disabled",
             launchRouteStatus: launchRoute.diagnosticLabel,
             backendAdapterStatus: adapterLabel(environment.hostAdapters.backend),
@@ -37,32 +37,6 @@ struct DeveloperDiagnosticsSnapshot: Equatable, Sendable {
 
     private static func adapterLabel(_ adapter: Any) -> String {
         String(describing: type(of: adapter)).hasPrefix("Mock") ? "Mock" : "Empty"
-    }
-}
-
-private extension CredentialState {
-    var diagnosticLabel: String {
-        switch self {
-        case .noCredentials: "Missing"
-        case .loading: "Loading"
-        case .valid: "Valid"
-        case .refreshing: "Refreshing"
-        case .expired: "Expired"
-        case .revoked: "Revoked"
-        }
-    }
-}
-
-private extension DeviceBindingState {
-    var diagnosticLabel: String {
-        switch self {
-        case .unbound: "Unbound"
-        case .binding: "Binding"
-        case .bound: "Bound"
-        case .expired: "Expired"
-        case .rebinding: "Rebinding"
-        case .unbinding: "Unbinding"
-        }
     }
 }
 

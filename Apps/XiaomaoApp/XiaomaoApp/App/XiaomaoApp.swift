@@ -123,8 +123,8 @@ private struct RootView: View {
         )
         return .make(
             environment: coordinator.environment,
-            credentialState: credentials,
-            deviceState: device,
+            hasCredentials: credentials.allowsHome,
+            hasBoundDevice: device.allowsHome,
             launchRoute: route
         )
     }
