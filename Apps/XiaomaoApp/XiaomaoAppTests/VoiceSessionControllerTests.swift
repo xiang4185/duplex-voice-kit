@@ -924,7 +924,18 @@ final class VoiceSessionControllerTests: XCTestCase {
         fixture.capture.emit(pcmFrame(amplitude: 0))
         fixture.capture.emit(pcmFrame(amplitude: 0))
         fixture.capture.emit(pcmFrame(amplitude: 0))
-        await settle()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while clock.now < deadline {
+            let sent = await fixture.socket.sentTypesValue()
+            if sent.contains(.audioAppend),
+               sent.filter({ $0 == .audioCommit }).count == 1,
+               fixture.controller.speechStartCount == 1,
+               fixture.controller.automaticCommitCount == 1 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         let sent = await fixture.socket.sentTypesValue()
         XCTAssertTrue(sent.contains(.audioAppend))
         XCTAssertEqual(sent.filter { $0 == .audioCommit }.count, 1)
