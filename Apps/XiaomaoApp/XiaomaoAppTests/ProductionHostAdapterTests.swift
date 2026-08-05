@@ -144,7 +144,7 @@ final class ProductionHostAdapterTests: XCTestCase {
         XCTAssertTrue(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
         XCTAssertFalse(request.value(forHTTPHeaderField: "X-Device-ID")?.isEmpty ?? true)
         let body = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any]
+            JSONSerialization.jsonObject(with: try requestBodyData(from: request)) as? [String: Any]
         )
         XCTAssertNotNil(body["device_id"])
         XCTAssertEqual(body["message"] as? String, "synthetic")
@@ -394,6 +394,29 @@ final class ProductionHostAdapterTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ProductionURLProtocolStub.self]
         return URLSession(configuration: configuration)
+    }
+
+    private func requestBodyData(from request: URLRequest) throws -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+        let stream = try XCTUnwrap(request.httpBodyStream)
+        stream.open()
+        defer { stream.close() }
+
+        var body = Data()
+        var buffer = [UInt8](repeating: 0, count: 1_024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count < 0 {
+                throw try XCTUnwrap(stream.streamError)
+            }
+            if count == 0 {
+                break
+            }
+            body.append(buffer, count: count)
+        }
+        return body
     }
 
     private func makeEnvironment(

@@ -14,7 +14,11 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertLessThan(chat.lowerBound, smallThings.lowerBound)
         XCTAssertLessThan(smallThings.lowerBound, settings.lowerBound)
         XCTAssertTrue(main.contains("chatService: any ChatServicing"))
-        XCTAssertFalse(main.contains("MockChatService()"))
+        let preview = try XCTUnwrap(main.range(of: "#Preview"))
+        let runtimeSource = String(main[..<preview.lowerBound])
+        let previewSource = String(main[preview.lowerBound...])
+        XCTAssertFalse(runtimeSource.contains("MockChatService()"))
+        XCTAssertTrue(previewSource.contains("MockChatService()"))
         XCTAssertFalse(main.contains("isChatConfigurationReady"))
         XCTAssertFalse(main.contains("APIClient("))
     }
