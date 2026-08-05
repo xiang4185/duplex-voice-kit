@@ -2,19 +2,47 @@ import SwiftUI
 
 @main
 struct XiaomaoApp: App {
-    @StateObject private var coordinator = AppCoordinator()
-
     var body: some Scene {
         WindowGroup {
-            RootView(coordinator: coordinator)
-                .task { await coordinator.start() }
-                .onOpenURL { url in
-                    handleCallURL(url)
-                }
+            AppBootstrapView()
         }
     }
 
     // MARK: Live Activity App Intent → URL scheme 处理
+    private func handleCallURL(_ url: URL) {
+        guard url.scheme == "xiaomao" else { return }
+        switch url.path {
+        case "/call/mute":
+            NotificationCenter.default.post(name: .toggleMuteFromActivity, object: nil)
+        case "/call/hangup":
+            NotificationCenter.default.post(name: .hangupFromActivity, object: nil)
+        default:
+            break
+        }
+    }
+}
+
+private struct AppBootstrapView: View {
+    @State private var generation = UUID()
+
+    var body: some View {
+        RootContainer(reload: { generation = UUID() })
+            .id(generation)
+    }
+}
+
+private struct RootContainer: View {
+    @StateObject private var coordinator = AppCoordinator()
+    let reload: () -> Void
+
+    var body: some View {
+        RootView(coordinator: coordinator, reload: reload)
+            .task { await coordinator.start() }
+            .onOpenURL { url in
+                handleCallURL(url)
+            }
+    }
+
     private func handleCallURL(_ url: URL) {
         guard url.scheme == "xiaomao" else { return }
         switch url.path {
@@ -36,6 +64,7 @@ extension Notification.Name {
 
 private struct RootView: View {
     @ObservedObject var coordinator: AppCoordinator
+    let reload: () -> Void
     @State private var activeCall = false
 #if DEBUG
     @State private var showingDiagnostics = false
@@ -53,7 +82,8 @@ private struct RootView: View {
                     configurationReady: false,
                     configurationMessage: coordinator.environment.runtimeConfigurationMessage,
                     tokenStore: coordinator.tokenStore,
-                    completed: {}
+                    runtimeConfigurationStore: KeychainRuntimeConfigurationStore(),
+                    completed: reload
                 )
             case .binding:
                 DeviceBindingView(
@@ -61,8 +91,9 @@ private struct RootView: View {
                     configurationReady: coordinator.environment.isRuntimeConfigurationReady,
                     configurationMessage: coordinator.environment.runtimeConfigurationMessage,
                     tokenStore: coordinator.tokenStore,
+                    runtimeConfigurationStore: KeychainRuntimeConfigurationStore(),
                     completed: {
-                        Task { await coordinator.start() }
+                        reload()
                     }
                 )
             case .privacy:
