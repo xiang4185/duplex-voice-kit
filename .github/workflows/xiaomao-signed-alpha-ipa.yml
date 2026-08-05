@@ -1,6 +1,9 @@
 name: Xiaomao Signed Alpha IPA
 
 on:
+  push:
+    branches:
+      - xiaomao/alpha-e2e-p1
   workflow_dispatch:
 
 permissions:
