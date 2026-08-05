@@ -15,6 +15,7 @@ REQUIRED = [
     "Config/Release.xcconfig",
     "Config/Secrets.example.xcconfig",
     "XiaomaoApp/App/XiaomaoApp.swift",
+    "XiaomaoApp/Integration/HostAdapters.swift",
     "XiaomaoApp/Models/VoiceEvent.swift",
     "XiaomaoApp/Models/VoiceSessionState.swift",
     "XiaomaoApp/Networking/WebSocketClient.swift",
@@ -39,6 +40,7 @@ REQUIRED = [
     "XiaomaoAppTests/DuplexVoiceKitAdapterTests.swift",
     "XiaomaoAppTests/HandsFreeInteractionContractTests.swift",
     "XiaomaoAppTests/ChatViewModelTests.swift",
+    "XiaomaoAppTests/HostAdapterTests.swift",
 ]
 
 SENSITIVE_NAMES = {".env", "Secrets.xcconfig"}
@@ -254,6 +256,44 @@ def main() -> None:
         failures.append("production coordinator must not create separate Route B capture/playback engines")
     if coordinator.count("RealtimeAudioIOEngine()") != 1:
         failures.append("production coordinator must create exactly one Route B realtime adapter")
+
+    host_adapters = read("XiaomaoApp/Integration/HostAdapters.swift")
+    for expected in (
+        "protocol BackendAdapter",
+        "protocol VoiceAdapter",
+        "protocol CredentialProviderAdapter",
+        "protocol DeviceBindingProviderAdapter",
+        "struct EmptyBackendAdapter",
+        "struct EmptyVoiceAdapter",
+        "actor MockBackendAdapter",
+        "actor MockVoiceAdapter",
+        "struct HostAdapterDependencies",
+    ):
+        if expected not in host_adapters:
+            failures.append("host adapter boundary missing: " + expected)
+    for forbidden in (
+        "URLSession",
+        "NWConnection",
+        "Network.framework",
+        "http://",
+        "https://",
+        "ws://",
+        "wss://",
+        "Authorization",
+        "Bearer ",
+    ):
+        if forbidden in host_adapters:
+            failures.append("host adapter shell contains network or credential implementation: " + forbidden)
+    if host_adapters.count("networkRequestCount: 0") < 2:
+        failures.append("backend Empty and Mock adapters must report zero network requests")
+    if host_adapters.count("networkConnectionCount: 0") < 2:
+        failures.append("voice Empty and Mock adapters must report zero network connections")
+
+    environment = read("XiaomaoApp/App/AppEnvironment.swift")
+    if "hostAdapters: HostAdapterDependencies = .empty" not in environment:
+        failures.append("AppEnvironment must default host adapters to Empty implementations")
+    if "self.hostAdapters = environment.hostAdapters" not in coordinator:
+        failures.append("AppCoordinator must receive host adapters through AppEnvironment")
 
     call_view = read("XiaomaoApp/Call/VoiceCallView.swift")
     for forbidden_control in ("按住说话", "结束本轮", "Picker(\"路线"):

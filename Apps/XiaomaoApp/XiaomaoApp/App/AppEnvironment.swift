@@ -10,6 +10,31 @@ struct AppEnvironment: Sendable {
     let defaultVoiceRoute: VoiceRoute
     let appBuildSHA: String
     let appBuildTime: String
+    let hostAdapters: HostAdapterDependencies
+
+    init(
+        apiBaseURL: URL?,
+        voiceWebSocketURL: URL?,
+        deviceID: String,
+        appEnvironment: String,
+        enableMockVoice: Bool,
+        enableMemory: Bool,
+        defaultVoiceRoute: VoiceRoute,
+        appBuildSHA: String,
+        appBuildTime: String,
+        hostAdapters: HostAdapterDependencies = .empty
+    ) {
+        self.apiBaseURL = apiBaseURL
+        self.voiceWebSocketURL = voiceWebSocketURL
+        self.deviceID = deviceID
+        self.appEnvironment = appEnvironment
+        self.enableMockVoice = enableMockVoice
+        self.enableMemory = enableMemory
+        self.defaultVoiceRoute = defaultVoiceRoute
+        self.appBuildSHA = appBuildSHA
+        self.appBuildTime = appBuildTime
+        self.hostAdapters = hostAdapters
+    }
 
     var isRuntimeConfigurationReady: Bool {
         if enableMockVoice { return true }
@@ -44,7 +69,10 @@ struct AppEnvironment: Sendable {
         return "此安装包尚未配置 HTTPS API、WSS 语音地址或设备 ID。请使用手动 Actions 构建参数重新生成测试包。"
     }
 
-    static func fromBundle(_ bundle: Bundle = .main) -> AppEnvironment {
+    static func fromBundle(
+        _ bundle: Bundle = .main,
+        hostAdapters: HostAdapterDependencies = .empty
+    ) -> AppEnvironment {
         func value(_ key: String) -> String { bundle.object(forInfoDictionaryKey: key) as? String ?? "" }
         return AppEnvironment(
             apiBaseURL: URL(string: value("API_BASE_URL")),
@@ -55,7 +83,8 @@ struct AppEnvironment: Sendable {
             enableMemory: value("ENABLE_MEMORY").uppercased() == "YES",
             defaultVoiceRoute: VoiceRoute(rawValue: value("DEFAULT_VOICE_ROUTE")) ?? .b,
             appBuildSHA: value("APP_BUILD_SHA"),
-            appBuildTime: value("APP_BUILD_TIME")
+            appBuildTime: value("APP_BUILD_TIME"),
+            hostAdapters: hostAdapters
         )
     }
 

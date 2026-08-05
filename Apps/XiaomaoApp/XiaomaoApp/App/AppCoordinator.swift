@@ -7,11 +7,13 @@ final class AppCoordinator: ObservableObject {
     enum LaunchRoute: Equatable { case configurationError, binding, home }
     @Published var screen: Screen = .launch
     let environment: AppEnvironment
+    let hostAdapters: HostAdapterDependencies
     let tokenStore: AuthTokenStoring
     let voiceController: VoiceSessionController
 
     init(environment: AppEnvironment = .fromBundle()) {
         self.environment = environment
+        self.hostAdapters = environment.hostAdapters
         let tokenStore: AuthTokenStoring = environment.enableMockVoice
             ? MemoryAuthTokenStore() : KeychainAuthTokenStore()
         self.tokenStore = tokenStore
