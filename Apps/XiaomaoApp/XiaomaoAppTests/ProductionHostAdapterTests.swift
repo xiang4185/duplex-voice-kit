@@ -613,7 +613,8 @@ private actor RecordingBackendAdapter: BackendAdapter {
 
     func execute(_ request: BackendAdapterRequest) async throws -> BackendAdapterResponse {
         routes.append(request.route)
-        let data = Data(#"{
+        let data = Data(#"""
+        {
             "session_id":"session",
             "route":"direct",
             "degraded":false,
@@ -630,7 +631,8 @@ private actor RecordingBackendAdapter: BackendAdapter {
                 "content":"synthetic",
                 "created_at":"2026-08-05T00:00:01Z"
             }
-        }"#.utf8)
+        }
+        """#.utf8)
         return BackendAdapterResponse(statusCode: 200, payload: data)
     }
 
