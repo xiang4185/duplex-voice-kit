@@ -19,6 +19,13 @@ path, so the app, package, tests, and IPA workflow build from one source tree.
 - Credential and device-binding providers are empty public shells. No real
   authentication or registration service is connected.
 
+Public GitHub Actions and public IPA artifacts must use empty endpoint and
+device configuration. Real service integration is performed only on a trusted
+local Mac or in an access-controlled private build environment, using the
+ignored `Config/Secrets.xcconfig` and runtime Keychain injection. Production
+endpoints, credentials, device identifiers, private persona mappings, signing
+materials, and private brand assets must not be supplied to public Actions.
+
 ## Generate and build
 
 ```bash
