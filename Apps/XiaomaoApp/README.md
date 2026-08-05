@@ -11,6 +11,13 @@ path, so the app, package, tests, and IPA workflow build from one source tree.
   credential, certificate, signing profile, chat record, or audio record.
 - Live values may be supplied only at build time or entered at runtime and are
   never committed.
+- Mock Voice does not require a token, device identifier, or remote endpoint.
+- Non-Mock networking fails closed until HTTPS Backend, WSS Voice, token, and
+  device configuration are all present.
+- `Config/Secrets.example.xcconfig` contains empty keys only. Any documentation
+  example must use a reserved `.invalid` host and must be marked non-routable.
+- Credential and device-binding providers are empty public shells. No real
+  authentication or registration service is connected.
 
 ## Generate and build
 

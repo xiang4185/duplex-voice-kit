@@ -13,9 +13,28 @@ struct AppEnvironment: Sendable {
 
     var isRuntimeConfigurationReady: Bool {
         if enableMockVoice { return true }
-        return Self.isAllowedRemoteURL(apiBaseURL, scheme: "https")
-            && Self.isAllowedRemoteURL(voiceWebSocketURL, scheme: "wss")
-            && !deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return isBackendConfigurationReady && isVoiceConfigurationReady
+    }
+
+    var isBackendConfigurationReady: Bool {
+        Self.isAllowedRemoteURL(apiBaseURL, scheme: "https") && hasDeviceID
+    }
+
+    var isVoiceConfigurationReady: Bool {
+        if enableMockVoice { return true }
+        return Self.isAllowedRemoteURL(voiceWebSocketURL, scheme: "wss") && hasDeviceID
+    }
+
+    func canStartBackendRequest(hasToken: Bool) -> Bool {
+        isBackendConfigurationReady && hasToken
+    }
+
+    func canStartVoiceConnection(hasToken: Bool) -> Bool {
+        enableMockVoice || (isVoiceConfigurationReady && hasToken)
+    }
+
+    private var hasDeviceID: Bool {
+        !deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var runtimeConfigurationMessage: String {
