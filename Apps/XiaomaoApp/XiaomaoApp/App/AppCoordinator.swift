@@ -58,7 +58,7 @@ final class AppCoordinator: ObservableObject {
         screen = .main
     }
 
-    static func launchRoute(
+    nonisolated static func launchRoute(
         environmentReady: Bool,
         mockMode: Bool,
         credentialState: CredentialState,
