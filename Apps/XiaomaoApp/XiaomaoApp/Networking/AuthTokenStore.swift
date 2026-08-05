@@ -25,12 +25,118 @@ struct EmptyCredentialProvider: CredentialProviding {
     func clearCredentials() async throws {}
 }
 
+enum CredentialState: Equatable, Sendable {
+    case noCredentials
+    case loading
+    case valid(AuthCredentials)
+    case refreshing(AuthCredentials)
+    case expired
+    case revoked
+
+    var allowsChat: Bool {
+        if case .valid(let credentials) = self { return credentials.hasAccessToken }
+        return false
+    }
+
+    var allowsVoice: Bool { allowsChat }
+
+    var allowsHome: Bool { allowsChat }
+
+    var allowsBindingFlow: Bool {
+        switch self {
+        case .noCredentials, .expired, .revoked:
+            return true
+        case .loading, .valid, .refreshing:
+            return false
+        }
+    }
+}
+
+actor MemoryCredentialProvider: CredentialProviding {
+    private var credentials: AuthCredentials?
+
+    init(credentials: AuthCredentials? = nil) {
+        self.credentials = credentials
+    }
+
+    func obtainCredentials() async throws -> AuthCredentials? { credentials }
+
+    func refreshCredentials(_ credentials: AuthCredentials) async throws -> AuthCredentials? {
+        self.credentials = credentials
+        return credentials
+    }
+
+    func clearCredentials() async throws { credentials = nil }
+}
+
+actor MockCredentialProvider: CredentialProviding {
+    private(set) var obtainCallCount = 0
+    private(set) var refreshCallCount = 0
+    private(set) var clearCallCount = 0
+    private var credentials: AuthCredentials?
+
+    init(credentials: AuthCredentials? = nil) {
+        self.credentials = credentials
+    }
+
+    func obtainCredentials() async throws -> AuthCredentials? {
+        obtainCallCount += 1
+        return credentials
+    }
+
+    func refreshCredentials(_ credentials: AuthCredentials) async throws -> AuthCredentials? {
+        refreshCallCount += 1
+        self.credentials = credentials
+        return credentials
+    }
+
+    func clearCredentials() async throws {
+        clearCallCount += 1
+        credentials = nil
+    }
+}
+
 enum DeviceBindingState: Equatable, Sendable {
     case unbound
     case binding
     case bound(deviceID: String)
-    case invalid
+    case expired
+    case rebinding
     case unbinding
+
+    var allowsHome: Bool {
+        if case .bound(let deviceID) = self {
+            return !deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return false
+    }
+
+    var allowsBindingFlow: Bool {
+        switch self {
+        case .unbound, .expired:
+            return true
+        case .binding, .bound(_), .rebinding, .unbinding:
+            return false
+        }
+    }
+
+    func canTransition(to next: DeviceBindingState) -> Bool {
+        switch (self, next) {
+        case (.unbound, .binding),
+             (.binding, .bound(_)),
+             (.binding, .unbound),
+             (.bound(_), .expired),
+             (.bound(_), .unbinding),
+             (.expired, .rebinding),
+             (.expired, .binding),
+             (.rebinding, .bound(_)),
+             (.rebinding, .expired),
+             (.unbinding, .unbound):
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 protocol DeviceBindingProviding: Sendable {
@@ -43,6 +149,60 @@ struct EmptyDeviceBindingProvider: DeviceBindingProviding {
     func currentState() async -> DeviceBindingState { .unbound }
     func bind() async throws -> DeviceBindingState { .unbound }
     func unbind() async throws -> DeviceBindingState { .unbound }
+}
+
+actor MemoryDeviceBindingProvider: DeviceBindingProviding {
+    private var state: DeviceBindingState
+
+    init(state: DeviceBindingState = .unbound) {
+        self.state = state
+    }
+
+    func currentState() async -> DeviceBindingState { state }
+
+    func bind() async throws -> DeviceBindingState {
+        state = .binding
+        return state
+    }
+
+    func unbind() async throws -> DeviceBindingState {
+        state = .unbinding
+        return state
+    }
+
+    func transition(to next: DeviceBindingState) -> Bool {
+        guard state.canTransition(to: next) else { return false }
+        state = next
+        return true
+    }
+}
+
+actor MockDeviceBindingProvider: DeviceBindingProviding {
+    private(set) var currentStateCallCount = 0
+    private(set) var bindCallCount = 0
+    private(set) var unbindCallCount = 0
+    private var state: DeviceBindingState
+
+    init(state: DeviceBindingState = .unbound) {
+        self.state = state
+    }
+
+    func currentState() async -> DeviceBindingState {
+        currentStateCallCount += 1
+        return state
+    }
+
+    func bind() async throws -> DeviceBindingState {
+        bindCallCount += 1
+        state = .binding
+        return state
+    }
+
+    func unbind() async throws -> DeviceBindingState {
+        unbindCallCount += 1
+        state = .unbinding
+        return state
+    }
 }
 
 protocol AuthTokenStoring: Sendable {

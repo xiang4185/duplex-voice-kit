@@ -18,6 +18,9 @@ path, so the app, package, tests, and IPA workflow build from one source tree.
   example must use a reserved `.invalid` host and must be marked non-routable.
 - Credential and device-binding providers are empty public shells. No real
   authentication or registration service is connected.
+- Credential and device-binding lifecycles are resolved by one launch router.
+  Empty and Mock providers perform no network access; Mock mode can open the
+  public offline UI without endpoints, credentials, or a device identifier.
 
 Public GitHub Actions and public IPA artifacts must use empty endpoint and
 device configuration. Real service integration is performed only on a trusted

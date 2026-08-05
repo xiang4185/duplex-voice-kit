@@ -3,7 +3,8 @@ import Foundation
 
 @MainActor
 final class AppCoordinator: ObservableObject {
-    enum Screen { case launch, binding, privacy, main }
+    enum Screen { case launch, configurationError, binding, privacy, main }
+    enum LaunchRoute: Equatable { case configurationError, binding, home }
     @Published var screen: Screen = .launch
     let environment: AppEnvironment
     let tokenStore: AuthTokenStoring
@@ -57,16 +58,38 @@ final class AppCoordinator: ObservableObject {
         screen = .main
     }
 
+    nonisolated static func launchRoute(
+        environmentReady: Bool,
+        mockMode: Bool,
+        credentialState: CredentialState,
+        bindingState: DeviceBindingState
+    ) -> LaunchRoute {
+        if mockMode { return .home }
+        guard environmentReady else { return .configurationError }
+        guard credentialState.allowsHome, bindingState.allowsHome else { return .binding }
+        return .home
+    }
+
     func start() {
-        guard environment.isRuntimeConfigurationReady else {
+        let credentials = tokenStore.load().map {
+            CredentialState.valid(AuthCredentials(accessToken: $0, refreshToken: nil))
+        } ?? .noCredentials
+        let bindingState: DeviceBindingState = environment.deviceID.isEmpty
+            ? .unbound : .bound(deviceID: environment.deviceID)
+
+        switch Self.launchRoute(
+            environmentReady: environment.isRuntimeConfigurationReady,
+            mockMode: environment.enableMockVoice,
+            credentialState: credentials,
+            bindingState: bindingState
+        ) {
+        case .configurationError:
+            screen = .configurationError
+        case .binding:
             screen = .binding
-            return
-        }
-        if tokenStore.load() == nil {
-            screen = .binding
-        } else if !hasAgreedPrivacy {
+        case .home where !hasAgreedPrivacy:
             screen = .privacy
-        } else {
+        case .home:
             screen = .main
         }
     }
