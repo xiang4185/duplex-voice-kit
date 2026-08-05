@@ -44,6 +44,25 @@ xcodebuild \
 
 Run `python3 Scripts/static_check.py` before generating the project.
 
+## Trusted Alpha end-to-end build
+
+Real service and signing verification must run only on a trusted Mac. Create
+the ignored `Config/Secrets.xcconfig`, provide an untracked export-options
+plist, then run:
+
+```bash
+cd Apps/XiaomaoApp
+XIAOMAO_EXPORT_OPTIONS_PLIST=/secure/path/ExportOptions.plist \
+XIAOMAO_DEVICE_UDID=<optional-device-udid> \
+Scripts/trusted_alpha_e2e.sh
+```
+
+The script validates only that required settings exist and use HTTPS/WSS. It
+does not print their values. It runs the public static check, generates the
+project, runs simulator tests, creates a signed archive, exports an IPA, and
+optionally installs it through `devicectl`. Build output stays under the
+ignored `.trusted-alpha-build` directory.
+
 ## Asset provenance
 
 The app icon and cat portrait/avatar PNG files were generated for this project
