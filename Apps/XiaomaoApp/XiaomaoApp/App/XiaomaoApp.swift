@@ -37,6 +37,9 @@ extension Notification.Name {
 private struct RootView: View {
     @ObservedObject var coordinator: AppCoordinator
     @State private var activeCall = false
+#if DEBUG
+    @State private var showingDiagnostics = false
+#endif
 
     var body: some View {
         ZStack {
@@ -78,10 +81,54 @@ private struct RootView: View {
                     )
                 }
             }
+#if DEBUG
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        showingDiagnostics = true
+                    } label: {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .padding(10)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Developer Diagnostics")
+                    .padding()
+                }
+                Spacer()
+            }
+#endif
         }
         .animation(.easeInOut(duration: 0.25), value: coordinator.screen)
         .preferredColorScheme(.light)
+#if DEBUG
+        .sheet(isPresented: $showingDiagnostics) {
+            DeveloperDiagnosticsView(snapshot: diagnosticsSnapshot)
+        }
+#endif
     }
+
+#if DEBUG
+    private var diagnosticsSnapshot: DeveloperDiagnosticsSnapshot {
+        let credentials = coordinator.tokenStore.load().map {
+            CredentialState.valid(AuthCredentials(accessToken: $0, refreshToken: nil))
+        } ?? .noCredentials
+        let device: DeviceBindingState = coordinator.environment.deviceID.isEmpty
+            ? .unbound : .bound(deviceID: coordinator.environment.deviceID)
+        let route = AppCoordinator.launchRoute(
+            environmentReady: coordinator.environment.isRuntimeConfigurationReady,
+            mockMode: coordinator.environment.enableMockVoice,
+            credentialState: credentials,
+            bindingState: device
+        )
+        return .make(
+            environment: coordinator.environment,
+            hasCredentials: credentials.allowsHome,
+            hasBoundDevice: device.allowsHome,
+            launchRoute: route
+        )
+    }
+#endif
 
     // MARK: P2.8A 单次启动门禁 (同一时间只允许一次通话页面展示请求)
     // 连续点击/URL scheme 重复触发不会重复创建 VoiceCallView;
