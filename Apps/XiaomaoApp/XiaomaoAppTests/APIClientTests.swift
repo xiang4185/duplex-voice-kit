@@ -133,7 +133,8 @@ final class APIClientTests: XCTestCase {
         XCTAssertFalse(history.sessionID.isEmpty)
         XCTAssertEqual(sent.sessionID, "server-session")
         XCTAssertEqual(sent.userMessage.content, "合成发送")
-        XCTAssertEqual(sent.assistantMessage.content, "合成回复")
+        XCTAssertEqual(sent.developerMessage?.content, "合成回复")
+        XCTAssertEqual(sent.developerMessage?.participant, .developer)
         XCTAssertEqual(cleared.sessionID, history.sessionID)
         XCTAssertTrue(cleared.cleared)
 

@@ -32,7 +32,10 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains("清空聊天记录"))
         XCTAssertTrue(chat.contains("刚才的回复由服务端安全降级生成"))
         XCTAssertTrue(chat.contains("ChatTypingIndicator()"))
-        XCTAssertTrue(typing.contains("小猫正在回复"))
+        XCTAssertTrue(typing.contains("正在发送消息"))
+        XCTAssertFalse(typing.contains("小猫正在回复"))
+        XCTAssertTrue(chat.contains("refreshHistorySilently"))
+        XCTAssertTrue(chat.contains("Task.sleep(for: .seconds(4))"))
     }
 
     func testCoreAccessibilityIdentifiersRemainStable() throws {

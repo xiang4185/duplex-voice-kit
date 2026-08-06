@@ -50,6 +50,9 @@ struct ChatView: View {
                     .padding(.horizontal, Theme.Spacing.medium)
                     .padding(.vertical, Theme.Spacing.small)
                 }
+                .refreshable {
+                    await viewModel.refreshHistorySilently()
+                }
                 .accessibilityIdentifier("chat.messages")
                 .onChange(of: viewModel.messages.count) { _, _ in
                     withAnimation(.easeOut(duration: 0.22)) {
@@ -83,7 +86,13 @@ struct ChatView: View {
         }
         .background(Theme.bg.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
-        .task { await viewModel.loadHistoryIfNeeded() }
+        .task {
+            await viewModel.loadHistoryIfNeeded()
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(4)) } catch { return }
+                await viewModel.refreshHistorySilently()
+            }
+        }
         .confirmationDialog(
             "清空聊天记录？",
             isPresented: $showsClearConfirmation,

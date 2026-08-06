@@ -30,20 +30,33 @@ private func loadedHistory() -> Result<ChatHistoryResult, Error> {
 
 private func successfulSend() -> ChatSendResult {
     let turnID = "send-turn"
+    let user = serverMessage(
+        id: "send-user",
+        role: .user,
+        content: "合成发送",
+        participant: .user,
+        turnID: turnID
+    )
+    let developer = serverMessage(
+        id: "send-developer",
+        role: .assistant,
+        content: "合成开发者回复",
+        participant: .developer,
+        turnID: turnID
+    )
     return ChatSendResult(
         sessionID: "server-session",
-        userMessage: serverMessage(
-            id: "send-user",
-            role: .user,
-            content: "合成发送",
-            turnID: turnID
-        ),
-        assistantMessage: serverMessage(
-            id: "send-assistant",
-            role: .assistant,
-            content: "合成回复",
-            turnID: turnID
-        ),
+        turnID: turnID,
+        messages: [user, developer],
+        participantResults: [
+            ChatParticipantResult(
+                participant: .developer,
+                turnID: turnID,
+                status: .completed,
+                retryable: false,
+                message: developer
+            )
+        ],
         route: "direct",
         degraded: false,
         persisted: true
@@ -152,13 +165,36 @@ final class ChatViewModelTests: XCTestCase {
 
     func testSendUsesCurrentSessionAndGeneratedRequestIDAndOnlyAddsServerMessages() async {
         let user = serverMessage(id: "opaque-user", role: .user, content: "合成发送")
-        let assistant = serverMessage(id: "opaque-assistant", role: .assistant, content: "合成回复")
+        let turnID = "opaque-turn"
+        let user = serverMessage(
+            id: "opaque-user",
+            role: .user,
+            content: "合成发送",
+            participant: .user,
+            turnID: turnID
+        )
+        let developer = serverMessage(
+            id: "opaque-developer",
+            role: .assistant,
+            content: "合成开发者回复",
+            participant: .developer,
+            turnID: turnID
+        )
         let service = ChatServiceSpy(
             historyResults: [loadedHistory()],
             sendResult: .success(ChatSendResult(
                 sessionID: "server-session",
-                userMessage: user,
-                assistantMessage: assistant,
+                turnID: turnID,
+                messages: [user, developer],
+                participantResults: [
+                    ChatParticipantResult(
+                        participant: .developer,
+                        turnID: turnID,
+                        status: .completed,
+                        retryable: false,
+                        message: developer
+                    )
+                ],
                 route: "direct",
                 degraded: false,
                 persisted: true
@@ -177,8 +213,8 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(service.sendRequests, [
             .init(message: "合成发送", sessionID: "server-session", requestID: "opaque-request-id")
         ])
-        XCTAssertEqual(viewModel.messages, originalMessages + [user, assistant])
-        XCTAssertEqual(viewModel.messages.suffix(2).map(\.id), ["opaque-user", "opaque-assistant"])
+        XCTAssertEqual(viewModel.messages, originalMessages + [user, developer])
+        XCTAssertEqual(viewModel.messages.suffix(2).map(\.id), ["opaque-user", "opaque-developer"])
         XCTAssertEqual(viewModel.draft, "")
     }
 
@@ -200,6 +236,28 @@ final class ChatViewModelTests: XCTestCase {
         await viewModel.send()
 
         XCTAssertEqual(service.sendRequests.first?.xiaomaoMode, .always)
+    }
+
+    func testSilentHistoryRefreshReceivesHumanDeveloperMessageWithoutLoadingState() async {
+        let developer = serverMessage(
+            id: "developer-poll",
+            role: .assistant,
+            content: "真实开发者合成回复",
+            participant: .developer,
+            turnID: "developer-turn"
+        )
+        let service = ChatServiceSpy(historyResults: [
+            .success(ChatHistoryResult(sessionID: "server-session", messages: [])),
+            .success(ChatHistoryResult(sessionID: "server-session", messages: [developer]))
+        ])
+        let viewModel = ChatViewModel(service: service)
+        await viewModel.loadHistory()
+
+        await viewModel.refreshHistorySilently()
+
+        XCTAssertFalse(viewModel.isLoadingHistory)
+        XCTAssertEqual(viewModel.messages, [developer])
+        XCTAssertEqual(viewModel.errorMessage, "")
     }
 
     func testXiaomaoFailureKeepsUserMessageAndIndependentRetryAppendsOnlyXiaomao() async {
@@ -319,10 +377,27 @@ final class ChatViewModelTests: XCTestCase {
 
     func testMismatchedSendResponseInvalidatesSessionButKeepsDraftAndHistory() async {
         let history = [serverMessage(id: "history", role: .assistant, content: "合成历史")]
+        let turnID = "mismatched-turn"
+        let user = serverMessage(
+            id: "u",
+            role: .user,
+            content: "合成发送",
+            participant: .user,
+            turnID: turnID
+        )
         let mismatched = ChatSendResult(
             sessionID: "other-server-session",
-            userMessage: serverMessage(id: "u", role: .user, content: "合成发送"),
-            assistantMessage: serverMessage(id: "a", role: .assistant, content: "合成回复"),
+            turnID: turnID,
+            messages: [user],
+            participantResults: [
+                ChatParticipantResult(
+                    participant: .developer,
+                    turnID: turnID,
+                    status: .pending,
+                    retryable: false,
+                    message: nil
+                )
+            ],
             route: "direct",
             degraded: false,
             persisted: true
@@ -435,10 +510,41 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testDegradedResponseUpdatesState() async {
+        let turnID = "degraded-turn"
+        let user = serverMessage(
+            id: "u",
+            role: .user,
+            content: "合成发送",
+            participant: .user,
+            turnID: turnID
+        )
+        let xiaomao = serverMessage(
+            id: "a",
+            role: .assistant,
+            content: "安全降级回复",
+            participant: .xiaomao,
+            turnID: turnID
+        )
         let degraded = ChatSendResult(
             sessionID: "server-session",
-            userMessage: serverMessage(id: "u", role: .user, content: "合成发送"),
-            assistantMessage: serverMessage(id: "a", role: .assistant, content: "安全降级回复"),
+            turnID: turnID,
+            messages: [user, xiaomao],
+            participantResults: [
+                ChatParticipantResult(
+                    participant: .developer,
+                    turnID: turnID,
+                    status: .pending,
+                    retryable: false,
+                    message: nil
+                ),
+                ChatParticipantResult(
+                    participant: .xiaomao,
+                    turnID: turnID,
+                    status: .completed,
+                    retryable: false,
+                    message: xiaomao
+                )
+            ],
             route: "fallback",
             degraded: true,
             persisted: true

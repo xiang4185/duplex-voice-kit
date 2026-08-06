@@ -107,6 +107,34 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func refreshHistorySilently() async {
+        guard hasLoadedHistory,
+              !isBusy,
+              let currentSessionID = sessionID,
+              let service else { return }
+        do {
+            let result = try await service.loadHistory()
+            guard result.sessionID == currentSessionID else {
+                throw ChatStateError.sessionMismatch
+            }
+            guard result.messages != messages else { return }
+            messages = result.messages
+            let completedXiaomaoTurns = Set(
+                result.messages
+                    .filter { $0.participant == .xiaomao && $0.status == .completed }
+                    .map(\.turnID)
+            )
+            failedXiaomaoTurns.subtract(completedXiaomaoTurns)
+            requiresReconfiguration = false
+        } catch {
+            if Self.isSessionInvalidatingError(error) {
+                invalidateSession()
+                errorMessage = Self.userFacingMessage(for: error, action: "刷新聊天记录")
+                requiresReconfiguration = Self.requiresReconfiguration(for: error)
+            }
+        }
+    }
+
     func send() async {
         let text = normalizedDraft
         guard !text.isEmpty else { return }
