@@ -120,6 +120,14 @@ private actor ContractBackend: BackendAdapter {
                     content: "synthetic-xiaomao"
                 ))
             }
+            let xiaomaoMessage: Any = includesXiaomao
+                ? Self.message(
+                    id: "send-xiaomao",
+                    participant: "xiaomao",
+                    turnID: "send-turn",
+                    content: "synthetic-xiaomao"
+                )
+                : NSNull()
             payload = try JSONSerialization.data(withJSONObject: [
                 "session_id": "synthetic-session",
                 "turn_id": "send-turn",
@@ -137,12 +145,7 @@ private actor ContractBackend: BackendAdapter {
                         "turn_id": "send-turn",
                         "status": includesXiaomao ? "completed" : "skipped",
                         "retryable": false,
-                        "message": includesXiaomao ? Self.message(
-                            id: "send-xiaomao",
-                            participant: "xiaomao",
-                            turnID: "send-turn",
-                            content: "synthetic-xiaomao"
-                        ) : NSNull()
+                        "message": xiaomaoMessage
                     ]
                 ],
                 "route": includesXiaomao ? "direct" : "human",
