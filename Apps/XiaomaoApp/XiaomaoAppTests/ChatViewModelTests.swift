@@ -164,7 +164,6 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSendUsesCurrentSessionAndGeneratedRequestIDAndOnlyAddsServerMessages() async {
-        let user = serverMessage(id: "opaque-user", role: .user, content: "合成发送")
         let turnID = "opaque-turn"
         let user = serverMessage(
             id: "opaque-user",
