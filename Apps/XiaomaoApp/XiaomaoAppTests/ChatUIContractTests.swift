@@ -94,10 +94,10 @@ final class ChatUIContractTests: XCTestCase {
     func testSendDismissesKeyboardBeforeAsyncRequestAndNeverRestoresFocus() throws {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
         let sendRange = try XCTUnwrap(chat.range(of: "send:"))
-        let clearRange = try XCTUnwrap(
-            chat.range(of: "clear:", range: sendRange.upperBound..<chat.endIndex)
+        let focusBindingRange = try XCTUnwrap(
+            chat.range(of: "inputFocused:", range: sendRange.upperBound..<chat.endIndex)
         )
-        let sendBlock = String(chat[sendRange.lowerBound..<clearRange.lowerBound])
+        let sendBlock = String(chat[sendRange.lowerBound..<focusBindingRange.lowerBound])
 
         let dismiss = try XCTUnwrap(sendBlock.range(of: "inputFocused = false"))
         let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send()"))

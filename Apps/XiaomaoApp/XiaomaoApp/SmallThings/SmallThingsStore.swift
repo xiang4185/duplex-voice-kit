@@ -60,6 +60,7 @@ final class SmallThingsStore: ObservableObject {
         entries
             .filter {
                 $0.type == .expense
+                    && $0.requester == .partner
                     && $0.reviewer == .me
                     && $0.expenseStatus == .pending
             }
@@ -289,6 +290,9 @@ final class SmallThingsStore: ObservableObject {
         }
         guard status != .pending,
               let entry = entry(id: entryID),
+              entry.requester == .partner,
+              entry.reviewer == .me,
+              entry.expenseStatus == .pending,
               let serverID = entry.serverID else { return false }
         isLoading = true
         operationError = nil
@@ -432,6 +436,7 @@ final class SmallThingsStore: ObservableObject {
             SmallThingEntry(
                 type: .expense,
                 requester: .me,
+                reviewer: .partner,
                 title: cleanPurpose,
                 body: note.trimmingCharacters(in: .whitespacesAndNewlines),
                 amount: amount,
@@ -487,6 +492,7 @@ final class SmallThingsStore: ObservableObject {
         guard status != .pending,
               let index = entries.firstIndex(where: { $0.id == entryID }),
               entries[index].requester == .partner,
+              entries[index].reviewer == .me,
               entries[index].expenseStatus == .pending else {
             return false
         }
@@ -667,6 +673,7 @@ final class SmallThingsStore: ObservableObject {
                 createdAt: now.addingTimeInterval(-60),
                 type: .expense,
                 requester: .partner,
+                reviewer: .me,
                 title: "奶茶",
                 body: "同款第二杯半价",
                 amount: 12,

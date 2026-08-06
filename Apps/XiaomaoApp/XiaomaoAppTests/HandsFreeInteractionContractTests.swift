@@ -102,7 +102,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
         let diagnostics = try source("XiaomaoApp/Voice/VoiceDiagnostics.swift")
 
-        XCTAssertTrue(controller.contains("async let audioPrepared = prepareAudio()"))
+        XCTAssertTrue(controller.contains("guard await authorizeMicrophone() else"))
+        XCTAssertTrue(controller.contains("async let audioPrepared = activateAudioSession()"))
         XCTAssertTrue(controller.contains("async let socketConnected = connectSocketForNewSession()"))
         XCTAssertTrue(controller.contains("captureCallbackCount > 0"))
         XCTAssertTrue(controller.contains("isConversationReady"))
