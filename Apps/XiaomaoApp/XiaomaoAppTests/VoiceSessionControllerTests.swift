@@ -762,7 +762,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         await fixture.socket.simulateDisconnect(abnormal)
         await fixture.socket.waitForConnectCount(2)
         await fixture.socket.waitForSentEvent(.sessionResume)
-        await waitUntil {
+        await waitUntil(timeout: .seconds(1)) {
             fixture.controller.state == .ready
                 && !fixture.controller.hasReconnectTaskForTesting
                 && fixture.controller.isRecording

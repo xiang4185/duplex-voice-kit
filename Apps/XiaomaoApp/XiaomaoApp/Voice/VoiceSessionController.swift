@@ -333,7 +333,11 @@ final class VoiceSessionController: ObservableObject {
         state = .connecting
         expectedReadyEvent = .sessionReady
         lastReadyEvent = nil
-        async let audioPrepared = prepareAudio()
+        guard await authorizeMicrophone() else {
+            networkMonitor.stop()
+            return
+        }
+        async let audioPrepared = activateAudioSession()
         async let socketConnected = connectSocketForNewSession()
         let (audioReady, connected) = await (audioPrepared, socketConnected)
         guard audioReady, connected else {
@@ -537,7 +541,7 @@ final class VoiceSessionController: ObservableObject {
         VoiceLog.lifecycle.info("new_call_created")
     }
 
-    private func prepareAudio() async -> Bool {
+    private func authorizeMicrophone() async -> Bool {
         microphonePermission = audioSession.permissionState
         if microphonePermission == .notDetermined {
             microphonePermission = await audioSession.requestPermission() ? .granted : .denied
@@ -550,6 +554,10 @@ final class VoiceSessionController: ObservableObject {
             VoiceLog.audio.error("microphone_permission_denied")
             return false
         }
+        return true
+    }
+
+    private func activateAudioSession() -> Bool {
         do {
             try audioSession.activate()
             audioSession.refreshRoute()
