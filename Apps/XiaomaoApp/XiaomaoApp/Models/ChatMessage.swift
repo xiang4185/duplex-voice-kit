@@ -1,77 +1,87 @@
 import Foundation
 
-struct ChatMessage: Identifiable, Equatable, Sendable, Decodable {
-    enum Role: String, Equatable, Sendable, Decodable {
+enum ChatParticipant: String, Codable, CaseIterable, Equatable, Sendable {
+    case user
+    case companion
+    case xiaomao
+
+    var displayName: String {
+        switch self {
+        case .user: "你"
+        case .companion: "我"
+        case .xiaomao: "小猫"
+        }
+    }
+}
+
+enum ChatMessageStatus: String, Codable, Equatable, Sendable {
+    case sending
+    case completed
+    case failed
+    case skipped
+}
+
+enum XiaomaoParticipationMode: String, Codable, CaseIterable, Hashable, Sendable {
+    case off
+    case auto
+    case always
+
+    var title: String {
+        switch self {
+        case .off: "小猫关闭"
+        case .auto: "提到小猫时参与"
+        case .always: "小猫每轮参与"
+        }
+    }
+
+    var footerTitle: String {
+        switch self {
+        case .off: "小猫当前安静旁听"
+        case .auto: "提到小猫时，她会加入对话"
+        case .always: "小猫会在每一轮接话"
+        }
+    }
+}
+
+struct ChatMessage: Identifiable, Codable, Equatable, Sendable {
+    enum Role: String, Codable, Equatable, Sendable {
         case user
         case assistant
     }
 
     let id: String
     let role: Role
+    let participant: ChatParticipant
+    let turnID: String
+    let status: ChatMessageStatus
     let content: String
     let createdAt: Date
 
-    enum Participant: Equatable, Sendable {
-        case user
-        case xiaomao
-        case companion
-    }
-
-    var participant: Participant {
-        guard role == .assistant else { return .user }
-        return id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }.isMultiple(of: 2)
-            ? .xiaomao : .companion
-    }
-
-    var senderName: String {
-        switch participant {
-        case .user: return "你"
-        case .xiaomao: return "小猫"
-        case .companion: return "伙伴"
-        }
-    }
-
-    var text: String { content }
-
-    init(id: String, role: Role, content: String, createdAt: Date) {
+    init(
+        id: String,
+        role: Role,
+        content: String,
+        createdAt: Date,
+        participant: ChatParticipant? = nil,
+        turnID: String? = nil,
+        status: ChatMessageStatus = .completed
+    ) {
         self.id = id
         self.role = role
+        self.participant = participant ?? (role == .user ? .user : .companion)
+        self.turnID = turnID ?? id
+        self.status = status
         self.content = content
         self.createdAt = createdAt
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case role
-        case content
-        case createdAt = "created_at"
-    }
+    var isUser: Bool { participant == .user }
+}
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        role = try container.decode(Role.self, forKey: .role)
-        content = try container.decode(String.self, forKey: .content)
-        let timestamp = try container.decode(String.self, forKey: .createdAt)
-        guard let parsedDate = Self.parseUTCISO8601(timestamp) else {
-            throw DecodingError.dataCorruptedError(
-                forKey: .createdAt,
-                in: container,
-                debugDescription: "created_at must be an ISO 8601 UTC timestamp"
-            )
-        }
-        createdAt = parsedDate
-    }
-
-    private static func parseUTCISO8601(_ value: String) -> Date? {
-        let standard = ISO8601DateFormatter()
-        standard.formatOptions = [.withInternetDateTime]
-        if let date = standard.date(from: value) {
-            return date
-        }
-
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: value)
-    }
+struct ChatParticipantResult: Codable, Equatable, Sendable {
+    let participant: ChatParticipant
+    let turnID: String
+    let status: ChatMessageStatus
+    let retryable: Bool
+    let message: ChatMessage?
 }

@@ -639,9 +639,47 @@ private actor RecordingBackendAdapter: BackendAdapter {
         let data = Data(#"""
         {
             "session_id":"session",
-            "reply":"synthetic",
+            "turn_id":"synthetic-turn",
+            "messages":[
+                {
+                    "id":"synthetic-user",
+                    "role":"user",
+                    "participant":"user",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "content":"synthetic",
+                    "created_at":"2026-08-06T00:00:00Z"
+                },
+                {
+                    "id":"synthetic-companion",
+                    "role":"assistant",
+                    "participant":"companion",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "content":"synthetic",
+                    "created_at":"2026-08-06T00:00:01Z"
+                }
+            ],
+            "participant_results":[
+                {
+                    "participant":"companion",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "retryable":false,
+                    "message":{
+                        "id":"synthetic-companion",
+                        "role":"assistant",
+                        "participant":"companion",
+                        "turn_id":"synthetic-turn",
+                        "status":"completed",
+                        "content":"synthetic",
+                        "created_at":"2026-08-06T00:00:01Z"
+                    }
+                }
+            ],
             "route":"direct",
-            "degraded":false
+            "degraded":false,
+            "persisted":true
         }
         """#.utf8)
         return BackendAdapterResponse(statusCode: 200, payload: data)

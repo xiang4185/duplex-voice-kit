@@ -12,15 +12,25 @@ final class SmallThingsStore: ObservableObject {
     @Published private(set) var bindingState: SmallThingBindingState
     @Published private(set) var bindingFeedback: SmallThingBindingFeedback = .idle
     @Published private(set) var lastUndo: SmallThingApprovalUndo?
+    @Published private(set) var generatedBindingCode: String?
+    @Published private(set) var isLoading = false
+    @Published private(set) var operationError: String?
     @Published var validationMessage: String?
+
+    private let service: (any SmallThingsServicing)?
+    private var remoteReviewReceipt: SmallThingsReviewReceipt?
 
     init(
         entries: [SmallThingEntry]? = nil,
-        bindingState: SmallThingBindingState = .unbound
+        bindingState: SmallThingBindingState = .unbound,
+        service: (any SmallThingsServicing)? = nil
     ) {
-        self.entries = entries ?? Self.mockEntries()
+        self.service = service
+        self.entries = entries ?? (service == nil ? Self.mockEntries() : [])
         self.bindingState = bindingState
     }
+
+    var isProduction: Bool { service != nil }
 
     var isDemoBound: Bool {
         bindingState == .bound
@@ -66,12 +76,260 @@ final class SmallThingsStore: ObservableObject {
 
     func clearValidation() {
         validationMessage = nil
+        operationError = nil
     }
 
     func resetBindingFeedback() {
         guard bindingState == .unbound else { return }
         bindingFeedback = .idle
         validationMessage = nil
+    }
+
+    func refreshFromBackend() async {
+        guard let service, !isLoading else { return }
+        isLoading = true
+        operationError = nil
+        defer { isLoading = false }
+        do {
+            let state = try await service.loadState()
+            bindingState = state.bindingState
+            entries = state.entries
+            await hydrateRemoteImages(using: service)
+        } catch {
+            operationError = Self.userFacingMessage(for: error)
+        }
+    }
+
+    @discardableResult
+    func addNotePersisted(title: String, body: String, imageData: Data?) async -> Bool {
+        guard let service else { return addNote(title: title, body: body, imageData: imageData) }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty || !cleanBody.isEmpty else {
+            validationMessage = "标题或正文至少填写一项"
+            return false
+        }
+        return await performRemoteWrite {
+            try await service.createNote(
+                title: cleanTitle,
+                body: cleanBody,
+                imageData: imageData,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+    }
+
+    @discardableResult
+    func addExpensePersisted(
+        purpose: String,
+        amountText: String,
+        note: String
+    ) async -> Bool {
+        guard let service else {
+            return addExpense(purpose: purpose, amountText: amountText, note: note)
+        }
+        let cleanPurpose = purpose.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPurpose.isEmpty else {
+            validationMessage = "请填写用途"
+            return false
+        }
+        guard let amount = Self.validAmount(from: amountText) else {
+            validationMessage = "金额需大于 0，并最多保留两位小数"
+            return false
+        }
+        guard amount <= remainingAmount else {
+            validationMessage = "金额不能超过当前可用金额"
+            return false
+        }
+        return await performRemoteWrite {
+            try await service.createExpense(
+                purpose: cleanPurpose,
+                amountCents: Int((amount * 100).rounded()),
+                note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+    }
+
+    func toggleReactionPersisted(entryID: UUID) async {
+        guard let service else {
+            toggleReaction(entryID: entryID)
+            return
+        }
+        guard let serverID = entry(id: entryID)?.serverID else { return }
+        _ = await performRemoteWrite {
+            try await service.toggleReaction(
+                entryID: serverID,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+    }
+
+    @discardableResult
+    func addCommentPersisted(entryID: UUID, text: String) async -> Bool {
+        guard let service else { return addComment(entryID: entryID, text: text) }
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty,
+              let serverID = entry(id: entryID)?.serverID else { return false }
+        return await performRemoteWrite {
+            try await service.createComment(
+                entryID: serverID,
+                text: clean,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+    }
+
+    @discardableResult
+    func addReplyPersisted(
+        entryID: UUID,
+        commentID: UUID,
+        replyToID: UUID,
+        replyTo: SmallThingRequester,
+        text: String
+    ) async -> Bool {
+        guard let service else {
+            return addReply(
+                entryID: entryID,
+                commentID: commentID,
+                replyTo: replyTo,
+                text: text
+            )
+        }
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty,
+              let entry = entry(id: entryID),
+              let entryServerID = entry.serverID,
+              let comment = entry.comments.first(where: { $0.id == commentID }),
+              let commentServerID = comment.serverID else { return false }
+        let targetServerID: String?
+        if replyToID == commentID {
+            targetServerID = commentServerID
+        } else {
+            targetServerID = comment.replies.first(where: { $0.id == replyToID })?.serverID
+        }
+        guard let targetServerID else { return false }
+        return await performRemoteWrite {
+            try await service.createReply(
+                entryID: entryServerID,
+                commentID: commentServerID,
+                replyToID: targetServerID,
+                text: clean,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+    }
+
+    @discardableResult
+    func reviewPersisted(
+        entryID: UUID,
+        status: SmallThingExpenseStatus,
+        message: String
+    ) async -> Bool {
+        guard let service else {
+            return review(entryID: entryID, status: status, message: message)
+        }
+        guard status != .pending,
+              let entry = entry(id: entryID),
+              let serverID = entry.serverID else { return false }
+        isLoading = true
+        operationError = nil
+        defer { isLoading = false }
+        do {
+            let requestID = UUID().uuidString.lowercased()
+            remoteReviewReceipt = try await service.review(
+                entryID: serverID,
+                status: status,
+                message: message.trimmingCharacters(in: .whitespacesAndNewlines),
+                requestID: requestID
+            )
+            lastUndo = SmallThingApprovalUndo(
+                entryID: entryID,
+                previousStatus: .pending,
+                previousMessage: entry.approvalMessage
+            )
+            let state = try await service.loadState()
+            bindingState = state.bindingState
+            entries = state.entries
+            await hydrateRemoteImages(using: service)
+            return true
+        } catch {
+            operationError = Self.userFacingMessage(for: error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func undoLastReviewPersisted() async -> Bool {
+        guard let service else { return undoLastReview() }
+        guard let receipt = remoteReviewReceipt else { return false }
+        let success = await performRemoteWrite {
+            try await service.undo(
+                receipt,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+        if success {
+            remoteReviewReceipt = nil
+            lastUndo = nil
+        }
+        return success
+    }
+
+    @discardableResult
+    func createBindingCodePersisted() async -> Bool {
+        guard let service else {
+            generatedBindingCode = Self.localBindingCode
+            return true
+        }
+        isLoading = true
+        operationError = nil
+        defer { isLoading = false }
+        do {
+            generatedBindingCode = try await service.createBindingCode(
+                requestID: UUID().uuidString.lowercased()
+            )
+            bindingFeedback = .idle
+            return true
+        } catch {
+            operationError = Self.userFacingMessage(for: error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func bindPersisted(code: String) async -> Bool {
+        guard let service else { return bindDemo(code: code) }
+        let clean = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard clean.count == 6, clean.allSatisfy(\.isNumber) else {
+            validationMessage = "请输入六位数字"
+            return false
+        }
+        let success = await performRemoteWrite {
+            try await service.acceptBindingCode(
+                clean,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+        if success {
+            bindingFeedback = .success
+            generatedBindingCode = nil
+        }
+        return success
+    }
+
+    func unbindPersisted() async {
+        guard let service else {
+            unbindDemo()
+            return
+        }
+        let success = await performRemoteWrite {
+            try await service.unbind(requestID: UUID().uuidString.lowercased())
+        }
+        if success {
+            generatedBindingCode = nil
+            bindingFeedback = .idle
+        }
     }
 
     @discardableResult
@@ -199,6 +457,7 @@ final class SmallThingsStore: ObservableObject {
 
     func discardUndo() {
         lastUndo = nil
+        remoteReviewReceipt = nil
     }
 
     @discardableResult
@@ -236,6 +495,73 @@ final class SmallThingsStore: ObservableObject {
         bindingState = .unbound
         bindingFeedback = .idle
         validationMessage = nil
+    }
+
+    private func performRemoteWrite(
+        _ operation: () async throws -> Void
+    ) async -> Bool {
+        guard let service else { return false }
+        isLoading = true
+        operationError = nil
+        validationMessage = nil
+        defer { isLoading = false }
+        do {
+            try await operation()
+            let state = try await service.loadState()
+            bindingState = state.bindingState
+            entries = state.entries
+            await hydrateRemoteImages(using: service)
+            return true
+        } catch {
+            operationError = Self.userFacingMessage(for: error)
+            validationMessage = operationError
+            return false
+        }
+    }
+
+    private func hydrateRemoteImages(using service: any SmallThingsServicing) async {
+        for index in entries.indices {
+            guard let mediaID = entries[index].imageMediaID else { continue }
+            if let data = try? await service.loadMedia(mediaID: mediaID),
+               entries.indices.contains(index),
+               entries[index].imageMediaID == mediaID {
+                entries[index].imageData = data
+            }
+        }
+    }
+
+    private static func userFacingMessage(for error: Error) -> String {
+        guard let appError = error as? AppError else {
+            return "操作失败，请稍后重试。"
+        }
+        switch appError {
+        case .unauthorized:
+            return "授权已失效，请重新配置连接。"
+        case .networkUnavailable:
+            return "网络不可用，请检查连接后重试。"
+        case .configuration:
+            return "小事服务配置不可用。"
+        case let .server(code):
+            switch code {
+            case "not_bound": return "请先完成关系绑定。"
+            case "ledger_limit_exceeded": return "金额超过当前可用额度。"
+            case "invalid_code", "expired_code", "code_already_used":
+                return "绑定码无效或已过期。"
+            case "already_bound": return "当前已经处于绑定状态。"
+            case "media_too_large": return "图片过大，请选择较小的图片。"
+            case "unsupported_media_type", "media_type_mismatch", "invalid_media_dimensions":
+                return "图片格式不受支持。"
+            default:
+                if code.hasPrefix("http_") {
+                    return "服务器返回异常状态（\(code.replacingOccurrences(of: "http_", with: "HTTP "))）。"
+                }
+                return "服务器拒绝了本次操作。"
+            }
+        case .protocolError:
+            return "服务端数据格式异常，请稍后重试。"
+        case .audio:
+            return "操作失败，请稍后重试。"
+        }
     }
 
     static func validAmount(from text: String) -> Double? {

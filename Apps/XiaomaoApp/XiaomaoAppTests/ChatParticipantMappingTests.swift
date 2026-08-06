@@ -11,17 +11,40 @@ final class ChatParticipantMappingTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 0)
         )
         XCTAssertEqual(message.participant, .user)
-        XCTAssertEqual(message.senderName, "你")
+        XCTAssertEqual(message.participant.displayName, "你")
     }
 
-    func testAssistantParticipantMappingIsStableAcrossReads() {
-        let message = ChatMessage(
-            id: "assistant-message",
+    func testAssistantDefaultsToCompanionWithoutIDGuessing() {
+        let first = ChatMessage(
+            id: "assistant-message-1",
             role: .assistant,
             content: "synthetic",
             createdAt: Date(timeIntervalSince1970: 0)
         )
-        XCTAssertEqual(message.participant, message.participant)
-        XCTAssertTrue(["小猫", "伙伴"].contains(message.senderName))
+        let second = ChatMessage(
+            id: "assistant-message-2",
+            role: .assistant,
+            content: "synthetic",
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertEqual(first.participant, .companion)
+        XCTAssertEqual(second.participant, .companion)
+        XCTAssertEqual(first.participant.displayName, "我")
+    }
+
+    func testServerProvidedXiaomaoIdentityIsPreserved() {
+        let message = ChatMessage(
+            id: "opaque-message",
+            role: .assistant,
+            content: "synthetic",
+            createdAt: Date(timeIntervalSince1970: 0),
+            participant: .xiaomao,
+            turnID: "opaque-turn",
+            status: .completed
+        )
+        XCTAssertEqual(message.participant, .xiaomao)
+        XCTAssertEqual(message.participant.displayName, "小猫")
+        XCTAssertEqual(message.turnID, "opaque-turn")
+        XCTAssertEqual(message.status, .completed)
     }
 }

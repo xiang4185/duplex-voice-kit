@@ -104,7 +104,12 @@ private struct RootView: View {
                 MainTabView(
                     environment: coordinator.environment,
                     startCall: { requestCall() },
-                    chatService: coordinator.chatService
+                    chatService: coordinator.chatService,
+                    smallThingsStore: coordinator.smallThingsStore,
+                    onReconfigure: {
+                        activeCall = false
+                        coordinator.screen = .binding
+                    }
                 )
                 .fullScreenCover(isPresented: $activeCall) {
                     VoiceCallView(

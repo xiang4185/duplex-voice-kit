@@ -18,6 +18,13 @@ struct SmallThingsBindingView: View {
                     partnerCodeCard
                 }
 
+                if let error = store.operationError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(Theme.footnoteFont)
+                        .foregroundStyle(Theme.danger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 privacyNote
             }
             .padding(Theme.Spacing.medium)
@@ -28,9 +35,12 @@ struct SmallThingsBindingView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .sensoryFeedback(.impact(weight: .light), trigger: feedbackTrigger)
-        .onDisappear {
-            store.clearValidation()
-        }
+        .onDisappear { store.clearValidation() }
+    }
+
+    private var localCode: String? {
+        store.generatedBindingCode
+            ?? (store.isProduction ? nil : SmallThingsStore.localBindingCode)
     }
 
     private var localCodeCard: some View {
@@ -40,33 +50,58 @@ struct SmallThingsBindingView: View {
                 .foregroundStyle(Theme.primary)
 
             VStack(spacing: Theme.Spacing.xSmall) {
-                Text("我的通用 Mock 绑定码")
+                Text(store.isProduction ? "我的绑定码" : "离线 Mock 绑定码")
                     .font(Theme.headlineFont)
                     .foregroundStyle(Theme.textPrimary)
-                Text(Self.spacedCode(SmallThingsStore.localBindingCode))
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.75)
-                    .accessibilityLabel("绑定码 \(SmallThingsStore.localBindingCode)")
-            }
 
-            Text("把这个码给对方。本页面只演示离线 UI，不会生成真实邀请关系。")
-                .font(Theme.footnoteFont)
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Spacing.small) {
-                    copyButton
-                    shareButton
-                }
-                VStack(spacing: Theme.Spacing.xSmall) {
-                    copyButton
-                    shareButton
+                if let localCode {
+                    Text(Self.spacedCode(localCode))
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.75)
+                        .accessibilityLabel("绑定码 \(localCode)")
+                } else {
+                    Text("生成后可复制或分享")
+                        .font(Theme.bodyFont)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
+
+            Text(
+                store.isProduction
+                    ? "生成一次性绑定码并交给对方。绑定成功后，双方可共同记录和审批小事。"
+                    : "离线 Mock 只复现绑定交互，不连接生产服务。"
+            )
+            .font(Theme.footnoteFont)
+            .foregroundStyle(Theme.textSecondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if localCode != nil {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Spacing.small) {
+                        copyButton
+                        shareButton
+                    }
+                    VStack(spacing: Theme.Spacing.xSmall) {
+                        copyButton
+                        shareButton
+                    }
+                }
+            }
+
+            Button(store.generatedBindingCode == nil ? "生成绑定码" : "重新生成绑定码") {
+                Task {
+                    copied = false
+                    if await store.createBindingCodePersisted() {
+                        feedbackTrigger += 1
+                    }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.primary)
+            .disabled(store.isLoading)
         }
         .padding(Theme.Spacing.large)
         .background(Theme.surfaceWarm)
@@ -80,7 +115,8 @@ struct SmallThingsBindingView: View {
 
     private var copyButton: some View {
         Button {
-            UIPasteboard.general.string = SmallThingsStore.localBindingCode
+            guard let localCode else { return }
+            UIPasteboard.general.string = localCode
             copied = true
             feedbackTrigger += 1
         } label: {
@@ -92,14 +128,17 @@ struct SmallThingsBindingView: View {
         .accessibilityLabel(copied ? "绑定码已复制" : "复制绑定码")
     }
 
+    @ViewBuilder
     private var shareButton: some View {
-        ShareLink(item: "小猫小事演示绑定码：\(SmallThingsStore.localBindingCode)") {
-            Label("系统分享", systemImage: "square.and.arrow.up")
-                .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
+        if let localCode {
+            ShareLink(item: "小猫小事绑定码：\(localCode)") {
+                Label("系统分享", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.primary)
+            .accessibilityLabel("分享绑定码")
         }
-        .buttonStyle(.bordered)
-        .tint(Theme.primary)
-        .accessibilityLabel("分享 Mock 绑定码")
     }
 
     private var partnerCodeCard: some View {
@@ -131,9 +170,7 @@ struct SmallThingsBindingView: View {
                     }
                     .onChange(of: code) { _, newValue in
                         let digits = String(newValue.filter(\.isNumber).prefix(6))
-                        if digits != newValue {
-                            code = digits
-                        }
+                        if digits != newValue { code = digits }
                         store.resetBindingFeedback()
                     }
                     .accessibilityIdentifier("smallThings.binding.codeInput")
@@ -154,16 +191,19 @@ struct SmallThingsBindingView: View {
                 }
             }
 
-            Button("提交演示绑定") {
+            Button(store.isProduction ? "提交绑定" : "提交离线绑定") {
                 codeFocused = false
-                _ = store.bindDemo(code: code)
-                feedbackTrigger += 1
+                Task {
+                    if await store.bindPersisted(code: code) {
+                        feedbackTrigger += 1
+                    }
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.primary)
             .font(Theme.headlineFont)
             .frame(maxWidth: .infinity, minHeight: 50)
-            .disabled(code.count != 6)
+            .disabled(code.count != 6 || store.isLoading)
             .accessibilityIdentifier("smallThings.binding.submit")
 
             if let message = store.bindingFeedback.message,
@@ -175,13 +215,15 @@ struct SmallThingsBindingView: View {
                     .accessibilityLabel("绑定结果：\(message)")
             }
 
-            Text(
-                "离线复现：\(SmallThingsStore.successfulPartnerCode) 绑定成功；"
-                    + "\(SmallThingsStore.occupiedPartnerCode) 位置已占用；其他六位数字为无效码。"
-            )
-            .font(.caption2)
-            .foregroundStyle(Theme.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
+            if !store.isProduction {
+                Text(
+                    "离线复现：\(SmallThingsStore.successfulPartnerCode) 绑定成功；"
+                        + "\(SmallThingsStore.occupiedPartnerCode) 已占用；其他六位数字为无效码。"
+                )
+                .font(.caption2)
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(Theme.Spacing.medium)
         .background(Theme.surface)
@@ -202,11 +244,15 @@ struct SmallThingsBindingView: View {
                 Text("已经一起记啦")
                     .font(Theme.title2Font)
                     .foregroundStyle(Theme.textPrimary)
-                Text("这是本地 Mock 成功状态，不代表真实账号或设备已经绑定。")
-                    .font(Theme.footnoteFont)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    store.isProduction
+                        ? "当前关系已由服务端确认，小事记录会在双方设备间同步。"
+                        : "这是离线 Mock 绑定状态。"
+                )
+                .font(Theme.footnoteFont)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Label("已绑定", systemImage: "checkmark.seal.fill")
@@ -217,15 +263,18 @@ struct SmallThingsBindingView: View {
                 .background(Theme.success.opacity(0.12), in: Capsule())
 
             Button(role: .destructive) {
-                store.unbindDemo()
-                code = ""
-                copied = false
-                feedbackTrigger += 1
+                Task {
+                    await store.unbindPersisted()
+                    code = ""
+                    copied = false
+                    feedbackTrigger += 1
+                }
             } label: {
-                Label("解除演示绑定", systemImage: "link.badge.minus")
+                Label("解除绑定", systemImage: "link.badge.minus")
                     .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
             }
             .buttonStyle(.bordered)
+            .disabled(store.isLoading)
             .accessibilityIdentifier("smallThings.binding.unbind")
         }
         .padding(Theme.Spacing.large)
@@ -237,13 +286,17 @@ struct SmallThingsBindingView: View {
                 .stroke(Theme.border, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("演示关系已绑定")
+        .accessibilityLabel("关系已绑定")
     }
 
     private var privacyNote: some View {
         Label {
-            Text("不会读取真实账号或设备信息，也不会连接生产服务；所有状态仅存在于当前内存。")
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                store.isProduction
+                    ? "绑定和小事数据仅通过当前设备凭据访问，不会写入公共仓库或构建产物。"
+                    : "离线 Mock 状态仅存在于当前 App 运行期间。"
+            )
+            .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "lock.shield.fill")
         }
@@ -253,10 +306,10 @@ struct SmallThingsBindingView: View {
 
     private var feedbackSymbol: String {
         switch store.bindingFeedback {
-        case .occupied: return "person.crop.circle.badge.exclamationmark"
-        case .invalidCode: return "xmark.circle.fill"
-        case .alreadyBound: return "link.circle.fill"
-        case .idle, .success: return "info.circle.fill"
+        case .occupied: "person.crop.circle.badge.exclamationmark"
+        case .invalidCode: "xmark.circle.fill"
+        case .alreadyBound: "link.circle.fill"
+        case .idle, .success: "info.circle.fill"
         }
     }
 

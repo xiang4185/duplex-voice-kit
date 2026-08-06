@@ -30,7 +30,7 @@ struct SmallThingsLedgerCard: View {
                 Text("52 元小本本")
                     .font(Theme.title3Font)
                     .foregroundStyle(Theme.textPrimary)
-                Text("我和图图一起记的账")
+                Text("我和对方一起记的账")
                     .font(Theme.captionFont)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -146,7 +146,9 @@ struct SmallThingsLedgerCard: View {
     private var bindingButton: some View {
         Button(action: openBinding) {
             Label(
-                store.isDemoBound ? "已演示绑定" : "绑定演示关系",
+                store.isDemoBound
+                    ? (store.isProduction ? "已绑定" : "已离线绑定")
+                    : (store.isProduction ? "绑定关系" : "离线绑定"),
                 systemImage: store.isDemoBound ? "link.circle.fill" : "link.circle"
             )
             .font(Theme.captionFont)

@@ -24,20 +24,87 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
     }
 
-    func testChatServiceUsesAlphaSendOnlyContractAndLocalHistoryClear() async throws {
+    func testChatServiceUsesFormalPersistentChatContract() async throws {
         let captured = CapturedRequests()
         let client = try makeStubbedClient { request in
             captured.append(request)
-            XCTAssertEqual(request.url?.path, "/v1/chat")
-            let data = Data(#"""
-            {
-                "trace_id":"opaque-trace-send",
-                "session_id":"server-session",
-                "reply":"合成回复",
-                "route":"direct",
-                "degraded":false
+            let data: Data
+            switch request.url?.path {
+            case "/v1/chat/history":
+                data = Data(#"""
+                {
+                    "trace_id":"opaque-trace-history",
+                    "session_id":"server-session",
+                    "messages":[]
+                }
+                """#.utf8)
+            case "/v1/chat":
+                data = Data(#"""
+                {
+                    "trace_id":"opaque-trace-send",
+                    "session_id":"server-session",
+                    "turn_id":"opaque-turn",
+                    "messages":[
+                        {
+                            "id":"opaque-user",
+                            "role":"user",
+                            "participant":"user",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "content":"合成发送",
+                            "created_at":"2026-08-06T00:00:00Z"
+                        },
+                        {
+                            "id":"opaque-companion",
+                            "role":"assistant",
+                            "participant":"companion",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "content":"合成回复",
+                            "created_at":"2026-08-06T00:00:01Z"
+                        }
+                    ],
+                    "participant_results":[
+                        {
+                            "participant":"companion",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "retryable":false,
+                            "message":{
+                                "id":"opaque-companion",
+                                "role":"assistant",
+                                "participant":"companion",
+                                "turn_id":"opaque-turn",
+                                "status":"completed",
+                                "content":"合成回复",
+                                "created_at":"2026-08-06T00:00:01Z"
+                            }
+                        },
+                        {
+                            "participant":"xiaomao",
+                            "turn_id":"opaque-turn",
+                            "status":"skipped",
+                            "retryable":false,
+                            "message":null
+                        }
+                    ],
+                    "route":"direct",
+                    "degraded":false,
+                    "persisted":true
+                }
+                """#.utf8)
+            case "/v1/chat/clear":
+                data = Data(#"""
+                {
+                    "trace_id":"opaque-trace-clear",
+                    "session_id":"server-session",
+                    "cleared":true
+                }
+                """#.utf8)
+            default:
+                XCTFail("Unexpected path: \(request.url?.path ?? "nil")")
+                data = Data()
             }
-            """#.utf8)
             return try Self.response(for: request, statusCode: 200, data: data)
         }
         let credentials = KeychainCredentialProviderAdapter(tokenStore: client.tokenStore)
@@ -54,7 +121,8 @@ final class APIClientTests: XCTestCase {
         let sent = try await service.send(
             message: "合成发送",
             sessionID: history.sessionID,
-            requestID: "opaque-send-request"
+            requestID: "opaque-send-request",
+            xiaomaoMode: .off
         )
         let cleared = try await service.clear(
             sessionID: history.sessionID,
@@ -70,7 +138,10 @@ final class APIClientTests: XCTestCase {
         XCTAssertTrue(cleared.cleared)
 
         let requests = captured.values
-        XCTAssertEqual(requests.map { $0.url?.path }, ["/v1/chat"])
+        XCTAssertEqual(
+            requests.map { $0.url?.path },
+            ["/v1/chat/history", "/v1/chat", "/v1/chat/clear"]
+        )
         for request in requests {
             XCTAssertEqual(
                 request.value(forHTTPHeaderField: "Authorization"),
@@ -83,11 +154,20 @@ final class APIClientTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         }
 
-        let sendBody = try jsonBody(try XCTUnwrap(requests.first))
+        let historyBody = try jsonBody(requests[0])
+        XCTAssertEqual(historyBody["device_id"] as? String, "synthetic-device")
+
+        let sendBody = try jsonBody(requests[1])
         XCTAssertEqual(sendBody["device_id"] as? String, "synthetic-device")
         XCTAssertEqual(sendBody["session_id"] as? String, history.sessionID)
         XCTAssertEqual(sendBody["request_id"] as? String, "opaque-send-request")
         XCTAssertEqual(sendBody["message"] as? String, "合成发送")
+        XCTAssertEqual(sendBody["xiaomao_mode"] as? String, "off")
+
+        let clearBody = try jsonBody(requests[2])
+        XCTAssertEqual(clearBody["device_id"] as? String, "synthetic-device")
+        XCTAssertEqual(clearBody["session_id"] as? String, history.sessionID)
+        XCTAssertEqual(clearBody["request_id"] as? String, "opaque-clear-request")
     }
 
     func testNon2xxResponseIsNotDecodedAsSuccess() async throws {

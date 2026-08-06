@@ -20,6 +20,7 @@ actor MockChatService: ChatServicing {
 
     private enum StoredResult: Sendable {
         case send(fingerprint: String, result: ChatSendResult)
+        case retry(fingerprint: String, result: ChatRetryResult)
         case clear(fingerprint: String, result: ChatClearResult)
     }
 
@@ -31,7 +32,7 @@ actor MockChatService: ChatServicing {
 
     init(
         delays: Delays = .demo,
-        sessionID: String = "mock-chat-session-v1",
+        sessionID: String = "mock-chat-session-v2",
         initialMessages: [ChatMessage] = MockChatService.demoHistory,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
@@ -49,11 +50,12 @@ actor MockChatService: ChatServicing {
     func send(
         message: String,
         sessionID: String,
-        requestID: String
+        requestID: String,
+        xiaomaoMode: XiaomaoParticipationMode
     ) async throws -> ChatSendResult {
         try await pause(delays.sendNanoseconds)
         let key = "send:\(requestID)"
-        let fingerprint = Self.fingerprint(sessionID, message)
+        let fingerprint = Self.fingerprint(sessionID, message, xiaomaoMode.rawValue)
         if let stored = storedResults[key] {
             guard case let .send(storedFingerprint, result) = stored,
                   storedFingerprint == fingerprint else {
@@ -66,29 +68,114 @@ actor MockChatService: ChatServicing {
         }
 
         let timestamp = now()
+        let turnID = "mock-turn-\(UUID().uuidString.lowercased())"
         let userMessage = ChatMessage(
             id: "mock-user-\(UUID().uuidString.lowercased())",
             role: .user,
             content: message,
-            createdAt: timestamp
+            createdAt: timestamp,
+            participant: .user,
+            turnID: turnID
         )
-        let assistantMessage = ChatMessage(
-            id: "mock-assistant-\(UUID().uuidString.lowercased())",
+        let companionMessage = ChatMessage(
+            id: "mock-companion-\(UUID().uuidString.lowercased())",
             role: .assistant,
-            content: "这是离线演示回复。消息只保留在本次 App 运行期间。",
-            createdAt: timestamp.addingTimeInterval(0.001)
+            content: "我听见了，我们继续把这件事说完。",
+            createdAt: timestamp.addingTimeInterval(0.001),
+            participant: .companion,
+            turnID: turnID
         )
+        var turnMessages = [userMessage, companionMessage]
+        var participantResults = [
+            ChatParticipantResult(
+                participant: .companion,
+                turnID: turnID,
+                status: .completed,
+                retryable: false,
+                message: companionMessage
+            )
+        ]
+        if shouldIncludeXiaomao(mode: xiaomaoMode, message: message) {
+            let xiaomaoMessage = ChatMessage(
+                id: "mock-xiaomao-\(UUID().uuidString.lowercased())",
+                role: .assistant,
+                content: "小猫也在，先陪你把这一轮接住。",
+                createdAt: timestamp.addingTimeInterval(0.002),
+                participant: .xiaomao,
+                turnID: turnID
+            )
+            turnMessages.append(xiaomaoMessage)
+            participantResults.append(ChatParticipantResult(
+                participant: .xiaomao,
+                turnID: turnID,
+                status: .completed,
+                retryable: false,
+                message: xiaomaoMessage
+            ))
+        } else {
+            participantResults.append(ChatParticipantResult(
+                participant: .xiaomao,
+                turnID: turnID,
+                status: .skipped,
+                retryable: false,
+                message: nil
+            ))
+        }
         let result = ChatSendResult(
             sessionID: self.sessionID,
-            userMessage: userMessage,
-            assistantMessage: assistantMessage,
-            route: "direct",
+            turnID: turnID,
+            messages: turnMessages,
+            participantResults: participantResults,
+            route: "mock",
             degraded: false,
             persisted: true
         )
-        messages.append(userMessage)
-        messages.append(assistantMessage)
+        messages.append(contentsOf: turnMessages)
         storedResults[key] = .send(fingerprint: fingerprint, result: result)
+        return result
+    }
+
+    func retryXiaomao(
+        turnID: String,
+        sessionID: String,
+        requestID: String
+    ) async throws -> ChatRetryResult {
+        try await pause(delays.sendNanoseconds)
+        let key = "retry:\(requestID)"
+        let fingerprint = Self.fingerprint(sessionID, turnID)
+        if let stored = storedResults[key] {
+            guard case let .retry(storedFingerprint, result) = stored,
+                  storedFingerprint == fingerprint else {
+                throw AppError.server("idempotency_conflict")
+            }
+            return result
+        }
+        guard sessionID == self.sessionID,
+              messages.contains(where: { $0.turnID == turnID && $0.participant == .user }) else {
+            throw AppError.server("session_mismatch")
+        }
+        if messages.contains(where: { $0.turnID == turnID && $0.participant == .xiaomao }) {
+            throw AppError.server("participant_already_completed")
+        }
+        let message = ChatMessage(
+            id: "mock-xiaomao-retry-\(UUID().uuidString.lowercased())",
+            role: .assistant,
+            content: "刚才没接上，现在小猫回来啦。",
+            createdAt: now(),
+            participant: .xiaomao,
+            turnID: turnID
+        )
+        messages.append(message)
+        let result = ChatRetryResult(
+            sessionID: sessionID,
+            turnID: turnID,
+            participant: .xiaomao,
+            status: .completed,
+            retryable: false,
+            message: message,
+            persisted: true
+        )
+        storedResults[key] = .retry(fingerprint: fingerprint, result: result)
         return result
     }
 
@@ -118,36 +205,76 @@ actor MockChatService: ChatServicing {
         try await Task.sleep(nanoseconds: nanoseconds)
     }
 
+    private func shouldIncludeXiaomao(
+        mode: XiaomaoParticipationMode,
+        message: String
+    ) -> Bool {
+        switch mode {
+        case .off: false
+        case .always: true
+        case .auto:
+            message.localizedCaseInsensitiveContains("小猫")
+                || message.localizedCaseInsensitiveContains("猫猫")
+                || message.localizedCaseInsensitiveContains("你们俩")
+        }
+    }
+
     private static func fingerprint(_ values: String...) -> String {
         values.joined(separator: "\u{1F}")
     }
 
     static let demoHistory: [ChatMessage] = {
         let base = Date(timeIntervalSince1970: 1_775_000_000)
+        let firstTurn = "mock-history-turn-1"
+        let secondTurn = "mock-history-turn-2"
         return [
-            ChatMessage(
-                id: "mock-history-assistant-1",
-                role: .assistant,
-                content: "这里是离线聊天演示。",
-                createdAt: base
-            ),
             ChatMessage(
                 id: "mock-history-user-1",
                 role: .user,
-                content: "我想试试消息时间流。",
-                createdAt: base.addingTimeInterval(60)
+                content: "今天总算把拖了很久的事情做完了。",
+                createdAt: base,
+                participant: .user,
+                turnID: firstTurn
             ),
             ChatMessage(
-                id: "mock-history-assistant-2",
+                id: "mock-history-companion-1",
                 role: .assistant,
-                content: "可以发送一条短消息，也可以输入稍长的文字查看自动换行。演示内容不会写入本地文件。",
-                createdAt: base.addingTimeInterval(120)
+                content: "那种一直压在心里的东西终于放下来的感觉，应该很轻松。",
+                createdAt: base.addingTimeInterval(1),
+                participant: .companion,
+                turnID: firstTurn
+            ),
+            ChatMessage(
+                id: "mock-history-xiaomao-1",
+                role: .assistant,
+                content: "应该奖励一下。至少可以理直气壮地躺一会儿。",
+                createdAt: base.addingTimeInterval(2),
+                participant: .xiaomao,
+                turnID: firstTurn
             ),
             ChatMessage(
                 id: "mock-history-user-2",
                 role: .user,
-                content: "那就从这里开始。",
-                createdAt: base.addingTimeInterval(180)
+                content: "你们两个今天倒是意见很一致。",
+                createdAt: base.addingTimeInterval(60),
+                participant: .user,
+                turnID: secondTurn
+            ),
+            ChatMessage(
+                id: "mock-history-companion-2",
+                role: .assistant,
+                content: "因为这次确实值得夸你。",
+                createdAt: base.addingTimeInterval(61),
+                participant: .companion,
+                turnID: secondTurn
+            ),
+            ChatMessage(
+                id: "mock-history-xiaomao-2",
+                role: .assistant,
+                content: "我负责监督你别马上又给自己安排下一件事。",
+                createdAt: base.addingTimeInterval(62),
+                participant: .xiaomao,
+                turnID: secondTurn
             )
         ]
     }()

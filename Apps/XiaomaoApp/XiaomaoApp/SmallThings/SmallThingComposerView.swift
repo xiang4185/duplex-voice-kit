@@ -47,7 +47,7 @@ struct SmallThingComposerView: View {
                     }
 
                     Button {
-                        save()
+                        Task { await save() }
                     } label: {
                         Text("保存")
                             .font(Theme.headlineFont)
@@ -68,7 +68,7 @@ struct SmallThingComposerView: View {
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
-                    .disabled(!canSave)
+                    .disabled(!canSave || store.isLoading)
                     .accessibilityIdentifier("smallThings.form.save")
                     .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
                     .id(Field.save)
@@ -243,7 +243,9 @@ struct SmallThingComposerView: View {
         Label {
             Text(
                 type == .note
-                    ? "图片只保存在本次离线演示的内存中，退出 App 后不会持久化。"
+                    ? (store.isProduction
+                        ? "图片会先在本机压缩并移除定位等元数据，再通过鉴权上传保存。"
+                        : "图片只保存在本次离线 Mock 的内存中，退出 App 后不会持久化。")
                     : "保存后会先标记为“等我看”，等待对方在审批页点头或打回。"
             )
             .fixedSize(horizontal: false, vertical: true)
@@ -296,13 +298,21 @@ struct SmallThingComposerView: View {
         }
     }
 
-    private func save() {
+    private func save() async {
         let saved: Bool
         switch type {
         case .note:
-            saved = store.addNote(title: title, body: details, imageData: imageData)
+            saved = await store.addNotePersisted(
+                title: title,
+                body: details,
+                imageData: imageData
+            )
         case .expense:
-            saved = store.addExpense(purpose: title, amountText: amount, note: details)
+            saved = await store.addExpensePersisted(
+                purpose: title,
+                amountText: amount,
+                note: details
+            )
         }
 
         guard saved else {

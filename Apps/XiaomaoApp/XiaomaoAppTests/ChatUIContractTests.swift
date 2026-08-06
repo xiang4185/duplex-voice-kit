@@ -7,7 +7,7 @@ final class ChatUIContractTests: XCTestCase {
         let main = try source("XiaomaoApp/App/MainTabView.swift")
         let companion = try XCTUnwrap(main.range(of: "CompanionHomeView("))
         let chat = try XCTUnwrap(main.range(of: "ChatView("))
-        let smallThings = try XCTUnwrap(main.range(of: "SmallThingsRootView()"))
+        let smallThings = try XCTUnwrap(main.range(of: "SmallThingsRootView(store:"))
         let settings = try XCTUnwrap(main.range(of: "SettingsView("))
 
         XCTAssertLessThan(companion.lowerBound, chat.lowerBound)
@@ -57,6 +57,8 @@ final class ChatUIContractTests: XCTestCase {
             "chat.input",
             "chat.send",
             "chat.clear",
+            "chat.xiaomao.mode",
+            "chat.xiaomao.retry.",
             "chat.message."
         ] {
             XCTAssertTrue(files.contains(identifier), "Missing identifier: \(identifier)")
@@ -77,8 +79,8 @@ final class ChatUIContractTests: XCTestCase {
         let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
 
         XCTAssertTrue(bubble.contains("chat.message.\\(message.id)"))
-        XCTAssertTrue(bubble.contains("Text(message.senderName)"))
-        XCTAssertTrue(bubble.contains("\\(message.senderName)：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("message.participant.displayName"))
+        XCTAssertTrue(bubble.contains("\\(message.participant.displayName)：\\(message.content)"))
         XCTAssertTrue(bubble.contains("message.participant == .xiaomao"))
         XCTAssertTrue(bubble.contains("message.participant == .user"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))

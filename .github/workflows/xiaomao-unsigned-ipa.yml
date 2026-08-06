@@ -167,7 +167,7 @@ jobs:
           BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
           ICON_PRIMARY="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")"
           test "$BUNDLE_IDENTIFIER" = "$BUNDLE_ID"
-          test "$BUILD_NUMBER" = "2"
+          test "$BUILD_NUMBER" = "3"
           test "$ICON_PRIMARY" = "AppIcon"
           ARCHS="$(lipo -archs "$APP_PATH/$EXECUTABLE_NAME")"
           grep -Eq '(^|[[:space:]])arm64($|[[:space:]])' <<< "$ARCHS"

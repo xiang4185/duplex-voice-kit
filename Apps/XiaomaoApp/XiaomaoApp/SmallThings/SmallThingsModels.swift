@@ -1,11 +1,11 @@
 import Foundation
 
-enum SmallThingEntryType: String, Codable, CaseIterable, Hashable {
+enum SmallThingEntryType: String, Codable, CaseIterable, Hashable, Sendable {
     case note
     case expense
 }
 
-enum SmallThingExpenseStatus: String, Codable, CaseIterable, Hashable {
+enum SmallThingExpenseStatus: String, Codable, CaseIterable, Hashable, Sendable {
     case pending
     case approved
     case rejected
@@ -27,21 +27,21 @@ enum SmallThingExpenseStatus: String, Codable, CaseIterable, Hashable {
     }
 }
 
-enum SmallThingRequester: String, Codable, Hashable {
+enum SmallThingRequester: String, Codable, Hashable, Sendable {
     case me
     case partner
 
     var displayName: String {
-        self == .me ? "我" : "图图"
+        self == .me ? "我" : "对方"
     }
 }
 
-enum SmallThingBindingState: Equatable {
+enum SmallThingBindingState: Equatable, Sendable {
     case unbound
     case bound
 }
 
-enum SmallThingBindingFeedback: Equatable {
+enum SmallThingBindingFeedback: Equatable, Sendable {
     case idle
     case success
     case invalidCode
@@ -51,54 +51,61 @@ enum SmallThingBindingFeedback: Equatable {
     var message: String? {
         switch self {
         case .idle: return nil
-        case .success: return "演示绑定成功，双方现在可以一起记小事。"
-        case .invalidCode: return "这个演示码无效，请检查后再试。"
-        case .occupied: return "这个位置已被占用，请换一个演示码。"
-        case .alreadyBound: return "当前已经处于演示绑定状态。"
+        case .success: return "绑定成功，双方现在可以一起记小事。"
+        case .invalidCode: return "这个绑定码无效，请检查后再试。"
+        case .occupied: return "这个绑定码已失效，请重新生成。"
+        case .alreadyBound: return "当前已经处于绑定状态。"
         }
     }
 }
 
-struct SmallThingReply: Identifiable, Equatable {
+struct SmallThingReply: Identifiable, Equatable, Sendable {
     let id: UUID
+    let serverID: String?
     let author: SmallThingRequester
     let text: String
     let replyToAuthor: SmallThingRequester
 
     init(
         id: UUID = UUID(),
+        serverID: String? = nil,
         author: SmallThingRequester,
         text: String,
         replyToAuthor: SmallThingRequester
     ) {
         self.id = id
+        self.serverID = serverID
         self.author = author
         self.text = text
         self.replyToAuthor = replyToAuthor
     }
 }
 
-struct SmallThingComment: Identifiable, Equatable {
+struct SmallThingComment: Identifiable, Equatable, Sendable {
     let id: UUID
+    let serverID: String?
     let author: SmallThingRequester
     let text: String
     var replies: [SmallThingReply]
 
     init(
         id: UUID = UUID(),
+        serverID: String? = nil,
         author: SmallThingRequester,
         text: String,
         replies: [SmallThingReply] = []
     ) {
         self.id = id
+        self.serverID = serverID
         self.author = author
         self.text = text
         self.replies = replies
     }
 }
 
-struct SmallThingEntry: Identifiable, Equatable {
+struct SmallThingEntry: Identifiable, Equatable, Sendable {
     let id: UUID
+    let serverID: String?
     let createdAt: Date
     let type: SmallThingEntryType
     let requester: SmallThingRequester
@@ -110,9 +117,11 @@ struct SmallThingEntry: Identifiable, Equatable {
     var reacted: Bool
     var comments: [SmallThingComment]
     var imageData: Data?
+    var imageMediaID: String?
 
     init(
         id: UUID = UUID(),
+        serverID: String? = nil,
         createdAt: Date = Date(),
         type: SmallThingEntryType,
         requester: SmallThingRequester,
@@ -123,9 +132,11 @@ struct SmallThingEntry: Identifiable, Equatable {
         approvalMessage: String = "",
         reacted: Bool = false,
         comments: [SmallThingComment] = [],
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        imageMediaID: String? = nil
     ) {
         self.id = id
+        self.serverID = serverID
         self.createdAt = createdAt
         self.type = type
         self.requester = requester
@@ -137,6 +148,7 @@ struct SmallThingEntry: Identifiable, Equatable {
         self.reacted = reacted
         self.comments = comments
         self.imageData = imageData
+        self.imageMediaID = imageMediaID
     }
 
     var commentAndReplyCount: Int {
@@ -144,12 +156,23 @@ struct SmallThingEntry: Identifiable, Equatable {
     }
 }
 
-struct SmallThingReplyTarget: Equatable {
+struct SmallThingReplyTarget: Equatable, Sendable {
     let commentID: UUID
+    let targetID: UUID
     let author: SmallThingRequester
+
+    init(
+        commentID: UUID,
+        targetID: UUID? = nil,
+        author: SmallThingRequester
+    ) {
+        self.commentID = commentID
+        self.targetID = targetID ?? commentID
+        self.author = author
+    }
 }
 
-struct SmallThingApprovalUndo: Equatable {
+struct SmallThingApprovalUndo: Equatable, Sendable {
     let entryID: UUID
     let previousStatus: SmallThingExpenseStatus
     let previousMessage: String

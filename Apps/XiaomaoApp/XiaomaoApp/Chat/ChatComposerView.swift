@@ -16,7 +16,7 @@ struct ChatComposerView: View {
                 .overlay(Theme.border)
 
             HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
-                TextField("对小猫说点什么", text: $draft, axis: .vertical)
+                TextField("说点什么", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
                     .focused($inputFocused)
                     .font(Theme.bodyFont)

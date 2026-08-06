@@ -173,7 +173,7 @@ struct SmallThingsApprovalView: View {
 
     private func rejectButton(_ entry: SmallThingEntry) -> some View {
         Button {
-            review(entry, status: .rejected)
+            Task { await review(entry, status: .rejected) }
         } label: {
             Label("再想想", systemImage: "arrow.uturn.backward")
                 .font(Theme.headlineFont)
@@ -181,13 +181,13 @@ struct SmallThingsApprovalView: View {
         }
         .buttonStyle(.bordered)
         .tint(Theme.danger)
-        .disabled(decision != nil)
+        .disabled(decision != nil || store.isLoading)
         .accessibilityIdentifier("smallThings.approval.reject")
     }
 
     private func approveButton(_ entry: SmallThingEntry) -> some View {
         Button {
-            review(entry, status: .approved)
+            Task { await review(entry, status: .approved) }
         } label: {
             Label("点头", systemImage: "checkmark")
                 .font(Theme.headlineFont)
@@ -195,7 +195,7 @@ struct SmallThingsApprovalView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(Theme.primary)
-        .disabled(decision != nil)
+        .disabled(decision != nil || store.isLoading)
         .accessibilityIdentifier("smallThings.approval.approve")
     }
 
@@ -233,7 +233,7 @@ struct SmallThingsApprovalView: View {
             Label(decision.toastText, systemImage: decision.systemImage)
                 .font(Theme.subheadFont.weight(.semibold))
             Button("撤销") {
-                undoReview()
+                Task { await undoReview() }
             }
             .font(Theme.subheadFont.weight(.bold))
             .foregroundStyle(Theme.primarySoft)
@@ -248,9 +248,16 @@ struct SmallThingsApprovalView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func review(_ entry: SmallThingEntry, status: SmallThingExpenseStatus) {
+    private func review(
+        _ entry: SmallThingEntry,
+        status: SmallThingExpenseStatus
+    ) async {
         let previousMessage = entry.approvalMessage
-        guard store.review(entryID: entry.id, status: status, message: approvalMessage) else { return }
+        guard await store.reviewPersisted(
+            entryID: entry.id,
+            status: status,
+            message: approvalMessage
+        ) else { return }
 
         decision = ApprovalDecision(
             entryID: entry.id,
@@ -273,11 +280,11 @@ struct SmallThingsApprovalView: View {
         }
     }
 
-    private func undoReview() {
+    private func undoReview() async {
         guard let decision else { return }
         undoTask?.cancel()
         undoTask = nil
-        guard store.undoLastReview() else { return }
+        guard await store.undoLastReviewPersisted() else { return }
         approvalMessage = decision.previousMessage
         self.decision = nil
         WarmHaptics.action()

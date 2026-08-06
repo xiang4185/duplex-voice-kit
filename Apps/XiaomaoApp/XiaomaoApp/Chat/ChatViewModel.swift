@@ -6,6 +6,7 @@ final class ChatViewModel: ObservableObject {
     static let maximumMessageLength = 200
 
     @Published var draft = ""
+    @Published var xiaomaoMode: XiaomaoParticipationMode = .auto
     @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var sessionID: String?
     @Published private(set) var isLoadingHistory = false
@@ -14,6 +15,8 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var hasLoadedHistory = false
     @Published private(set) var lastReplyWasDegraded = false
     @Published private(set) var requiresReconfiguration = false
+    @Published private(set) var failedXiaomaoTurns: Set<String> = []
+    @Published private(set) var retryingXiaomaoTurnID: String?
     @Published var errorMessage = ""
 
     private let service: (any ChatServicing)?
@@ -35,12 +38,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     var isBusy: Bool {
-        isLoadingHistory || isSending || isClearing
+        isLoadingHistory || isSending || isClearing || retryingXiaomaoTurnID != nil
     }
 
-    var isConfigurationAvailable: Bool {
-        service != nil
-    }
+    var isConfigurationAvailable: Bool { service != nil }
 
     var canRetryHistory: Bool {
         service != nil && !isBusy && !hasLoadedHistory
@@ -59,8 +60,15 @@ final class ChatViewModel: ObservableObject {
         hasLoadedHistory && sessionID != nil && !messages.isEmpty && !isBusy
     }
 
-    var draftCharacterCount: Int {
-        draft.count
+    var draftCharacterCount: Int { draft.count }
+
+    func canRetryXiaomao(turnID: String) -> Bool {
+        failedXiaomaoTurns.contains(turnID)
+            && retryingXiaomaoTurnID == nil
+            && !isSending
+            && !isClearing
+            && hasLoadedHistory
+            && sessionID != nil
     }
 
     func loadHistoryIfNeeded() async {
@@ -87,6 +95,7 @@ final class ChatViewModel: ObservableObject {
             }
             sessionID = result.sessionID
             messages = result.messages
+            failedXiaomaoTurns.removeAll()
             hasLoadedHistory = true
             lastReplyWasDegraded = false
             requiresReconfiguration = false
@@ -111,7 +120,6 @@ final class ChatViewModel: ObservableObject {
         }
         guard !isBusy, let service else { return }
 
-        let requestID = requestIDGenerator()
         isSending = true
         errorMessage = ""
         defer { isSending = false }
@@ -120,7 +128,8 @@ final class ChatViewModel: ObservableObject {
             let result = try await service.send(
                 message: text,
                 sessionID: sessionID,
-                requestID: requestID
+                requestID: requestIDGenerator(),
+                xiaomaoMode: xiaomaoMode
             )
             guard result.sessionID == sessionID else {
                 throw ChatStateError.sessionMismatch
@@ -128,8 +137,15 @@ final class ChatViewModel: ObservableObject {
             guard result.persisted else {
                 throw ChatStateError.notPersisted
             }
-            messages.append(result.userMessage)
-            messages.append(result.assistantMessage)
+            messages.append(contentsOf: result.messages)
+            for participantResult in result.participantResults
+            where participantResult.participant == .xiaomao {
+                if participantResult.status == .failed && participantResult.retryable {
+                    failedXiaomaoTurns.insert(participantResult.turnID)
+                } else {
+                    failedXiaomaoTurns.remove(participantResult.turnID)
+                }
+            }
             draft = ""
             lastReplyWasDegraded = result.degraded
             requiresReconfiguration = false
@@ -142,6 +158,38 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func retryXiaomao(turnID: String) async {
+        guard canRetryXiaomao(turnID: turnID),
+              let sessionID,
+              let service else { return }
+        retryingXiaomaoTurnID = turnID
+        errorMessage = ""
+        defer { retryingXiaomaoTurnID = nil }
+        do {
+            let result = try await service.retryXiaomao(
+                turnID: turnID,
+                sessionID: sessionID,
+                requestID: requestIDGenerator()
+            )
+            guard result.sessionID == sessionID,
+                  result.turnID == turnID,
+                  result.participant == .xiaomao,
+                  result.status == .completed,
+                  result.persisted,
+                  let message = result.message else {
+                throw ChatStateError.sessionMismatch
+            }
+            messages.append(message)
+            failedXiaomaoTurns.remove(turnID)
+        } catch {
+            if Self.isSessionInvalidatingError(error) {
+                invalidateSession()
+            }
+            errorMessage = Self.userFacingMessage(for: error, action: "重试小猫回复")
+            requiresReconfiguration = Self.requiresReconfiguration(for: error)
+        }
+    }
+
     func clear() async {
         guard hasLoadedHistory, let sessionID else {
             errorMessage = "请先加载聊天记录。"
@@ -149,7 +197,6 @@ final class ChatViewModel: ObservableObject {
         }
         guard !isBusy, let service else { return }
 
-        let requestID = requestIDGenerator()
         isClearing = true
         errorMessage = ""
         requiresReconfiguration = false
@@ -158,18 +205,20 @@ final class ChatViewModel: ObservableObject {
         do {
             let result = try await service.clear(
                 sessionID: sessionID,
-                requestID: requestID
+                requestID: requestIDGenerator()
             )
             guard result.sessionID == sessionID, result.cleared else {
                 throw ChatStateError.sessionMismatch
             }
             messages = []
+            failedXiaomaoTurns.removeAll()
             lastReplyWasDegraded = false
         } catch {
             if Self.isSessionInvalidatingError(error) {
                 invalidateSession()
             }
             errorMessage = Self.userFacingMessage(for: error, action: "清空聊天记录")
+            requiresReconfiguration = Self.requiresReconfiguration(for: error)
         }
     }
 
@@ -186,6 +235,7 @@ final class ChatViewModel: ObservableObject {
         sessionID = nil
         hasLoadedHistory = false
         lastReplyWasDegraded = false
+        failedXiaomaoTurns.removeAll()
     }
 
     private static func isSessionInvalidatingError(_ error: Error) -> Bool {
@@ -211,7 +261,7 @@ final class ChatViewModel: ObservableObject {
         if let appError = error as? AppError {
             switch appError {
             case .unauthorized:
-                return "授权已失效，请重新绑定设备。"
+                return "授权已失效，请重新配置连接。"
             case .networkUnavailable:
                 return "网络不可用，请检查连接后重试。"
             case .configuration:
@@ -219,6 +269,9 @@ final class ChatViewModel: ObservableObject {
             case let .server(code):
                 if code == "session_mismatch" || code == "invalid_session_id" {
                     return "聊天会话已失效，请重新加载聊天记录。"
+                }
+                if code == "participant_already_completed" {
+                    return "小猫已经完成这一轮回复。"
                 }
                 if code.hasPrefix("http_") {
                     return "服务器返回异常状态（\(code.replacingOccurrences(of: "http_", with: "HTTP "))）。"

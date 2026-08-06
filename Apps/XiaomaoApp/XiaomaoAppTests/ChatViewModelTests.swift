@@ -5,13 +5,19 @@ import XCTest
 private func serverMessage(
     id: String,
     role: ChatMessage.Role,
-    content: String
+    content: String,
+    participant: ChatParticipant? = nil,
+    turnID: String? = nil,
+    status: ChatMessageStatus = .completed
 ) -> ChatMessage {
     ChatMessage(
         id: id,
         role: role,
         content: content,
-        createdAt: Date(timeIntervalSince1970: 1_775_000_000)
+        createdAt: Date(timeIntervalSince1970: 1_775_000_000),
+        participant: participant,
+        turnID: turnID,
+        status: status
     )
 }
 
@@ -23,10 +29,21 @@ private func loadedHistory() -> Result<ChatHistoryResult, Error> {
 }
 
 private func successfulSend() -> ChatSendResult {
-    ChatSendResult(
+    let turnID = "send-turn"
+    return ChatSendResult(
         sessionID: "server-session",
-        userMessage: serverMessage(id: "send-user", role: .user, content: "合成发送"),
-        assistantMessage: serverMessage(id: "send-assistant", role: .assistant, content: "合成回复"),
+        userMessage: serverMessage(
+            id: "send-user",
+            role: .user,
+            content: "合成发送",
+            turnID: turnID
+        ),
+        assistantMessage: serverMessage(
+            id: "send-assistant",
+            role: .assistant,
+            content: "合成回复",
+            turnID: turnID
+        ),
         route: "direct",
         degraded: false,
         persisted: true
@@ -71,7 +88,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages, authoritative.messages)
         XCTAssertEqual(viewModel.messages.first?.createdAt, timestamp)
         XCTAssertTrue(viewModel.messages.first?.id.hasPrefix("mock-user-") == true)
-        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-assistant-") == true)
+        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-companion-") == true)
     }
 
     func testHistoryFailureDoesNotCreateSessionAndCanRetry() async {
@@ -163,6 +180,108 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages, originalMessages + [user, assistant])
         XCTAssertEqual(viewModel.messages.suffix(2).map(\.id), ["opaque-user", "opaque-assistant"])
         XCTAssertEqual(viewModel.draft, "")
+    }
+
+    func testParticipationModeIsForwardedToService() async {
+        let service = ChatServiceSpy(
+            historyResults: [.success(ChatHistoryResult(
+                sessionID: "server-session",
+                messages: []
+            ))]
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { "mode-request" }
+        )
+        await viewModel.loadHistory()
+        viewModel.xiaomaoMode = .always
+        viewModel.draft = "每轮参与"
+
+        await viewModel.send()
+
+        XCTAssertEqual(service.sendRequests.first?.xiaomaoMode, .always)
+    }
+
+    func testXiaomaoFailureKeepsCompanionAndIndependentRetryAppendsOnlyXiaomao() async {
+        let turnID = "retry-turn"
+        let user = serverMessage(
+            id: "retry-user",
+            role: .user,
+            content: "合成发送",
+            participant: .user,
+            turnID: turnID
+        )
+        let companion = serverMessage(
+            id: "retry-companion",
+            role: .assistant,
+            content: "我已完成",
+            participant: .companion,
+            turnID: turnID
+        )
+        let xiaomao = serverMessage(
+            id: "retry-xiaomao",
+            role: .assistant,
+            content: "小猫重试成功",
+            participant: .xiaomao,
+            turnID: turnID
+        )
+        let sendResult = ChatSendResult(
+            sessionID: "server-session",
+            turnID: turnID,
+            messages: [user, companion],
+            participantResults: [
+                ChatParticipantResult(
+                    participant: .companion,
+                    turnID: turnID,
+                    status: .completed,
+                    retryable: false,
+                    message: companion
+                ),
+                ChatParticipantResult(
+                    participant: .xiaomao,
+                    turnID: turnID,
+                    status: .failed,
+                    retryable: true,
+                    message: nil
+                )
+            ],
+            route: "direct",
+            degraded: false,
+            persisted: true
+        )
+        let retryResult = ChatRetryResult(
+            sessionID: "server-session",
+            turnID: turnID,
+            participant: .xiaomao,
+            status: .completed,
+            retryable: false,
+            message: xiaomao,
+            persisted: true
+        )
+        let service = ChatServiceSpy(
+            historyResults: [.success(ChatHistoryResult(
+                sessionID: "server-session",
+                messages: []
+            ))],
+            sendResult: .success(sendResult),
+            retryResult: .success(retryResult)
+        )
+        let viewModel = ChatViewModel(service: service)
+        await viewModel.loadHistory()
+        viewModel.draft = "合成发送"
+
+        await viewModel.send()
+
+        XCTAssertEqual(viewModel.messages.map(\.participant), [.user, .companion])
+        XCTAssertTrue(viewModel.failedXiaomaoTurns.contains(turnID))
+
+        await viewModel.retryXiaomao(turnID: turnID)
+
+        XCTAssertEqual(
+            viewModel.messages.map(\.participant),
+            [.user, .companion, .xiaomao]
+        )
+        XCTAssertFalse(viewModel.failedXiaomaoTurns.contains(turnID))
     }
 
     func testSendDoesNotOptimisticallyInsertAndConsecutiveTapSendsOnce() async {
@@ -476,6 +595,19 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         let message: String
         let sessionID: String
         let requestID: String
+        let xiaomaoMode: XiaomaoParticipationMode
+
+        init(
+            message: String,
+            sessionID: String,
+            requestID: String,
+            xiaomaoMode: XiaomaoParticipationMode = .auto
+        ) {
+            self.message = message
+            self.sessionID = sessionID
+            self.requestID = requestID
+            self.xiaomaoMode = xiaomaoMode
+        }
     }
 
     struct ClearRequest: Equatable {
@@ -486,6 +618,7 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
     private let lock = NSLock()
     private var historyResults: [Result<ChatHistoryResult, Error>]
     private let sendResult: Result<ChatSendResult, Error>
+    private let retryResult: Result<ChatRetryResult, Error>
     private let clearResult: Result<ChatClearResult, Error>
     private let loadDelayNanoseconds: UInt64
     private let sendDelayNanoseconds: UInt64
@@ -500,6 +633,7 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
     init(
         historyResults: [Result<ChatHistoryResult, Error>] = [],
         sendResult: Result<ChatSendResult, Error> = .success(successfulSend()),
+        retryResult: Result<ChatRetryResult, Error> = .failure(SyntheticError.failed),
         clearResult: Result<ChatClearResult, Error> = .success(
             ChatClearResult(sessionID: "server-session", cleared: true)
         ),
@@ -512,6 +646,7 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
     ) {
         self.historyResults = historyResults
         self.sendResult = sendResult
+        self.retryResult = retryResult
         self.clearResult = clearResult
         self.loadDelayNanoseconds = loadDelayNanoseconds
         self.sendDelayNanoseconds = sendDelayNanoseconds
@@ -551,17 +686,34 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         return try result.get()
     }
 
-    func send(message: String, sessionID: String, requestID: String) async throws -> ChatSendResult {
+    func send(
+        message: String,
+        sessionID: String,
+        requestID: String,
+        xiaomaoMode: XiaomaoParticipationMode
+    ) async throws -> ChatSendResult {
         recordSendRequest(.init(
             message: message,
             sessionID: sessionID,
-            requestID: requestID
+            requestID: requestID,
+            xiaomaoMode: xiaomaoMode
         ))
         onSend?()
         if sendDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: sendDelayNanoseconds)
         }
         return try sendResult.get()
+    }
+
+    func retryXiaomao(
+        turnID: String,
+        sessionID: String,
+        requestID: String
+    ) async throws -> ChatRetryResult {
+        _ = turnID
+        _ = sessionID
+        _ = requestID
+        return try retryResult.get()
     }
 
     func clear(sessionID: String, requestID: String) async throws -> ChatClearResult {

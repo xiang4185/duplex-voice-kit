@@ -1,260 +1,290 @@
 import SwiftUI
 
 struct ChatView: View {
-    @ObservedObject var viewModel: ChatViewModel
-    let modeTitle: String
-
+    @StateObject private var viewModel: ChatViewModel
     @FocusState private var inputFocused: Bool
-    @State private var showClearConfirmation = false
+    @State private var showsClearConfirmation = false
 
-    private let bottomAnchor = "chat.bottom"
+    private let isMockMode: Bool
+    private let onReconfigure: () -> Void
 
-    init(viewModel: ChatViewModel, modeTitle: String = "离线演示") {
-        self.viewModel = viewModel
-        self.modeTitle = modeTitle
+    init(
+        viewModel: @autoclosure @escaping () -> ChatViewModel,
+        isMockMode: Bool,
+        onReconfigure: @escaping () -> Void = {}
+    ) {
+        _viewModel = StateObject(wrappedValue: viewModel())
+        self.isMockMode = isMockMode
+        self.onReconfigure = onReconfigure
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                header
-                statusArea
-                messageArea
-                ChatComposerView(
-                    draft: $viewModel.draft,
-                    canSend: viewModel.canSend,
-                    isBusy: viewModel.isBusy,
-                    isSending: viewModel.isSending,
-                    characterLimit: ChatViewModel.maximumMessageLength,
-                    send: { Task { await viewModel.send() } },
-                    inputFocused: $inputFocused
-                )
-            }
-            .background(Theme.homeBackground.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
-            .confirmationDialog(
-                "清空当前三人聊天？",
-                isPresented: $showClearConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("清空聊天记录", role: .destructive) {
-                    Task { await viewModel.clear() }
+        VStack(spacing: 0) {
+            header
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        stateContent
+                        ForEach(viewModel.messages) { message in
+                            ChatMessageBubble(message: message)
+                                .id(message.id)
+
+                            if message.participant == .companion,
+                               viewModel.failedXiaomaoTurns.contains(message.turnID) {
+                                xiaomaoRetryCard(turnID: message.turnID)
+                            }
+                        }
+
+                        if viewModel.isSending {
+                            ChatTypingIndicator()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if viewModel.lastReplyWasDegraded {
+                            degradedNotice
+                        }
+
+                        Color.clear.frame(height: 1).id("chat.bottom")
+                    }
+                    .padding(.horizontal, Theme.Spacing.medium)
+                    .padding(.vertical, Theme.Spacing.small)
                 }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("只清空本次运行中的本地消息时间流，不调用服务器清空接口。")
+                .accessibilityIdentifier("chat.messages")
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    }
+                }
+                .onChange(of: viewModel.isSending) { _, _ in
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    }
+                }
             }
-            .task {
-                await viewModel.loadHistoryIfNeeded()
-            }
+
+            modeFooter
+
+            ChatComposerView(
+                draft: $viewModel.draft,
+                canSend: viewModel.canSend,
+                isBusy: viewModel.isBusy,
+                isSending: viewModel.isSending,
+                characterLimit: ChatViewModel.maximumMessageLength,
+                send: {
+                    Task { await viewModel.send() }
+                },
+                inputFocused: $inputFocused
+            )
         }
+        .background(Theme.bg.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
+        .task { await viewModel.loadHistoryIfNeeded() }
+        .confirmationDialog(
+            "清空聊天记录？",
+            isPresented: $showsClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清空聊天记录", role: .destructive) {
+                Task { await viewModel.clear() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("服务器中的聊天历史也会被清空，此操作无法撤销。")
+        }
     }
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            HStack(spacing: -8) {
-                participantAvatar("person.fill", label: "你")
-                participantAvatar("cat.fill", label: "小猫")
-                participantAvatar("heart.fill", label: "伙伴")
-            }
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xxSmall) {
-                Text("三人聊天")
-                    .font(Theme.headlineFont)
+        ZStack {
+            VStack(spacing: 2) {
+                Text("聊天")
+                    .font(.system(size: 19, weight: .semibold, design: .serif))
                     .foregroundStyle(Theme.textPrimary)
-
-                Label(modeTitle, systemImage: "person.3.fill")
-                    .font(Theme.captionFont)
+                Text("我和小猫都在")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
                     .foregroundStyle(Theme.textSecondary)
-                    .accessibilityIdentifier("chat.mode.mock")
             }
 
-            Spacer()
-
-            Button {
-                showClearConfirmation = true
-            } label: {
-                Group {
-                    if viewModel.isClearing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "trash")
-                    }
+            HStack {
+                if isMockMode {
+                    Text("离线")
+                        .font(Theme.captionFont)
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Theme.surfaceWarm)
+                        .clipShape(Capsule())
+                        .accessibilityIdentifier("chat.mode.mock")
                 }
-                .frame(
-                    minWidth: Theme.controlMinimumSize,
-                    minHeight: Theme.controlMinimumSize
-                )
+                Spacer()
+                Menu {
+                    Section("小猫参与方式") {
+                        ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
+                            Button {
+                                viewModel.xiaomaoMode = mode
+                            } label: {
+                                Label(
+                                    mode.title,
+                                    systemImage: viewModel.xiaomaoMode == mode
+                                        ? "checkmark.circle.fill"
+                                        : "circle"
+                                )
+                            }
+                        }
+                    }
+                    if viewModel.canClear {
+                        Button("清空聊天记录", role: .destructive) {
+                            showsClearConfirmation = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("聊天选项")
+                .accessibilityIdentifier("chat.clear")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(viewModel.canClear ? Theme.textSecondary : Theme.textTertiary)
-            .disabled(!viewModel.canClear)
-            .accessibilityLabel(viewModel.isClearing ? "正在清空聊天" : "清空聊天")
-            .accessibilityIdentifier("chat.clear")
         }
+        .frame(minHeight: 58)
         .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, Theme.Spacing.small)
         .background(Theme.bgElevated.opacity(0.96))
-        .overlay(alignment: .bottom) {
-            Divider().overlay(Theme.border)
-        }
-        .accessibilityElement(children: .contain)
+        .overlay(alignment: .bottom) { Divider().overlay(Theme.border) }
         .accessibilityIdentifier("chat.header")
     }
 
-    private func participantAvatar(_ symbol: String, label: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 13, weight: .semibold))
-            .frame(width: 34, height: 34)
-            .foregroundStyle(Theme.primary)
-            .background(Theme.primarySoft)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Theme.bgElevated, lineWidth: 2))
-            .accessibilityLabel(label)
-    }
-
     @ViewBuilder
-    private var statusArea: some View {
+    private var stateContent: some View {
         if viewModel.isLoadingHistory {
-            Label("正在准备本地消息时间流", systemImage: "clock")
-                .font(Theme.footnoteFont)
-                .foregroundStyle(Theme.textSecondary)
-                .padding(.horizontal, Theme.Spacing.medium)
-                .padding(.vertical, Theme.Spacing.small)
-                .frame(maxWidth: .infinity)
-                .accessibilityIdentifier("chat.loading")
+            HStack(spacing: Theme.Spacing.xSmall) {
+                ProgressView()
+                Text("正在加载聊天记录…")
+                    .font(Theme.subheadFont)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 28)
+            .accessibilityIdentifier("chat.loading")
         } else if !viewModel.errorMessage.isEmpty {
-            VStack(spacing: Theme.Spacing.xSmall) {
-                Label(viewModel.errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(Theme.footnoteFont)
-                    .foregroundStyle(Theme.danger)
+            errorCard
+        } else if viewModel.hasLoadedHistory && viewModel.messages.isEmpty {
+            VStack(spacing: Theme.Spacing.small) {
+                Text("🐱")
+                    .font(.system(size: 38))
+                Text("还没有聊天记录")
+                    .font(Theme.headlineFont)
+                    .foregroundStyle(Theme.textPrimary)
+                Text("从一句轻松的话开始，我和小猫会按当前模式参与。")
+                    .font(Theme.subheadFont)
+                    .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
-
-                HStack(spacing: Theme.Spacing.small) {
-                    if viewModel.requiresReconfiguration {
-                        Button("重新配置连接") {
-                            NotificationCenter.default.post(
-                                name: .reconfigureConnection,
-                                object: nil
-                            )
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.primary)
-                        .accessibilityIdentifier("chat.reconfigure")
-                    }
-                    if viewModel.canRetryHistory {
-                        Button("重新加载") {
-                            Task { await viewModel.loadHistory() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.primary)
-                        .accessibilityIdentifier("chat.retry")
-                    } else if viewModel.isConfigurationAvailable {
-                        Button("关闭") {
-                            viewModel.clearError()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
             }
-            .padding(.horizontal, Theme.Spacing.medium)
-            .padding(.vertical, Theme.Spacing.small)
             .frame(maxWidth: .infinity)
-            .background(Theme.surface.opacity(0.88))
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("chat.error")
-        } else if viewModel.lastReplyWasDegraded {
-            Label(
-                "刚才的回复由服务端安全降级生成",
-                systemImage: "exclamationmark.circle"
-            )
-            .font(Theme.footnoteFont)
-            .foregroundStyle(Theme.textSecondary)
-            .padding(.horizontal, Theme.Spacing.medium)
-            .padding(.vertical, Theme.Spacing.xSmall)
-            .frame(maxWidth: .infinity)
-            .accessibilityIdentifier("chat.degraded")
+            .padding(.vertical, 42)
+            .accessibilityIdentifier("chat.empty")
         }
     }
 
-    private var messageArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: Theme.Spacing.small) {
-                    if viewModel.hasLoadedHistory && viewModel.messages.isEmpty {
-                        emptyState
-                    }
-
-                    ForEach(viewModel.messages) { message in
-                        ChatMessageBubble(message: message)
-                            .id(message.id)
-                    }
-
-                    if viewModel.isSending {
-                        ChatTypingIndicator()
-                    }
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id(bottomAnchor)
-                }
-                .padding(.vertical, Theme.Spacing.medium)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .accessibilityIdentifier("chat.messages")
-            .onChange(of: viewModel.messages.map(\.id)) { _, _ in
-                scrollToBottom(proxy)
-            }
-            .onChange(of: viewModel.isLoadingHistory) { _, loading in
-                if !loading { scrollToBottom(proxy, animated: false) }
-            }
-            .onChange(of: viewModel.isSending) { _, _ in
-                scrollToBottom(proxy)
-            }
-            .onChange(of: inputFocused) { _, focused in
-                if focused { scrollToBottom(proxy) }
-            }
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: Theme.Spacing.small) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 36, weight: .regular))
-                .foregroundStyle(Theme.primary)
-                .accessibilityHidden(true)
-
-            Text("还没有聊天记录")
-                .font(Theme.headlineFont)
+    private var errorCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Label(viewModel.errorMessage, systemImage: "exclamationmark.triangle.fill")
+                .font(Theme.subheadFont)
                 .foregroundStyle(Theme.textPrimary)
 
-            Text("从一句简单的话开始。当前版本只在本次运行期间维护消息时间流。")
-                .font(Theme.footnoteFont)
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Theme.Spacing.small) {
+                if viewModel.canRetryHistory {
+                    Button("重试") {
+                        Task { await viewModel.loadHistory() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.primary)
+                    .accessibilityIdentifier("chat.retry")
+                }
+                if viewModel.requiresReconfiguration {
+                    Button("重新配置连接", action: onReconfigure)
+                        .buttonStyle(.bordered)
+                }
+                if !viewModel.canRetryHistory && !viewModel.requiresReconfiguration {
+                    Button("关闭") { viewModel.clearError() }
+                        .buttonStyle(.bordered)
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, Theme.Spacing.xLarge)
-        .padding(.top, Theme.Spacing.xxLarge)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("chat.empty")
+        .padding(Theme.Spacing.medium)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .stroke(Theme.danger.opacity(0.22), lineWidth: 1)
+        }
+        .accessibilityIdentifier("chat.error")
     }
 
-    private func scrollToBottom(
-        _ proxy: ScrollViewProxy,
-        animated: Bool = true
-    ) {
-        let action = {
-            proxy.scrollTo(bottomAnchor, anchor: .bottom)
-        }
-        if animated {
-            withAnimation(.easeOut(duration: 0.2)) {
-                action()
+    private func xiaomaoRetryCard(turnID: String) -> some View {
+        HStack(spacing: Theme.Spacing.xSmall) {
+            Text("🐱")
+                .font(.system(size: 17))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("小猫这一轮没有接上")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textPrimary)
+                Text("“我”的回复已经保存，可以只重试小猫。")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(Theme.textSecondary)
             }
-        } else {
-            action()
+            Spacer()
+            Button {
+                Task { await viewModel.retryXiaomao(turnID: turnID) }
+            } label: {
+                if viewModel.retryingXiaomaoTurnID == turnID {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("重试")
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.primary)
+            .disabled(!viewModel.canRetryXiaomao(turnID: turnID))
         }
+        .padding(12)
+        .background(Color(hex: 0xFFF3ED))
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("chat.xiaomao.retry.\(turnID)")
     }
+
+    private var degradedNotice: some View {
+        Label("刚才的回复由服务端安全降级生成", systemImage: "shield.lefthalf.filled")
+            .font(Theme.captionFont)
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Theme.surfaceWarm)
+            .clipShape(Capsule())
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("chat.degraded")
+    }
+
+    private var modeFooter: some View {
+        HStack(spacing: 6) {
+            Text("🐱")
+                .font(.system(size: 13))
+            Text(viewModel.xiaomaoMode.footerTitle)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.primary)
+            Spacer()
+        }
+        .padding(.horizontal, Theme.Spacing.medium)
+        .padding(.vertical, 7)
+        .background(Theme.bgElevated)
+        .accessibilityIdentifier("chat.xiaomao.mode")
+    }
+}
+
+#Preview {
+    ChatView(
+        viewModel: ChatViewModel(service: MockChatService(delays: .zero)),
+        isMockMode: true
+    )
 }

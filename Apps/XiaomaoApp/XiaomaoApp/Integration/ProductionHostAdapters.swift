@@ -39,7 +39,33 @@ actor ProductionBackendAdapter: BackendAdapter {
     private static let allowedServerErrorCodes: Set<String> = [
         "session_mismatch",
         "invalid_session_id",
-        "idempotency_conflict"
+        "idempotency_conflict",
+        "invalid_xiaomao_mode",
+        "invalid_participant",
+        "participant_already_completed",
+        "turn_not_found",
+        "invalid_request",
+        "not_found",
+        "forbidden",
+        "not_bound",
+        "ledger_limit_exceeded",
+        "invalid_entry_type",
+        "invalid_amount",
+        "invalid_status",
+        "undo_expired",
+        "undo_conflict",
+        "invalid_code",
+        "expired_code",
+        "already_bound",
+        "code_already_used",
+        "cannot_bind_self",
+        "media_not_found",
+        "invalid_media",
+        "invalid_media_id",
+        "media_too_large",
+        "unsupported_media_type",
+        "media_type_mismatch",
+        "invalid_media_dimensions"
     ]
 
     private struct ServerErrorResponse: Decodable {

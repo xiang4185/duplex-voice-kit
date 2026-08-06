@@ -7,8 +7,10 @@ import SwiftUI
 struct MainTabView: View {
     let environment: AppEnvironment
     let startCall: () -> Void
+    let onReconfigure: () -> Void
 
     @StateObject private var chatViewModel: ChatViewModel
+    @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
 
     enum Tab: Hashable {
@@ -36,13 +38,17 @@ struct MainTabView: View {
     init(
         environment: AppEnvironment,
         startCall: @escaping () -> Void,
-        chatService: any ChatServicing
+        chatService: any ChatServicing,
+        smallThingsStore: SmallThingsStore,
+        onReconfigure: @escaping () -> Void = {}
     ) {
         self.environment = environment
         self.startCall = startCall
+        self.onReconfigure = onReconfigure
         _chatViewModel = StateObject(
             wrappedValue: ChatViewModel(service: chatService)
         )
+        _smallThingsStore = ObservedObject(wrappedValue: smallThingsStore)
     }
 
     var body: some View {
@@ -57,9 +63,8 @@ struct MainTabView: View {
 
             ChatView(
                 viewModel: chatViewModel,
-                modeTitle: environment.hostAdapters.mode == .mock
-                    ? "离线演示"
-                    : "在线三人会话"
+                isMockMode: environment.hostAdapters.mode == .mock,
+                onReconfigure: onReconfigure
             )
                 .tabItem {
                     Label(Tab.chat.title, systemImage: Tab.chat.icon)
@@ -67,7 +72,7 @@ struct MainTabView: View {
                 }
                 .tag(Tab.chat)
 
-            SmallThingsRootView()
+            SmallThingsRootView(store: smallThingsStore)
                 .tabItem { Label(Tab.smallThings.title, systemImage: Tab.smallThings.icon) }
                 .tag(Tab.smallThings)
                 .accessibilityIdentifier("smallThings.tab")
@@ -86,6 +91,7 @@ struct MainTabView: View {
     MainTabView(
         environment: .fromBundle(),
         startCall: {},
-        chatService: MockChatService()
+        chatService: MockChatService(),
+        smallThingsStore: SmallThingsStore()
     )
 }

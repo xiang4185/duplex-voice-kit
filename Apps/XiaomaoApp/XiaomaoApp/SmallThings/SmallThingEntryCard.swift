@@ -137,7 +137,7 @@ struct SmallThingEntryCard: View {
 
     private var reactionButton: some View {
         Button {
-            store.toggleReaction(entryID: entry.id)
+            Task { await store.toggleReactionPersisted(entryID: entry.id) }
             hapticTrigger += 1
         } label: {
             Label(
@@ -221,7 +221,7 @@ struct SmallThingEntryCard: View {
                 .accessibilityLabel(replyTarget == nil ? "评论内容" : "回复内容")
 
                 Button("发送") {
-                    sendComment()
+                    Task { await sendComment() }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.primary)
@@ -241,7 +241,11 @@ struct SmallThingEntryCard: View {
     private func commentThread(_ comment: SmallThingComment) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
             Button {
-                selectReplyTarget(commentID: comment.id, author: comment.author)
+                selectReplyTarget(
+                    commentID: comment.id,
+                    targetID: comment.id,
+                    author: comment.author
+                )
             } label: {
                 (Text(comment.author.displayName + "：")
                     .fontWeight(.semibold)
@@ -257,7 +261,11 @@ struct SmallThingEntryCard: View {
 
             ForEach(comment.replies) { reply in
                 Button {
-                    selectReplyTarget(commentID: comment.id, author: reply.author)
+                    selectReplyTarget(
+                        commentID: comment.id,
+                        targetID: reply.id,
+                        author: reply.author
+                    )
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(reply.author.displayName) 回复 \(reply.replyToAuthor.displayName)")
@@ -289,23 +297,35 @@ struct SmallThingEntryCard: View {
         commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func selectReplyTarget(commentID: UUID, author: SmallThingRequester) {
-        replyTarget = SmallThingReplyTarget(commentID: commentID, author: author)
+    private func selectReplyTarget(
+        commentID: UUID,
+        targetID: UUID,
+        author: SmallThingRequester
+    ) {
+        replyTarget = SmallThingReplyTarget(
+            commentID: commentID,
+            targetID: targetID,
+            author: author
+        )
         commentFocused = true
         hapticTrigger += 1
     }
 
-    private func sendComment() {
+    private func sendComment() async {
         let sent: Bool
         if let replyTarget {
-            sent = store.addReply(
+            sent = await store.addReplyPersisted(
                 entryID: entry.id,
                 commentID: replyTarget.commentID,
+                replyToID: replyTarget.targetID,
                 replyTo: replyTarget.author,
                 text: commentDraft
             )
         } else {
-            sent = store.addComment(entryID: entry.id, text: commentDraft)
+            sent = await store.addCommentPersisted(
+                entryID: entry.id,
+                text: commentDraft
+            )
         }
 
         guard sent else { return }
