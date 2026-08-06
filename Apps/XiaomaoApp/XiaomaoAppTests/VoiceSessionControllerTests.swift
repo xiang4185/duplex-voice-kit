@@ -31,7 +31,9 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertFalse(fixture.controller.hasCompletedInitialConnection)
 
         fixture.audio.emit(pcmFrame(amplitude: 2_000))
-        await settle()
+        await waitUntil {
+            fixture.controller.hasCompletedInitialConnection
+        }
         XCTAssertTrue(fixture.controller.hasCompletedInitialConnection)
 
         await fixture.socket.emitServerEvent(
