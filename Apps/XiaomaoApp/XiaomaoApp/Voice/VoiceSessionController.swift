@@ -47,6 +47,9 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var isPlaybackActive = false
     @Published private(set) var lastSpeechDurationMilliseconds = 0
     @Published private(set) var lastEndingSilenceMilliseconds = 0
+    @Published private(set) var callIsActive = false
+    @Published private(set) var responseCompletionCount = 0
+    @Published private(set) var postResponseCaptureRecoveryCount = 0
 
     private let environment: AppEnvironment
     private let socket: any VoiceAdapter
@@ -85,7 +88,6 @@ final class VoiceSessionController: ObservableObject {
     private var responseID = ""
     private var lastServerSequence = 0
     private var metrics = VoiceMetrics(route: .b)
-    private var callIsActive = false
     private var suspendedForBackground = false
     private var commitSentForCurrentPress = false
     private var expectedReadyEvent: VoiceEventType?
@@ -100,6 +102,14 @@ final class VoiceSessionController: ObservableObject {
     private var firstAudioDeltaReceivedAt: Date?
     private var terminalProtocolErrorCode: String?
     private var terminalLocalAudioFailure = false
+    private var presentationRequestedAt: Date?
+    private var audioSessionActivatedAt: Date?
+    private var sessionReadyAt: Date?
+    private var microphoneReadyAt: Date?
+    private var lastResponseCompletionCaptureCallbacks = 0
+    private var postResponseCaptureCallbackDelta = 0
+    private var postResponseCaptureCheckTask: Task<Void, Never>?
+    private var microphoneReadinessTask: Task<Void, Never>?
 
     init(
         environment: AppEnvironment,
@@ -152,7 +162,7 @@ final class VoiceSessionController: ObservableObject {
     }
 
     var canStartRecording: Bool {
-        callIsActive
+        return callIsActive
             && state == .ready
             && microphonePermission == .granted
             && audioSessionActive
@@ -177,6 +187,21 @@ final class VoiceSessionController: ObservableObject {
 
     var reconnectStatusText: String {
         reconnectAttempt > 0 ? "正在重连 \(reconnectAttempt)/\(reconnectDelays.count)" : "正在重连"
+    }
+
+    var isConversationReady: Bool {
+        let audioHealth = audioIOHealthReporter?.healthSnapshot
+        let captureHealthy = audioHealth.map {
+            $0.captureEngineRunning
+                && $0.captureTapInstalled
+                && $0.captureCallbackCount > 0
+        } ?? isRecording
+        callIsActive
+            && webSocketState == .connected
+            && audioSessionActive
+            && isRecording
+            && captureHealthy
+            && (state == .ready || state == .listening || state == .speaking)
     }
 
     var diagnosticText: String {
@@ -258,8 +283,35 @@ final class VoiceSessionController: ObservableObject {
             playbackActive: isPlaybackActive,
             lastSpeechDurationMilliseconds: lastSpeechDurationMilliseconds,
             lastEndingSilenceMilliseconds: lastEndingSilenceMilliseconds,
+            presentationToAudioSessionMilliseconds: elapsedMilliseconds(
+                from: presentationRequestedAt,
+                to: audioSessionActivatedAt
+            ),
+            presentationToWebSocketMilliseconds: elapsedMilliseconds(
+                from: presentationRequestedAt,
+                to: webSocketConnectedAt
+            ),
+            presentationToSessionReadyMilliseconds: elapsedMilliseconds(
+                from: presentationRequestedAt,
+                to: sessionReadyAt
+            ),
+            presentationToMicrophoneReadyMilliseconds: elapsedMilliseconds(
+                from: presentationRequestedAt,
+                to: microphoneReadyAt
+            ),
+            responseCompletionCount: responseCompletionCount,
+            postResponseCaptureRecoveryCount: postResponseCaptureRecoveryCount,
+            lastResponseCompletionCaptureCallbacks: lastResponseCompletionCaptureCallbacks,
+            postResponseCaptureCallbackDelta: postResponseCaptureCallbackDelta,
             generatedAt: Date()
         ).text
+    }
+
+    func markPresentationRequested() {
+        presentationRequestedAt = Date()
+        audioSessionActivatedAt = nil
+        sessionReadyAt = nil
+        microphoneReadyAt = nil
     }
 
     func startNewCall() async {
@@ -277,13 +329,22 @@ final class VoiceSessionController: ObservableObject {
         suspendedForBackground = false
         networkMonitor.start()
         networkType = networkMonitor.connectionType
-
-        guard await prepareAudio() else {
-            networkMonitor.stop()
+        await startReceiveLoop()
+        state = .connecting
+        expectedReadyEvent = .sessionReady
+        lastReadyEvent = nil
+        async let audioPrepared = prepareAudio()
+        async let socketConnected = connectSocketForNewSession()
+        let (audioReady, connected) = await (audioPrepared, socketConnected)
+        guard audioReady, connected else {
+            if connected {
+                await socket.disconnect()
+                webSocketState = .disconnected
+            }
+            if !audioReady { networkMonitor.stop() }
             return
         }
-        await startReceiveLoop()
-        await establishNewSession()
+        await startProtocolSessionOnConnectedSocket()
     }
 
     func reconnectCurrentCall() {
@@ -456,6 +517,14 @@ final class VoiceSessionController: ObservableObject {
         isPlaybackActive = false
         lastSpeechDurationMilliseconds = 0
         lastEndingSilenceMilliseconds = 0
+        responseCompletionCount = 0
+        postResponseCaptureRecoveryCount = 0
+        lastResponseCompletionCaptureCallbacks = 0
+        postResponseCaptureCallbackDelta = 0
+        postResponseCaptureCheckTask?.cancel()
+        postResponseCaptureCheckTask = nil
+        microphoneReadinessTask?.cancel()
+        microphoneReadinessTask = nil
         metrics = VoiceMetrics(
             traceID: traceID,
             sessionID: sessionID,
@@ -485,6 +554,7 @@ final class VoiceSessionController: ObservableObject {
             try audioSession.activate()
             audioSession.refreshRoute()
             syncAudioSessionState()
+            audioSessionActivatedAt = Date()
             return true
         } catch {
             state = .failed
@@ -495,13 +565,19 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
-    private func establishNewSession() async {
-        state = .connecting
-        expectedReadyEvent = .sessionReady
-        lastReadyEvent = nil
+    private func connectSocketForNewSession() async -> Bool {
         do {
             try await socket.connect()
             markWebSocketConnected()
+            return true
+        } catch {
+            handleConnectionFailure(error, allowReconnect: true)
+            return false
+        }
+    }
+
+    private func startProtocolSessionOnConnectedSocket() async {
+        do {
             try await audioUploader.openConnection(
                 sessionID: sessionID,
                 traceID: traceID
@@ -752,6 +828,8 @@ final class VoiceSessionController: ObservableObject {
             errorMessage = ""
             await audioUploader.markReady()
             await startContinuousCaptureIfPossible()
+            sessionReadyAt = Date()
+            markMicrophoneReadyIfPossible()
             lastReadyEvent = .sessionReady
         case .sessionResumed where expectedReadyEvent == .sessionResumed:
             protocolReadyEventCount += 1
@@ -774,6 +852,8 @@ final class VoiceSessionController: ObservableObject {
             } else {
                 await startContinuousCaptureIfPossible()
             }
+            sessionReadyAt = Date()
+            markMicrophoneReadyIfPossible()
             lastReadyEvent = .sessionResumed
         case .listeningStarted:
             state = .listening
@@ -837,6 +917,8 @@ final class VoiceSessionController: ObservableObject {
             vadState = .idleListening
             state = .ready
             await startContinuousCaptureIfPossible()
+            responseCompletionCount += 1
+            schedulePostResponseCaptureCheck()
         case .responseTextDelta, .responseTextDone:
             responseText = event.payload.string("text") ?? responseText
         case .interrupted:
@@ -1152,6 +1234,7 @@ final class VoiceSessionController: ObservableObject {
             vadState = .idleListening
             vadEnergyBand = "silent"
             vadNormalizedRMS = 0
+            scheduleMicrophoneReadinessCheck()
             VoiceLog.audio.info("continuous_capture_started")
         } catch {
             state = .failed
@@ -1194,6 +1277,98 @@ final class VoiceSessionController: ObservableObject {
         captureWatchdogStartedAt = nil
         captureRecoveryAttemptCount = 0
         lastObservedCaptureCallbackCount = 0
+    }
+
+    private func markMicrophoneReadyIfPossible() {
+        let health = audioIOHealthReporter?.healthSnapshot
+        let callbackConfirmed = health.map {
+            $0.captureEngineRunning
+                && $0.captureTapInstalled
+                && $0.captureCallbackCount > 0
+        } ?? isRecording
+        guard microphoneReadyAt == nil,
+              callIsActive,
+              audioSessionActive,
+              isRecording,
+              webSocketState == .connected,
+              callbackConfirmed else { return }
+        microphoneReadyAt = Date()
+    }
+
+    private func scheduleMicrophoneReadinessCheck() {
+        markMicrophoneReadyIfPossible()
+        guard microphoneReadyAt == nil else { return }
+        microphoneReadinessTask?.cancel()
+        microphoneReadinessTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for _ in 0..<10 {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                guard self.callIsActive else { return }
+                self.markMicrophoneReadyIfPossible()
+                if self.microphoneReadyAt != nil { return }
+            }
+        }
+    }
+
+    private func schedulePostResponseCaptureCheck() {
+        postResponseCaptureCheckTask?.cancel()
+        let expectedSessionID = sessionID
+        let baseline = audioIOHealthReporter?.healthSnapshot.captureCallbackCount ?? 0
+        lastResponseCompletionCaptureCallbacks = baseline
+        postResponseCaptureCheckTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
+            guard let self,
+                  self.callIsActive,
+                  self.sessionID == expectedSessionID,
+                  !self.isMuted,
+                  self.webSocketState == .connected,
+                  self.state == .ready || self.state == .listening else { return }
+
+            self.syncAudioSessionState()
+            if !self.audioSessionActive {
+                do {
+                    try self.audioSession.activate()
+                    self.audioSession.refreshRoute()
+                    self.syncAudioSessionState()
+                } catch {
+                    VoiceLog.audio.error("post_response_audio_session_reactivation_failed")
+                }
+            }
+            if !self.isRecording {
+                await self.startContinuousCaptureIfPossible()
+            }
+
+            guard let reporter = self.audioIOHealthReporter else { return }
+            let snapshot = reporter.healthSnapshot
+            self.postResponseCaptureCallbackDelta = max(
+                0,
+                snapshot.captureCallbackCount - baseline
+            )
+            let captureHealthy = snapshot.captureEngineRunning
+                && snapshot.captureTapInstalled
+                && self.postResponseCaptureCallbackDelta > 0
+            guard !captureHealthy else {
+                self.markMicrophoneReadyIfPossible()
+                return
+            }
+
+            do {
+                try reporter.recoverCapture()
+                self.isRecording = true
+                await self.audioUploader.activateCaptureGeneration(
+                    self.capture.captureGeneration
+                )
+                self.voiceActivityDetector.resetForListening()
+                self.vadState = .idleListening
+                self.vadEnergyBand = "silent"
+                self.vadNormalizedRMS = 0
+                self.postResponseCaptureRecoveryCount += 1
+                self.markMicrophoneReadyIfPossible()
+                VoiceLog.audio.info("post_response_capture_recovered")
+            } catch {
+                VoiceLog.audio.error("post_response_capture_recovery_failed")
+            }
+        }
     }
 
     private func checkCaptureHealth() async {
@@ -1256,6 +1431,10 @@ final class VoiceSessionController: ObservableObject {
         heartbeatTask?.cancel()
         heartbeatTask = nil
         reconnectTask?.cancel()
+        postResponseCaptureCheckTask?.cancel()
+        postResponseCaptureCheckTask = nil
+        microphoneReadinessTask?.cancel()
+        microphoneReadinessTask = nil
         reconnectTask = nil
         reconnectGeneration = nil
         stopContinuousCapture(resetVAD: true)

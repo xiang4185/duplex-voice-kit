@@ -19,6 +19,7 @@ struct SmallThingsImageContent: View {
         .frame(height: height)
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("小事图片，暖色晚霞占位图")
     }

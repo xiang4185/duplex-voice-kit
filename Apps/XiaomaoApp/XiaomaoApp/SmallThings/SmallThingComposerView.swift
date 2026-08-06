@@ -246,7 +246,7 @@ struct SmallThingComposerView: View {
                     ? (store.isProduction
                         ? "图片会先在本机压缩并移除定位等元数据，再通过鉴权上传保存。"
                         : "图片只保存在本次离线 Mock 的内存中，退出 App 后不会持久化。")
-                    : "保存后会先标记为“等我看”，等待对方在审批页点头或打回。"
+                    : "保存后会标记为“等对方看”，等待对方在审批页点头或打回。"
             )
             .fixedSize(horizontal: false, vertical: true)
         } icon: {

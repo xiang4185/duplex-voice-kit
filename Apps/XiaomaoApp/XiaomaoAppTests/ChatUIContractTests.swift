@@ -88,6 +88,32 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
     }
 
+    func testSendDismissesKeyboardBeforeAsyncRequestAndNeverRestoresFocus() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let sendRange = try XCTUnwrap(chat.range(of: "send:"))
+        let clearRange = try XCTUnwrap(
+            chat.range(of: "clear:", range: sendRange.upperBound..<chat.endIndex)
+        )
+        let sendBlock = String(chat[sendRange.lowerBound..<clearRange.lowerBound])
+
+        let dismiss = try XCTUnwrap(sendBlock.range(of: "inputFocused = false"))
+        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send()"))
+        XCTAssertLessThan(dismiss.lowerBound, request.lowerBound)
+        XCTAssertTrue(sendBlock.contains("await Task.yield()"))
+        XCTAssertFalse(chat.contains("inputFocused = true"))
+    }
+
+    func testThreePartyHeaderUsesHumanDeveloperAndSoleAIIdentity() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let model = try source("XiaomaoApp/Models/ChatMessage.swift")
+
+        XCTAssertTrue(chat.contains("开发者和小猫都在"))
+        XCTAssertTrue(model.contains("case developer"))
+        XCTAssertTrue(model.contains("case xiaomao"))
+        XCTAssertFalse(model.contains("case companion"))
+        XCTAssertTrue(model.contains("case .developer: \"开发者\""))
+    }
+
     private func source(_ relativePath: String) throws -> String {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

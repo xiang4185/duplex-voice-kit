@@ -109,6 +109,7 @@ struct SmallThingEntry: Identifiable, Equatable, Sendable {
     let createdAt: Date
     let type: SmallThingEntryType
     let requester: SmallThingRequester
+    let reviewer: SmallThingRequester?
     var title: String
     var body: String
     var amount: Double
@@ -125,6 +126,7 @@ struct SmallThingEntry: Identifiable, Equatable, Sendable {
         createdAt: Date = Date(),
         type: SmallThingEntryType,
         requester: SmallThingRequester,
+        reviewer: SmallThingRequester? = nil,
         title: String = "",
         body: String = "",
         amount: Double = 0,
@@ -140,6 +142,7 @@ struct SmallThingEntry: Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
         self.type = type
         self.requester = requester
+        self.reviewer = reviewer
         self.title = title
         self.body = body
         self.amount = amount
@@ -153,6 +156,12 @@ struct SmallThingEntry: Identifiable, Equatable, Sendable {
 
     var commentAndReplyCount: Int {
         comments.reduce(0) { $0 + 1 + $1.replies.count }
+    }
+
+    var expenseStatusDisplayName: String {
+        guard let expenseStatus else { return "无" }
+        guard expenseStatus == .pending else { return expenseStatus.displayName }
+        return reviewer == .me ? "等我看" : "等对方看"
     }
 }
 

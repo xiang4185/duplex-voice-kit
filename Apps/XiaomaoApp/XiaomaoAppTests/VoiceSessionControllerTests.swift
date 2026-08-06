@@ -1741,6 +1741,43 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.route, .b)
     }
 
+    func testResponseDoneRecoversStalledCaptureWithoutChangingSession() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        let sessionID = fixture.controller.sessionIDForTesting
+
+        fixture.audio.simulateCaptureStall()
+        await emitAssistantAudio(fixture, responseID: "response-stalled", done: true)
+
+        await waitUntil(timeout: .seconds(1)) {
+            fixture.audio.recoverCount == 1
+                && fixture.controller.postResponseCaptureRecoveryCount == 1
+        }
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
+        let connectCount = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCount, 1)
+        XCTAssertTrue(fixture.audio.engineRunning)
+        XCTAssertTrue(fixture.audio.tapInstalled)
+    }
+
+    func testResponseDoneDoesNotRecoverWhenCaptureCallbacksContinue() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        let sessionID = fixture.controller.sessionIDForTesting
+
+        await emitAssistantAudio(fixture, responseID: "response-healthy", done: true)
+        try? await Task.sleep(for: .milliseconds(100))
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        try? await Task.sleep(for: .milliseconds(500))
+
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
+        XCTAssertEqual(fixture.audio.recoverCount, 0)
+        XCTAssertEqual(fixture.controller.postResponseCaptureRecoveryCount, 0)
+        XCTAssertGreaterThan(fixture.controller.diagnosticReport().count, 0)
+    }
+
     private func makeFixture(
         token: String = "synthetic-token",
         autoReady: Bool = true,

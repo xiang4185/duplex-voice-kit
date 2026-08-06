@@ -28,10 +28,23 @@ struct SmallThingEntryCard: View {
                     showingImagePreview = true
                 } label: {
                     SmallThingsImageContent(imageData: imageData, height: 190)
+                        .contentShape(
+                            RoundedRectangle(
+                                cornerRadius: Theme.Radius.medium,
+                                style: .continuous
+                            )
+                        )
                 }
                 .buttonStyle(.plain)
+                .contentShape(
+                    RoundedRectangle(
+                        cornerRadius: Theme.Radius.medium,
+                        style: .continuous
+                    )
+                )
                 .accessibilityLabel("查看小事大图")
                 .accessibilityHint("打开全屏图片预览")
+                .accessibilityIdentifier("smallThings.entry.image.preview")
             }
 
             if !entry.approvalMessage.isEmpty {
@@ -102,12 +115,15 @@ struct SmallThingEntryCard: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                     if let status = entry.expenseStatus {
-                        SmallThingStatusBadge(status: status)
+                        SmallThingStatusBadge(
+                            status: status,
+                            displayName: entry.expenseStatusDisplayName
+                        )
                     }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(
-                    "金额 \(entry.amount.formatted(.number.precision(.fractionLength(2)))) 元，状态 \(entry.expenseStatus?.displayName ?? "无")"
+                    "金额 \(entry.amount.formatted(.number.precision(.fractionLength(2)))) 元，状态 \(entry.expenseStatusDisplayName)"
                 )
             }
         }
@@ -339,16 +355,17 @@ struct SmallThingEntryCard: View {
 
 private struct SmallThingStatusBadge: View {
     let status: SmallThingExpenseStatus
+    let displayName: String
 
     var body: some View {
-        Label(status.displayName, systemImage: status.systemImage)
+        Label(displayName, systemImage: status.systemImage)
             .font(.caption2.bold())
             .foregroundStyle(statusColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(statusColor.opacity(0.11), in: Capsule())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("审批状态：\(status.displayName)")
+            .accessibilityLabel("审批状态：\(displayName)")
     }
 
     private var statusColor: Color {

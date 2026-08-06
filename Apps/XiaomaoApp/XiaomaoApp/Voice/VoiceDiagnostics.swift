@@ -74,6 +74,14 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let playbackActive: Bool
     let lastSpeechDurationMilliseconds: Int
     let lastEndingSilenceMilliseconds: Int
+    let presentationToAudioSessionMilliseconds: Int?
+    let presentationToWebSocketMilliseconds: Int?
+    let presentationToSessionReadyMilliseconds: Int?
+    let presentationToMicrophoneReadyMilliseconds: Int?
+    let responseCompletionCount: Int
+    let postResponseCaptureRecoveryCount: Int
+    let lastResponseCompletionCaptureCallbacks: Int
+    let postResponseCaptureCallbackDelta: Int
     let generatedAt: Date
 
     var text: String {
@@ -161,6 +169,14 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "playback_active=\(playbackActive)",
             "last_speech_duration_ms=\(lastSpeechDurationMilliseconds)",
             "last_ending_silence_ms=\(lastEndingSilenceMilliseconds)",
+            "presentation_to_audio_session_ms=\(optional(presentationToAudioSessionMilliseconds))",
+            "presentation_to_websocket_ms=\(optional(presentationToWebSocketMilliseconds))",
+            "presentation_to_session_ready_ms=\(optional(presentationToSessionReadyMilliseconds))",
+            "presentation_to_microphone_ready_ms=\(optional(presentationToMicrophoneReadyMilliseconds))",
+            "response_completion_count=\(responseCompletionCount)",
+            "post_response_capture_recovery_count=\(postResponseCaptureRecoveryCount)",
+            "last_response_completion_capture_callbacks=\(lastResponseCompletionCaptureCallbacks)",
+            "post_response_capture_callback_delta=\(postResponseCaptureCallbackDelta)",
             "generated_at=\(formatter.string(from: generatedAt))"
         ].joined(separator: "\n")
     }

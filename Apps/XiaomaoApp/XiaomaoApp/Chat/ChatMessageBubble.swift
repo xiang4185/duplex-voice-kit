@@ -58,8 +58,8 @@ struct ChatMessageBubble: View {
     @ViewBuilder
     private var avatar: some View {
         switch message.participant {
-        case .companion:
-            Text("我")
+        case .developer:
+            Text("开")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
@@ -82,7 +82,7 @@ struct ChatMessageBubble: View {
     private var bubbleSurface: Color {
         switch message.participant {
         case .user: Color(hex: 0xF9DCE3)
-        case .companion: Theme.surface
+        case .developer: Theme.surface
         case .xiaomao: Color(hex: 0xFBEADF)
         }
     }
@@ -90,7 +90,7 @@ struct ChatMessageBubble: View {
     private var bubbleBorder: Color {
         switch message.participant {
         case .user: Theme.primary.opacity(0.14)
-        case .companion: Theme.border.opacity(0.85)
+        case .developer: Theme.border.opacity(0.85)
         case .xiaomao: Color(hex: 0xF3D8C8)
         }
     }

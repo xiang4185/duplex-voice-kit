@@ -20,6 +20,7 @@ final class SmallThingsServiceTests: XCTestCase {
         let entry = try XCTUnwrap(state.entries.first)
         XCTAssertEqual(entry.serverID, SmallThingsBackendSpy.entryID)
         XCTAssertEqual(entry.requester, .partner)
+        XCTAssertNil(entry.reviewer)
         XCTAssertEqual(entry.imageMediaID, SmallThingsBackendSpy.mediaID)
         XCTAssertEqual(entry.comments.first?.serverID, SmallThingsBackendSpy.commentID)
         XCTAssertEqual(
@@ -229,6 +230,31 @@ private actor SmallThingsBackendSpy: BackendAdapter {
             ])
         case "/v1/small-things/binding/code/create":
             payload = try JSONSerialization.data(withJSONObject: ["code": "123456"])
+        case "/v1/small-things/reactions/toggle":
+            payload = try JSONSerialization.data(withJSONObject: [
+                "entry_id": Self.entryID,
+                "reacted_by_me": true
+            ])
+        case "/v1/small-things/comments/create":
+            payload = try JSONSerialization.data(withJSONObject: [
+                "comment": [
+                    "id": Self.commentID,
+                    "author": "me",
+                    "text": "synthetic-comment",
+                    "replies": []
+                ]
+            ])
+        case "/v1/small-things/replies/create":
+            payload = try JSONSerialization.data(withJSONObject: [
+                "reply": [
+                    "id": Self.replyID,
+                    "entry_id": Self.entryID,
+                    "comment_id": Self.commentID,
+                    "author": "me",
+                    "reply_to_author": "partner",
+                    "text": "synthetic-reply"
+                ]
+            ])
         default:
             payload = try JSONSerialization.data(withJSONObject: [:])
         }
@@ -301,15 +327,17 @@ private actor SmallThingsServiceSpy: SmallThingsServicing {
         _ = requestID
     }
 
-    func toggleReaction(entryID: String, requestID: String) async throws {
-        _ = entryID
+    func toggleReaction(entryID: String, requestID: String) async throws -> SmallThingsReactionResult {
         _ = requestID
+        return SmallThingsReactionResult(entryID: entryID, reacted: true)
     }
 
-    func createComment(entryID: String, text: String, requestID: String) async throws {
-        _ = entryID
-        _ = text
+    func createComment(entryID: String, text: String, requestID: String) async throws -> SmallThingsCommentResult {
         _ = requestID
+        return SmallThingsCommentResult(
+            entryID: entryID,
+            comment: SmallThingComment(author: .me, text: text)
+        )
     }
 
     func createReply(
@@ -318,12 +346,18 @@ private actor SmallThingsServiceSpy: SmallThingsServicing {
         replyToID: String,
         text: String,
         requestID: String
-    ) async throws {
-        _ = entryID
-        _ = commentID
+    ) async throws -> SmallThingsReplyResult {
         _ = replyToID
-        _ = text
         _ = requestID
+        return SmallThingsReplyResult(
+            entryID: entryID,
+            commentID: commentID,
+            reply: SmallThingReply(
+                author: .me,
+                text: text,
+                replyToAuthor: .partner
+            )
+        )
     }
 
     func review(

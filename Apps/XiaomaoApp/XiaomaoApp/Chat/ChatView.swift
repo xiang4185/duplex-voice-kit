@@ -30,7 +30,7 @@ struct ChatView: View {
                             ChatMessageBubble(message: message)
                                 .id(message.id)
 
-                            if message.participant == .companion,
+                            if isLastMessageInTurn(message),
                                viewModel.failedXiaomaoTurns.contains(message.turnID) {
                                 xiaomaoRetryCard(turnID: message.turnID)
                             }
@@ -72,7 +72,11 @@ struct ChatView: View {
                 isSending: viewModel.isSending,
                 characterLimit: ChatViewModel.maximumMessageLength,
                 send: {
-                    Task { await viewModel.send() }
+                    inputFocused = false
+                    Task {
+                        await Task.yield()
+                        await viewModel.send()
+                    }
                 },
                 inputFocused: $inputFocused
             )
@@ -100,7 +104,7 @@ struct ChatView: View {
                 Text("聊天")
                     .font(.system(size: 19, weight: .semibold, design: .serif))
                     .foregroundStyle(Theme.textPrimary)
-                Text("我和小猫都在")
+                Text("开发者和小猫都在")
                     .font(.system(size: 11, weight: .regular, design: .rounded))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -175,7 +179,7 @@ struct ChatView: View {
                 Text("还没有聊天记录")
                     .font(Theme.headlineFont)
                     .foregroundStyle(Theme.textPrimary)
-                Text("从一句轻松的话开始，我和小猫会按当前模式参与。")
+                Text("从一句轻松的话开始，开发者会在真实入口回复，小猫按当前模式参与。")
                     .font(Theme.subheadFont)
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -229,7 +233,7 @@ struct ChatView: View {
                 Text("小猫这一轮没有接上")
                     .font(Theme.captionFont)
                     .foregroundStyle(Theme.textPrimary)
-                Text("“我”的回复已经保存，可以只重试小猫。")
+                Text("已有消息已经保存，可以只重试小猫。")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -279,6 +283,10 @@ struct ChatView: View {
         .padding(.vertical, 7)
         .background(Theme.bgElevated)
         .accessibilityIdentifier("chat.xiaomao.mode")
+    }
+
+    private func isLastMessageInTurn(_ message: ChatMessage) -> Bool {
+        viewModel.messages.last(where: { $0.turnID == message.turnID })?.id == message.id
     }
 }
 

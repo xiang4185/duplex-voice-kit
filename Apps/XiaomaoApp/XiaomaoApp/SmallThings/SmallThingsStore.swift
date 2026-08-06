@@ -60,7 +60,7 @@ final class SmallThingsStore: ObservableObject {
         entries
             .filter {
                 $0.type == .expense
-                    && $0.requester == .partner
+                    && $0.reviewer == .me
                     && $0.expenseStatus == .pending
             }
             .sorted { $0.createdAt > $1.createdAt }
@@ -156,12 +156,24 @@ final class SmallThingsStore: ObservableObject {
             toggleReaction(entryID: entryID)
             return
         }
-        guard let serverID = entry(id: entryID)?.serverID else { return }
-        _ = await performRemoteWrite {
-            try await service.toggleReaction(
+        guard let index = entries.firstIndex(where: { $0.id == entryID }),
+              let serverID = entries[index].serverID else { return }
+        let previous = entries[index].reacted
+        entries[index].reacted.toggle()
+        operationError = nil
+        do {
+            let result = try await service.toggleReaction(
                 entryID: serverID,
                 requestID: UUID().uuidString.lowercased()
             )
+            if let currentIndex = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[currentIndex].reacted = result.reacted
+            }
+        } catch {
+            if let currentIndex = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[currentIndex].reacted = previous
+            }
+            operationError = Self.userFacingMessage(for: error)
         }
     }
 
@@ -170,13 +182,31 @@ final class SmallThingsStore: ObservableObject {
         guard let service else { return addComment(entryID: entryID, text: text) }
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty,
-              let serverID = entry(id: entryID)?.serverID else { return false }
-        return await performRemoteWrite {
-            try await service.createComment(
+              let entryIndex = entries.firstIndex(where: { $0.id == entryID }),
+              let serverID = entries[entryIndex].serverID else { return false }
+        let temporaryID = UUID()
+        entries[entryIndex].comments.append(
+            SmallThingComment(id: temporaryID, author: .me, text: clean)
+        )
+        operationError = nil
+        do {
+            let result = try await service.createComment(
                 entryID: serverID,
                 text: clean,
                 requestID: UUID().uuidString.lowercased()
             )
+            guard let currentEntryIndex = entries.firstIndex(where: { $0.id == entryID }),
+                  let temporaryIndex = entries[currentEntryIndex].comments.firstIndex(where: { $0.id == temporaryID }) else {
+                return true
+            }
+            entries[currentEntryIndex].comments[temporaryIndex] = result.comment
+            return true
+        } catch {
+            if let currentEntryIndex = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[currentEntryIndex].comments.removeAll { $0.id == temporaryID }
+            }
+            operationError = Self.userFacingMessage(for: error)
+            return false
         }
     }
 
@@ -209,14 +239,42 @@ final class SmallThingsStore: ObservableObject {
             targetServerID = comment.replies.first(where: { $0.id == replyToID })?.serverID
         }
         guard let targetServerID else { return false }
-        return await performRemoteWrite {
-            try await service.createReply(
+        guard let entryIndex = entries.firstIndex(where: { $0.id == entryID }),
+              let commentIndex = entries[entryIndex].comments.firstIndex(where: { $0.id == commentID }) else {
+            return false
+        }
+        let temporaryID = UUID()
+        entries[entryIndex].comments[commentIndex].replies.append(
+            SmallThingReply(
+                id: temporaryID,
+                author: .me,
+                text: clean,
+                replyToAuthor: replyTo
+            )
+        )
+        operationError = nil
+        do {
+            let result = try await service.createReply(
                 entryID: entryServerID,
                 commentID: commentServerID,
                 replyToID: targetServerID,
                 text: clean,
                 requestID: UUID().uuidString.lowercased()
             )
+            guard let currentEntryIndex = entries.firstIndex(where: { $0.id == entryID }),
+                  let currentCommentIndex = entries[currentEntryIndex].comments.firstIndex(where: { $0.id == commentID }),
+                  let temporaryIndex = entries[currentEntryIndex].comments[currentCommentIndex].replies.firstIndex(where: { $0.id == temporaryID }) else {
+                return true
+            }
+            entries[currentEntryIndex].comments[currentCommentIndex].replies[temporaryIndex] = result.reply
+            return true
+        } catch {
+            if let currentEntryIndex = entries.firstIndex(where: { $0.id == entryID }),
+               let currentCommentIndex = entries[currentEntryIndex].comments.firstIndex(where: { $0.id == commentID }) {
+                entries[currentEntryIndex].comments[currentCommentIndex].replies.removeAll { $0.id == temporaryID }
+            }
+            operationError = Self.userFacingMessage(for: error)
+            return false
         }
     }
 

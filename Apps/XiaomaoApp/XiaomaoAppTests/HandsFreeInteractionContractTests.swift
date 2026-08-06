@@ -61,8 +61,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // onDisappear 走 closePage: false (视图已消失, 不手动关闭)
         XCTAssertEqual(
-            source.components(separatedBy: "finishCall(closePage: false)").count - 1, 1,
-            "onDisappear 必须调用 finishCall(closePage: false)"
+            source.components(separatedBy: "finishCall(closePage: false)").count - 1, 0,
+            "页面消失不得结束仍在进行的通话"
         )
 
         // Live Activity 结束恰好 2 处合法位置 (P2.7B-FINAL-IDLE):
@@ -77,6 +77,40 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             .filter { $0.range(of: #"^\s+viewModel\.disappear\(\)$"#, options: .regularExpression) != nil }
             .count
         XCTAssertEqual(disappearLines, 1, "viewModel.disappear() 必须只在 finishCall 内调用一次")
+    }
+
+    func testCallPageCanMinimizeWithoutEndingAndResumeFromMiniBar() throws {
+        let call = try voiceCallViewSource()
+        let tabs = try source("XiaomaoApp/App/MainTabView.swift")
+
+        guard let disappearStart = call.range(of: ".onDisappear")?.lowerBound,
+              let sceneStart = call.range(of: ".onChange(of: scenePhase", range: disappearStart..<call.endIndex)?.lowerBound else {
+            XCTFail("缺少 VoiceCallView 生命周期范围")
+            return
+        }
+        let disappearBlock = String(call[disappearStart..<sceneStart])
+        XCTAssertFalse(disappearBlock.contains("finishCall"))
+        XCTAssertFalse(disappearBlock.contains("endCurrentCall"))
+        XCTAssertFalse(disappearBlock.contains("viewModel.disappear"))
+        XCTAssertTrue(call.contains(".accessibilityLabel(\"收起通话\")"))
+        XCTAssertTrue(tabs.contains("call.resume.bar"))
+        XCTAssertTrue(tabs.contains("voiceController.callIsActive"))
+        XCTAssertTrue(tabs.contains("Button(action: startCall)"))
+    }
+
+    func testConnectionReadinessUsesRealAudioAndParallelPreparation() throws {
+        let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
+        let diagnostics = try source("XiaomaoApp/Voice/VoiceDiagnostics.swift")
+
+        XCTAssertTrue(controller.contains("async let audioPrepared = prepareAudio()"))
+        XCTAssertTrue(controller.contains("async let socketConnected = connectSocketForNewSession()"))
+        XCTAssertTrue(controller.contains("captureCallbackCount > 0"))
+        XCTAssertTrue(controller.contains("isConversationReady"))
+        XCTAssertTrue(controller.contains("schedulePostResponseCaptureCheck"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_audio_session_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_websocket_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_session_ready_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_microphone_ready_ms"))
     }
 
     // MARK: P2.6D 多角色预览彩蛋契约
@@ -110,7 +144,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("CompanionRoleStore.shared.productionRole.displayName"))
         // 保留 P2.6B finishCall 单路径
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
     }
 
     // P2.8A: 角色页 1.0 收口 — 单生产角色"小猫", 无占位/彩蛋/死按钮
@@ -213,7 +247,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("silenceSeconds"))
         // 保留 finishCall 单路径 + productionRole
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         // 不新增 Timer
         XCTAssertFalse(call.contains("Timer.scheduledTimer"))
@@ -242,7 +276,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 3. 保留 finishCall 单路径 + 生产角色
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
 
         // 4. 通话主头像不再使用 170
@@ -312,7 +346,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("size: availableSize"), "P2.7B: portrait 自适应尺寸必须保留")
         XCTAssertTrue(call.contains("variant: .xiaomao"), "P2.7B: 通话主视觉必须使用生产角色")
         XCTAssertTrue(call.contains("await Task.yield()"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         guard let appearedIdx = call.range(of: "appeared = true")?.lowerBound,
               let appearIdx = call.range(of: "await viewModel.appear()")?.lowerBound else {
@@ -370,7 +404,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("size: availableSize"))
         XCTAssertTrue(call.contains("variant: .xiaomao"))
         XCTAssertTrue(call.contains("await Task.yield()"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         guard let aIdx = call.range(of: "appeared = true")?.lowerBound,
               let bIdx = call.range(of: "await viewModel.appear()")?.lowerBound else {
@@ -494,7 +528,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("callStatusText"))
         XCTAssertTrue(call.contains("private let heroSize: CGFloat = 220"), "P2.7B: heroSize 220 必须保留")
         XCTAssertTrue(call.contains("variant: .xiaomao"), "P2.7B: 通话主视觉必须使用生产角色")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         XCTAssertTrue(call.contains("SC2.0 · 路线 B"))
         XCTAssertTrue(call.contains("await Task.yield()"))
@@ -764,7 +798,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("callStatusColor"), "状态颜色必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
         XCTAssertTrue(call.contains(".symbolEffect(.pulse"), "麦克风 pulse 必须保留")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"), "统一结束路径必须保留")
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
         XCTAssertTrue(call.contains("productionRole.displayName"), "生产角色 Live Activity 必须保留")
@@ -827,7 +861,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // ===== 既有通话核心契约保留 =====
         XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "Mesh 背景必须保留")
         XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"), "统一结束路径必须保留")
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
@@ -1100,10 +1134,11 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         }
         let topBar = String(call[topStart..<topEnd])
         XCTAssertTrue(topBar.contains("xmark"), "左上按钮必须使用 xmark 图标")
-        XCTAssertTrue(topBar.contains("showHangupConfirm = true"), "左上点击必须显示挂断确认")
+        XCTAssertFalse(topBar.contains("showHangupConfirm = true"), "左上点击不得显示挂断确认")
+        XCTAssertTrue(topBar.contains("close()"), "左上点击必须只收起通话页面")
         XCTAssertFalse(topBar.contains("finishCall()"), "左上按钮不得直接调用 finishCall()")
         XCTAssertTrue(topBar.contains("call.close"), "call.close identifier 必须保留")
-        XCTAssertTrue(topBar.contains("结束通话"), "左上 accessibility label 必须为 结束通话")
+        XCTAssertTrue(topBar.contains("收起通话"), "左上 accessibility label 必须为 收起通话")
 
         // ===== 6. 聊天提示 (换话题降级, 限定控制区范围避免命中历史注释) =====
         guard let ctlStart = call.range(of: "private var controlArea")?.lowerBound else {

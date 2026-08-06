@@ -77,22 +77,22 @@ actor MockChatService: ChatServicing {
             participant: .user,
             turnID: turnID
         )
-        let companionMessage = ChatMessage(
-            id: "mock-companion-\(UUID().uuidString.lowercased())",
+        let developerMessage = ChatMessage(
+            id: "mock-developer-\(UUID().uuidString.lowercased())",
             role: .assistant,
-            content: "我听见了，我们继续把这件事说完。",
+            content: "开发者已通过离线 Mock 回复。",
             createdAt: timestamp.addingTimeInterval(0.001),
-            participant: .companion,
+            participant: .developer,
             turnID: turnID
         )
-        var turnMessages = [userMessage, companionMessage]
+        var turnMessages = [userMessage, developerMessage]
         var participantResults = [
             ChatParticipantResult(
-                participant: .companion,
+                participant: .developer,
                 turnID: turnID,
                 status: .completed,
                 retryable: false,
-                message: companionMessage
+                message: developerMessage
             )
         ]
         if shouldIncludeXiaomao(mode: xiaomaoMode, message: message) {
@@ -237,11 +237,11 @@ actor MockChatService: ChatServicing {
                 turnID: firstTurn
             ),
             ChatMessage(
-                id: "mock-history-companion-1",
+                id: "mock-history-developer-1",
                 role: .assistant,
                 content: "那种一直压在心里的东西终于放下来的感觉，应该很轻松。",
                 createdAt: base.addingTimeInterval(1),
-                participant: .companion,
+                participant: .developer,
                 turnID: firstTurn
             ),
             ChatMessage(
@@ -261,11 +261,11 @@ actor MockChatService: ChatServicing {
                 turnID: secondTurn
             ),
             ChatMessage(
-                id: "mock-history-companion-2",
+                id: "mock-history-developer-2",
                 role: .assistant,
                 content: "因为这次确实值得夸你。",
                 createdAt: base.addingTimeInterval(61),
-                participant: .companion,
+                participant: .developer,
                 turnID: secondTurn
             ),
             ChatMessage(

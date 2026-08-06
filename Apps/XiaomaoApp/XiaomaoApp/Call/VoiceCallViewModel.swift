@@ -24,6 +24,7 @@ final class VoiceCallViewModel: ObservableObject {
     func appear() async {
         guard !hasAppeared else { return }
         hasAppeared = true
+        guard !controller.callIsActive else { return }
         await controller.startNewCall()
     }
     func disappear() { Task { await controller.endCurrentCall() } }

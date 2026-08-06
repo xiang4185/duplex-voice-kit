@@ -14,7 +14,7 @@ final class ChatParticipantMappingTests: XCTestCase {
         XCTAssertEqual(message.participant.displayName, "你")
     }
 
-    func testAssistantDefaultsToCompanionWithoutIDGuessing() {
+    func testAssistantDefaultsToDeveloperWithoutIDGuessing() {
         let first = ChatMessage(
             id: "assistant-message-1",
             role: .assistant,
@@ -27,9 +27,9 @@ final class ChatParticipantMappingTests: XCTestCase {
             content: "synthetic",
             createdAt: Date(timeIntervalSince1970: 0)
         )
-        XCTAssertEqual(first.participant, .companion)
-        XCTAssertEqual(second.participant, .companion)
-        XCTAssertEqual(first.participant.displayName, "我")
+        XCTAssertEqual(first.participant, .developer)
+        XCTAssertEqual(second.participant, .developer)
+        XCTAssertEqual(first.participant.displayName, "开发者")
     }
 
     func testServerProvidedXiaomaoIdentityIsPreserved() {

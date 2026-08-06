@@ -25,12 +25,14 @@ final class ChatServiceContractTests: XCTestCase {
         )
 
         XCTAssertEqual(history.sessionID, "synthetic-session")
-        XCTAssertEqual(history.messages.first?.participant, .companion)
+        XCTAssertEqual(history.messages.first?.participant, .developer)
         XCTAssertEqual(sent.turnID, "send-turn")
         XCTAssertEqual(
             sent.messages.map(\.participant),
-            [.user, .companion, .xiaomao]
+            [.user, .xiaomao]
         )
+        XCTAssertEqual(sent.participantResults.first?.participant, .developer)
+        XCTAssertEqual(sent.participantResults.first?.status, .pending)
         XCTAssertEqual(sent.participantResults.last?.participant, .xiaomao)
         XCTAssertEqual(sent.participantResults.last?.status, .completed)
         XCTAssertEqual(retried.participant, .xiaomao)
@@ -71,7 +73,9 @@ final class ChatServiceContractTests: XCTestCase {
         XCTAssertEqual(body["xiaomao_mode"] as? String, "off")
         XCTAssertTrue(result.persisted)
         XCTAssertEqual(result.messages.first?.participant, .user)
-        XCTAssertEqual(result.messages[1].participant, .companion)
+        XCTAssertEqual(result.messages.count, 1)
+        XCTAssertEqual(result.participantResults.first?.participant, .developer)
+        XCTAssertEqual(result.participantResults.first?.status, .pending)
     }
 }
 
@@ -87,65 +91,61 @@ private actor ContractBackend: BackendAdapter {
                 "session_id": "synthetic-session",
                 "messages": [
                     Self.message(
-                        id: "history-companion",
-                        participant: "companion",
+                        id: "history-developer",
+                        participant: "developer",
                         turnID: "history-turn",
                         content: "synthetic-history"
                     )
                 ]
             ])
         case "/v1/chat":
+            let requestBody = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: request.payload) as? [String: Any]
+            )
+            let includesXiaomao = requestBody["xiaomao_mode"] as? String == "always"
+            var messages = [
+                Self.message(
+                    id: "send-user",
+                    role: "user",
+                    participant: "user",
+                    turnID: "send-turn",
+                    content: "synthetic-message"
+                )
+            ]
+            if includesXiaomao {
+                messages.append(Self.message(
+                    id: "send-xiaomao",
+                    participant: "xiaomao",
+                    turnID: "send-turn",
+                    content: "synthetic-xiaomao"
+                ))
+            }
             payload = try JSONSerialization.data(withJSONObject: [
                 "session_id": "synthetic-session",
                 "turn_id": "send-turn",
-                "messages": [
-                    Self.message(
-                        id: "send-user",
-                        role: "user",
-                        participant: "user",
-                        turnID: "send-turn",
-                        content: "synthetic-message"
-                    ),
-                    Self.message(
-                        id: "send-companion",
-                        participant: "companion",
-                        turnID: "send-turn",
-                        content: "synthetic-companion"
-                    ),
-                    Self.message(
-                        id: "send-xiaomao",
-                        participant: "xiaomao",
-                        turnID: "send-turn",
-                        content: "synthetic-xiaomao"
-                    )
-                ],
+                "messages": messages,
                 "participant_results": [
                     [
-                        "participant": "companion",
+                        "participant": "developer",
                         "turn_id": "send-turn",
-                        "status": "completed",
+                        "status": "pending",
                         "retryable": false,
-                        "message": Self.message(
-                            id: "send-companion",
-                            participant: "companion",
-                            turnID: "send-turn",
-                            content: "synthetic-companion"
-                        )
+                        "message": NSNull()
                     ],
                     [
                         "participant": "xiaomao",
                         "turn_id": "send-turn",
-                        "status": "completed",
+                        "status": includesXiaomao ? "completed" : "skipped",
                         "retryable": false,
-                        "message": Self.message(
+                        "message": includesXiaomao ? Self.message(
                             id: "send-xiaomao",
                             participant: "xiaomao",
                             turnID: "send-turn",
                             content: "synthetic-xiaomao"
-                        )
+                        ) : NSNull()
                     ]
                 ],
-                "route": "direct",
+                "route": includesXiaomao ? "direct" : "human",
                 "degraded": false,
                 "persisted": true
             ])

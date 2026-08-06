@@ -651,9 +651,9 @@ private actor RecordingBackendAdapter: BackendAdapter {
                     "created_at":"2026-08-06T00:00:00Z"
                 },
                 {
-                    "id":"synthetic-companion",
+                    "id":"synthetic-developer",
                     "role":"assistant",
-                    "participant":"companion",
+                    "participant":"developer",
                     "turn_id":"synthetic-turn",
                     "status":"completed",
                     "content":"synthetic",
@@ -662,14 +662,14 @@ private actor RecordingBackendAdapter: BackendAdapter {
             ],
             "participant_results":[
                 {
-                    "participant":"companion",
+                    "participant":"developer",
                     "turn_id":"synthetic-turn",
                     "status":"completed",
                     "retryable":false,
                     "message":{
-                        "id":"synthetic-companion",
+                        "id":"synthetic-developer",
                         "role":"assistant",
-                        "participant":"companion",
+                        "participant":"developer",
                         "turn_id":"synthetic-turn",
                         "status":"completed",
                         "content":"synthetic",

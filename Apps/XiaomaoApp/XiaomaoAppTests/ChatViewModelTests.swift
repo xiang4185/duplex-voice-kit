@@ -88,7 +88,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages, authoritative.messages)
         XCTAssertEqual(viewModel.messages.first?.createdAt, timestamp)
         XCTAssertTrue(viewModel.messages.first?.id.hasPrefix("mock-user-") == true)
-        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-companion-") == true)
+        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-developer-") == true)
     }
 
     func testHistoryFailureDoesNotCreateSessionAndCanRetry() async {
@@ -202,20 +202,13 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(service.sendRequests.first?.xiaomaoMode, .always)
     }
 
-    func testXiaomaoFailureKeepsCompanionAndIndependentRetryAppendsOnlyXiaomao() async {
+    func testXiaomaoFailureKeepsUserMessageAndIndependentRetryAppendsOnlyXiaomao() async {
         let turnID = "retry-turn"
         let user = serverMessage(
             id: "retry-user",
             role: .user,
             content: "合成发送",
             participant: .user,
-            turnID: turnID
-        )
-        let companion = serverMessage(
-            id: "retry-companion",
-            role: .assistant,
-            content: "我已完成",
-            participant: .companion,
             turnID: turnID
         )
         let xiaomao = serverMessage(
@@ -228,14 +221,14 @@ final class ChatViewModelTests: XCTestCase {
         let sendResult = ChatSendResult(
             sessionID: "server-session",
             turnID: turnID,
-            messages: [user, companion],
+            messages: [user],
             participantResults: [
                 ChatParticipantResult(
-                    participant: .companion,
+                    participant: .developer,
                     turnID: turnID,
-                    status: .completed,
+                    status: .pending,
                     retryable: false,
-                    message: companion
+                    message: nil
                 ),
                 ChatParticipantResult(
                     participant: .xiaomao,
@@ -272,14 +265,14 @@ final class ChatViewModelTests: XCTestCase {
 
         await viewModel.send()
 
-        XCTAssertEqual(viewModel.messages.map(\.participant), [.user, .companion])
+        XCTAssertEqual(viewModel.messages.map(\.participant), [.user])
         XCTAssertTrue(viewModel.failedXiaomaoTurns.contains(turnID))
 
         await viewModel.retryXiaomao(turnID: turnID)
 
         XCTAssertEqual(
             viewModel.messages.map(\.participant),
-            [.user, .companion, .xiaomao]
+            [.user, .xiaomao]
         )
         XCTAssertFalse(viewModel.failedXiaomaoTurns.contains(turnID))
     }

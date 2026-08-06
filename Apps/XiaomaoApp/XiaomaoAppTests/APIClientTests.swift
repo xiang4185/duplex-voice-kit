@@ -55,9 +55,9 @@ final class APIClientTests: XCTestCase {
                             "created_at":"2026-08-06T00:00:00Z"
                         },
                         {
-                            "id":"opaque-companion",
+                            "id":"opaque-developer",
                             "role":"assistant",
-                            "participant":"companion",
+                            "participant":"developer",
                             "turn_id":"opaque-turn",
                             "status":"completed",
                             "content":"合成回复",
@@ -66,14 +66,14 @@ final class APIClientTests: XCTestCase {
                     ],
                     "participant_results":[
                         {
-                            "participant":"companion",
+                            "participant":"developer",
                             "turn_id":"opaque-turn",
                             "status":"completed",
                             "retryable":false,
                             "message":{
-                                "id":"opaque-companion",
+                                "id":"opaque-developer",
                                 "role":"assistant",
-                                "participant":"companion",
+                                "participant":"developer",
                                 "turn_id":"opaque-turn",
                                 "status":"completed",
                                 "content":"合成回复",

@@ -63,40 +63,12 @@ struct ChatSendResult: Equatable, Sendable {
         self.persisted = persisted
     }
 
-    init(
-        sessionID: String,
-        userMessage: ChatMessage,
-        assistantMessage: ChatMessage,
-        route: String,
-        degraded: Bool,
-        persisted: Bool
-    ) {
-        let turnID = userMessage.turnID
-        self.init(
-            sessionID: sessionID,
-            turnID: turnID,
-            messages: [userMessage, assistantMessage],
-            participantResults: [
-                ChatParticipantResult(
-                    participant: .companion,
-                    turnID: turnID,
-                    status: .completed,
-                    retryable: false,
-                    message: assistantMessage
-                )
-            ],
-            route: route,
-            degraded: degraded,
-            persisted: persisted
-        )
-    }
-
     var userMessage: ChatMessage {
         messages.first(where: { $0.participant == .user }) ?? messages[0]
     }
 
-    var assistantMessage: ChatMessage {
-        messages.first(where: { $0.participant == .companion }) ?? messages[1]
+    var developerMessage: ChatMessage? {
+        messages.first(where: { $0.participant == .developer })
     }
 }
 
@@ -318,7 +290,6 @@ actor ChatService: ChatServicing {
         guard response.persisted,
               !response.turnID.isEmpty,
               messages.contains(where: { $0.participant == .user }),
-              messages.contains(where: { $0.participant == .companion }),
               messages.allSatisfy({ $0.turnID == response.turnID }) else {
             throw AppError.protocolError("invalid_chat_contract")
         }

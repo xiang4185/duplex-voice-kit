@@ -86,7 +86,7 @@ struct SmallThingsLedgerCard: View {
     private var amounts: some View {
         VStack(spacing: Theme.Spacing.xSmall) {
             amountRow("已点头", value: store.approvedAmount, symbol: "checkmark.circle.fill")
-            amountRow("等看看", value: store.pendingAmount, symbol: "clock.fill")
+            amountRow("等待确认", value: store.pendingAmount, symbol: "clock.fill")
             amountRow("还剩下", value: store.remainingAmount, symbol: "wallet.bifold.fill")
         }
         .frame(maxWidth: .infinity)

@@ -60,6 +60,10 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("smallThings.entry.comments.toggle"))
         XCTAssertTrue(entry.contains("smallThings.comment.send"))
         XCTAssertTrue(entry.contains("fullScreenCover"))
+        XCTAssertTrue(entry.contains("smallThings.entry.image.preview"))
+        XCTAssertTrue(entry.contains(".contentShape("))
+        XCTAssertTrue(image.contains(".clipped()"))
+        XCTAssertTrue(image.contains(".contentShape(RoundedRectangle"))
         XCTAssertTrue(image.contains("LinearGradient"), "Mock 初始图必须由程序生成")
     }
 
@@ -86,8 +90,9 @@ final class SmallThingsUIContractTests: XCTestCase {
         let approval = try source("XiaomaoApp/SmallThings/SmallThingsApprovalView.swift")
         let store = try source("XiaomaoApp/SmallThings/SmallThingsStore.swift")
 
-        XCTAssertTrue(store.contains("$0.requester == .partner"))
+        XCTAssertTrue(store.contains("$0.reviewer == .me"))
         XCTAssertTrue(store.contains("$0.expenseStatus == .pending"))
+        XCTAssertTrue(approval.contains("entry.expenseStatusDisplayName"))
         XCTAssertTrue(approval.contains("Task.sleep(for: .milliseconds(1_800))"))
         XCTAssertTrue(approval.contains("smallThings.approval.approve"))
         XCTAssertTrue(approval.contains("smallThings.approval.reject"))
@@ -96,6 +101,24 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(approval.contains("store.undoLastReviewPersisted()"))
         XCTAssertFalse(approval.contains("Alert("))
         XCTAssertFalse(approval.contains("alert("))
+    }
+
+    func testPendingCopyAndLightweightActionsUseServerRolesAndLocalUpdates() throws {
+        let models = try source("XiaomaoApp/SmallThings/SmallThingsModels.swift")
+        let store = try source("XiaomaoApp/SmallThings/SmallThingsStore.swift")
+        let composer = try source("XiaomaoApp/SmallThings/SmallThingComposerView.swift")
+
+        XCTAssertTrue(models.contains("reviewer == .me ? \"等我看\" : \"等对方看\""))
+        XCTAssertTrue(composer.contains("等对方看"))
+        XCTAssertTrue(store.contains("entries[index].reacted.toggle()"))
+        XCTAssertTrue(store.contains("entries[currentEntryIndex].comments.removeAll"))
+
+        let reactionStart = try XCTUnwrap(store.range(of: "func toggleReactionPersisted"))
+        let commentStart = try XCTUnwrap(store.range(of: "func addCommentPersisted", range: reactionStart.upperBound..<store.endIndex))
+        let reactionBlock = String(store[reactionStart.lowerBound..<commentStart.lowerBound])
+        XCTAssertFalse(reactionBlock.contains("refreshFromBackend"))
+        XCTAssertFalse(reactionBlock.contains("loadState()"))
+        XCTAssertFalse(reactionBlock.contains("performRemoteWrite"))
     }
 
     func testCoreAccessibilityIdentifiersRemainStable() throws {

@@ -84,7 +84,10 @@ struct SmallThingsApprovalView: View {
                     Text(entry.title)
                         .font(Theme.title2Font)
                         .foregroundStyle(Theme.textPrimary)
-                    Label("\(entry.requester.displayName) 发起 · 等我看", systemImage: "clock.fill")
+                    Label(
+                        "\(entry.requester.displayName) 发起 · \(entry.expenseStatusDisplayName)",
+                        systemImage: "clock.fill"
+                    )
                         .font(Theme.captionFont)
                         .foregroundStyle(Theme.primary)
                 }

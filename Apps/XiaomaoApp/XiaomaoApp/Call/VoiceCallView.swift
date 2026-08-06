@@ -93,8 +93,10 @@ struct VoiceCallView: View {
                     .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
                     // P2.8A: 首次连接加载反馈 (idle/connecting 时浮在人物上方, .ready 自动淡出)
                     .overlay {
-                        if viewModel.controller.state == .idle
-                            || viewModel.controller.state == .connecting {
+                        if !viewModel.controller.isConversationReady,
+                           viewModel.controller.state != .failed,
+                           viewModel.controller.state != .closed,
+                           viewModel.controller.state != .closing {
                             connectingCard
                                 .transition(.opacity)
                         }
@@ -230,8 +232,6 @@ struct VoiceCallView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
-            // P2.6B-FIX-1: 统一结束路径 — 视图已消失, 无需手动 close
-            finishCall(closePage: false)
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -272,13 +272,12 @@ struct VoiceCallView: View {
         }
     }
 
-    // MARK: 顶部栏 (P2.7B-FIX: 移除公开 stethoscope 诊断按钮; P2.8A: 左上为结束确认, 不直接结束)
+    // MARK: 顶部栏 — 左上仅收起页面，通话生命周期保持不变
     private var topBar: some View {
         HStack {
             Button {
-                // P2.8A: 左上关闭 → 显示挂断确认 (与底部挂断共用同一确认浮层), 不直接 finishCall
                 WarmHaptics.action()
-                withAnimation(.easeOut(duration: 0.28)) { showHangupConfirm = true }
+                close()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 17, weight: .medium))
@@ -287,7 +286,8 @@ struct VoiceCallView: View {
                     .background(Theme.surface.opacity(0.7), in: Circle())
                     .overlay(Circle().stroke(Theme.border, lineWidth: 1))
             }
-            .accessibilityLabel("结束通话")
+            .accessibilityLabel("收起通话")
+            .accessibilityHint("通话会继续，可从当前通话状态条重新进入")
             .accessibilityIdentifier("call.close")
 
             Spacer()
@@ -317,6 +317,14 @@ struct VoiceCallView: View {
 
     // P2.6J: 通话状态文案 (纯 UI 映射, 不接入连接流程)
     private var callStatusText: String {
+        if !viewModel.controller.isConversationReady,
+           viewModel.controller.state != .failed,
+           viewModel.controller.state != .closed,
+           viewModel.controller.state != .closing,
+           viewModel.controller.state != .reconnecting,
+           viewModel.controller.state != .degraded {
+            return "正在准备麦克风"
+        }
         switch viewModel.controller.state {
         case .idle, .connecting: return "正在连接小猫"
         case .ready, .listening, .endpointing: return "小猫正在听你说话"
@@ -331,6 +339,14 @@ struct VoiceCallView: View {
 
     // P2.6K: 通话状态点颜色 (与真实 Session 状态一致, 纯 UI 映射)
     private var callStatusColor: Color {
+        if !viewModel.controller.isConversationReady,
+           viewModel.controller.state != .failed,
+           viewModel.controller.state != .closed,
+           viewModel.controller.state != .closing,
+           viewModel.controller.state != .reconnecting,
+           viewModel.controller.state != .degraded {
+            return Theme.textTertiary
+        }
         switch viewModel.controller.state {
         case .idle, .connecting, .closing, .closed:
             return Theme.textTertiary

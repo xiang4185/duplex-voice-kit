@@ -2,19 +2,20 @@ import Foundation
 
 enum ChatParticipant: String, Codable, CaseIterable, Equatable, Sendable {
     case user
-    case companion
+    case developer
     case xiaomao
 
     var displayName: String {
         switch self {
         case .user: "你"
-        case .companion: "我"
+        case .developer: "开发者"
         case .xiaomao: "小猫"
         }
     }
 }
 
 enum ChatMessageStatus: String, Codable, Equatable, Sendable {
+    case pending
     case sending
     case completed
     case failed
@@ -68,7 +69,7 @@ struct ChatMessage: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.role = role
-        self.participant = participant ?? (role == .user ? .user : .companion)
+        self.participant = participant ?? (role == .user ? .user : .developer)
         self.turnID = turnID ?? id
         self.status = status
         self.content = content

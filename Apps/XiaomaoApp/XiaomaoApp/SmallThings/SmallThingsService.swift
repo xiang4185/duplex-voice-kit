@@ -17,6 +17,22 @@ struct SmallThingsReviewReceipt: Equatable, Sendable {
     let undoToken: String
 }
 
+struct SmallThingsReactionResult: Equatable, Sendable {
+    let entryID: String
+    let reacted: Bool
+}
+
+struct SmallThingsCommentResult: Equatable, Sendable {
+    let entryID: String
+    let comment: SmallThingComment
+}
+
+struct SmallThingsReplyResult: Equatable, Sendable {
+    let entryID: String
+    let commentID: String
+    let reply: SmallThingReply
+}
+
 protocol SmallThingsServicing: Sendable {
     func loadState() async throws -> SmallThingsRemoteState
     func createNote(
@@ -31,15 +47,15 @@ protocol SmallThingsServicing: Sendable {
         note: String,
         requestID: String
     ) async throws
-    func toggleReaction(entryID: String, requestID: String) async throws
-    func createComment(entryID: String, text: String, requestID: String) async throws
+    func toggleReaction(entryID: String, requestID: String) async throws -> SmallThingsReactionResult
+    func createComment(entryID: String, text: String, requestID: String) async throws -> SmallThingsCommentResult
     func createReply(
         entryID: String,
         commentID: String,
         replyToID: String,
         text: String,
         requestID: String
-    ) async throws
+    ) async throws -> SmallThingsReplyResult
     func review(
         entryID: String,
         status: SmallThingExpenseStatus,
@@ -93,6 +109,7 @@ actor ProductionSmallThingsService: SmallThingsServicing {
         let createdAt: String
         let type: SmallThingEntryType
         let requester: SmallThingRequester
+        let reviewer: SmallThingRequester?
         let title: String
         let body: String
         let imageMetadata: ImageMetadataDTO?
@@ -107,6 +124,7 @@ actor ProductionSmallThingsService: SmallThingsServicing {
             case createdAt = "created_at"
             case type
             case requester
+            case reviewer
             case title
             case body
             case imageMetadata = "image_metadata"
@@ -164,6 +182,42 @@ actor ProductionSmallThingsService: SmallThingsServicing {
 
         enum CodingKeys: String, CodingKey {
             case undoToken = "undo_token"
+        }
+    }
+
+    private struct ReactionResponse: Decodable {
+        let entryID: String
+        let reactedByMe: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case entryID = "entry_id"
+            case reactedByMe = "reacted_by_me"
+        }
+    }
+
+    private struct CommentResponse: Decodable {
+        let comment: CommentDTO
+    }
+
+    private struct ReplyResponse: Decodable {
+        let reply: ReplyEnvelopeDTO
+    }
+
+    private struct ReplyEnvelopeDTO: Decodable {
+        let id: String
+        let entryID: String
+        let commentID: String
+        let author: SmallThingRequester
+        let replyToAuthor: SmallThingRequester
+        let text: String
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case entryID = "entry_id"
+            case commentID = "comment_id"
+            case author
+            case replyToAuthor = "reply_to_author"
+            case text
         }
     }
 
@@ -267,17 +321,25 @@ actor ProductionSmallThingsService: SmallThingsServicing {
         )
     }
 
-    func toggleReaction(entryID: String, requestID: String) async throws {
-        try await write(
+    func toggleReaction(entryID: String, requestID: String) async throws -> SmallThingsReactionResult {
+        let response: ReactionResponse = try await execute(
             route: "/v1/small-things/reactions/toggle",
             body: ["request_id": requestID, "entry_id": entryID]
         )
+        return SmallThingsReactionResult(
+            entryID: response.entryID,
+            reacted: response.reactedByMe
+        )
     }
 
-    func createComment(entryID: String, text: String, requestID: String) async throws {
-        try await write(
+    func createComment(entryID: String, text: String, requestID: String) async throws -> SmallThingsCommentResult {
+        let response: CommentResponse = try await execute(
             route: "/v1/small-things/comments/create",
             body: ["request_id": requestID, "entry_id": entryID, "text": text]
+        )
+        return SmallThingsCommentResult(
+            entryID: entryID,
+            comment: Self.comment(from: response.comment)
         )
     }
 
@@ -287,8 +349,8 @@ actor ProductionSmallThingsService: SmallThingsServicing {
         replyToID: String,
         text: String,
         requestID: String
-    ) async throws {
-        try await write(
+    ) async throws -> SmallThingsReplyResult {
+        let response: ReplyResponse = try await execute(
             route: "/v1/small-things/replies/create",
             body: [
                 "request_id": requestID,
@@ -297,6 +359,17 @@ actor ProductionSmallThingsService: SmallThingsServicing {
                 "reply_to_id": replyToID,
                 "text": text
             ]
+        )
+        return SmallThingsReplyResult(
+            entryID: response.reply.entryID,
+            commentID: response.reply.commentID,
+            reply: SmallThingReply(
+                id: Self.stableUUID(from: response.reply.id),
+                serverID: response.reply.id,
+                author: response.reply.author,
+                text: response.reply.text,
+                replyToAuthor: response.reply.replyToAuthor
+            )
         )
     }
 
@@ -401,6 +474,7 @@ actor ProductionSmallThingsService: SmallThingsServicing {
             createdAt: createdAt,
             type: dto.type,
             requester: dto.requester,
+            reviewer: dto.reviewer,
             title: dto.title,
             body: dto.body,
             amount: Double(dto.amountCents ?? 0) / 100,

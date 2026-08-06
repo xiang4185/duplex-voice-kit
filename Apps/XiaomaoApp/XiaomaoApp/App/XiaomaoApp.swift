@@ -104,11 +104,11 @@ private struct RootView: View {
                 MainTabView(
                     environment: coordinator.environment,
                     startCall: { requestCall() },
+                    voiceController: coordinator.voiceController,
                     chatService: coordinator.chatService,
                     smallThingsStore: coordinator.smallThingsStore,
                     onReconfigure: {
-                        activeCall = false
-                        coordinator.screen = .binding
+                        reconfigureConnection()
                     }
                 )
                 .fullScreenCover(isPresented: $activeCall) {
@@ -171,7 +171,16 @@ private struct RootView: View {
     // 不使用人工延迟, 点击后立即置 activeCall.
     private func requestCall() {
         guard !activeCall else { return }
+        coordinator.voiceController.markPresentationRequested()
         activeCall = true
+    }
+
+    private func reconfigureConnection() {
+        activeCall = false
+        Task { @MainActor in
+            await coordinator.voiceController.endCurrentCall()
+            coordinator.screen = .binding
+        }
     }
 
     private func rebuildAdapters() {
