@@ -1775,7 +1775,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
         XCTAssertEqual(fixture.audio.recoverCount, 0)
         XCTAssertEqual(fixture.controller.postResponseCaptureRecoveryCount, 0)
-        XCTAssertGreaterThan(fixture.controller.diagnosticReport().count, 0)
+        XCTAssertGreaterThan(fixture.controller.diagnosticText.count, 0)
     }
 
     private func makeFixture(
