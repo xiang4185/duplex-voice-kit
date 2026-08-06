@@ -55,7 +55,12 @@ struct MainTabView: View {
             .tabItem { Label(Tab.companion.title, systemImage: Tab.companion.icon) }
             .tag(Tab.companion)
 
-            ChatView(viewModel: chatViewModel)
+            ChatView(
+                viewModel: chatViewModel,
+                modeTitle: environment.hostAdapters.mode == .mock
+                    ? "离线演示"
+                    : "在线三人会话"
+            )
                 .tabItem {
                     Label(Tab.chat.title, systemImage: Tab.chat.icon)
                         .accessibilityIdentifier("main.tab.chat")

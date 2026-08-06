@@ -13,6 +13,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var isClearing = false
     @Published private(set) var hasLoadedHistory = false
     @Published private(set) var lastReplyWasDegraded = false
+    @Published private(set) var requiresReconfiguration = false
     @Published var errorMessage = ""
 
     private let service: (any ChatServicing)?
@@ -88,10 +89,12 @@ final class ChatViewModel: ObservableObject {
             messages = result.messages
             hasLoadedHistory = true
             lastReplyWasDegraded = false
+            requiresReconfiguration = false
         } catch {
             sessionID = nil
             hasLoadedHistory = false
             errorMessage = Self.userFacingMessage(for: error, action: "加载聊天记录")
+            requiresReconfiguration = Self.requiresReconfiguration(for: error)
         }
     }
 
@@ -129,11 +132,13 @@ final class ChatViewModel: ObservableObject {
             messages.append(result.assistantMessage)
             draft = ""
             lastReplyWasDegraded = result.degraded
+            requiresReconfiguration = false
         } catch {
             if Self.isSessionInvalidatingError(error) {
                 invalidateSession()
             }
             errorMessage = Self.userFacingMessage(for: error, action: "发送消息")
+            requiresReconfiguration = Self.requiresReconfiguration(for: error)
         }
     }
 
@@ -147,6 +152,7 @@ final class ChatViewModel: ObservableObject {
         let requestID = requestIDGenerator()
         isClearing = true
         errorMessage = ""
+        requiresReconfiguration = false
         defer { isClearing = false }
 
         do {
@@ -214,12 +220,25 @@ final class ChatViewModel: ObservableObject {
                 if code == "session_mismatch" || code == "invalid_session_id" {
                     return "聊天会话已失效，请重新加载聊天记录。"
                 }
-                return "服务暂时不可用，请稍后重试。"
+                if code.hasPrefix("http_") {
+                    return "服务器返回异常状态（\(code.replacingOccurrences(of: "http_", with: "HTTP "))）。"
+                }
+                return "服务器拒绝了本次请求，请稍后重试。"
             case .protocolError, .audio:
                 return "\(action)失败，请稍后重试。"
             }
         }
         return "\(action)失败，请稍后重试。"
+    }
+
+    private static func requiresReconfiguration(for error: Error) -> Bool {
+        guard let appError = error as? AppError else { return false }
+        switch appError {
+        case .unauthorized, .configuration:
+            return true
+        default:
+            return false
+        }
     }
 }
 

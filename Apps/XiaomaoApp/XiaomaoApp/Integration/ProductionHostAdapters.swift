@@ -237,10 +237,11 @@ struct KeychainCredentialProviderAdapter: CredentialProviderAdapter {
     }
 
     func obtainCredentials() async throws -> AuthCredentials? {
-        guard let token = tokenStore.load()?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let token = tokenStore.load().map(RuntimeCredentialNormalizer.token),
               !token.isEmpty else {
             return nil
         }
+        guard !token.isEmpty else { return nil }
         return AuthCredentials(accessToken: token, refreshToken: nil)
     }
 
@@ -258,7 +259,7 @@ struct InjectedDeviceBindingProviderAdapter: DeviceBindingProviderAdapter {
     private let deviceID: String
 
     init(deviceID: String) {
-        self.deviceID = deviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.deviceID = RuntimeCredentialNormalizer.deviceID(deviceID)
     }
 
     func currentState() async -> DeviceBindingState {

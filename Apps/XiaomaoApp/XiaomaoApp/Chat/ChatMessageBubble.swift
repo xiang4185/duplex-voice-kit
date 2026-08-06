@@ -5,16 +5,20 @@ struct ChatMessageBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
-            if message.role == .user {
+            if message.participant == .user {
                 Spacer(minLength: Theme.Spacing.xxxLarge)
             } else {
                 avatar
             }
 
             VStack(
-                alignment: message.role == .user ? .trailing : .leading,
+                alignment: message.participant == .user ? .trailing : .leading,
                 spacing: Theme.Spacing.xxSmall
             ) {
+                Text(message.senderName)
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textSecondary)
+
                 Text(message.content)
                     .font(Theme.bodyFont)
                     .foregroundStyle(Theme.textPrimary)
@@ -36,7 +40,7 @@ struct ChatMessageBubble: View {
                     .padding(.horizontal, Theme.Spacing.xxSmall)
             }
 
-            if message.role == .assistant {
+            if message.participant != .user {
                 Spacer(minLength: Theme.Spacing.xxxLarge)
             }
         }
@@ -48,7 +52,7 @@ struct ChatMessageBubble: View {
     }
 
     private var avatar: some View {
-        Image(systemName: "cat.fill")
+        Image(systemName: message.participant == .xiaomao ? "cat.fill" : "heart.circle.fill")
             .font(.system(size: 15, weight: .semibold))
             .frame(width: 32, height: 32)
             .foregroundStyle(Theme.primary)
@@ -58,14 +62,12 @@ struct ChatMessageBubble: View {
     }
 
     private var bubbleSurface: Color {
-        message.role == .user
+        message.participant == .user
             ? Theme.userMessageSurface
             : Theme.assistantMessageSurface
     }
 
     private var accessibilityText: String {
-        message.role == .user
-            ? "你：\(message.content)"
-            : "小猫：\(message.content)"
+        "\(message.senderName)：\(message.content)"
     }
 }

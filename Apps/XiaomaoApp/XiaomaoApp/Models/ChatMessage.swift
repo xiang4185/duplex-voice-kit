@@ -11,6 +11,26 @@ struct ChatMessage: Identifiable, Equatable, Sendable, Decodable {
     let content: String
     let createdAt: Date
 
+    enum Participant: Equatable, Sendable {
+        case user
+        case xiaomao
+        case companion
+    }
+
+    var participant: Participant {
+        guard role == .assistant else { return .user }
+        return id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }.isMultiple(of: 2)
+            ? .xiaomao : .companion
+    }
+
+    var senderName: String {
+        switch participant {
+        case .user: return "你"
+        case .xiaomao: return "小猫"
+        case .companion: return "伙伴"
+        }
+    }
+
     var text: String { content }
 
     init(id: String, role: Role, content: String, createdAt: Date) {

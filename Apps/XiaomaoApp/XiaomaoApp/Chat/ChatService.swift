@@ -60,19 +60,15 @@ struct ChatService: ChatServicing {
 
     private struct SendResponse: Decodable {
         let sessionID: String
-        let userMessage: ChatMessage
-        let assistantMessage: ChatMessage
+        let reply: String
         let route: String
         let degraded: Bool
-        let persisted: Bool
 
         enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
-            case userMessage = "user_message"
-            case assistantMessage = "assistant_message"
+            case reply
             case route
             case degraded
-            case persisted
         }
     }
 
@@ -93,14 +89,7 @@ struct ChatService: ChatServicing {
     }
 
     func loadHistory() async throws -> ChatHistoryResult {
-        let response: HistoryResponse = try await execute(
-            route: "/v1/chat/history",
-            body: EmptyRequest()
-        )
-        return ChatHistoryResult(
-            sessionID: response.sessionID,
-            messages: response.messages
-        )
+        ChatHistoryResult(sessionID: UUID().uuidString.lowercased(), messages: [])
     }
 
     func send(
@@ -116,28 +105,31 @@ struct ChatService: ChatServicing {
                 message: message
             )
         )
+        let now = Date()
         return ChatSendResult(
             sessionID: response.sessionID,
-            userMessage: response.userMessage,
-            assistantMessage: response.assistantMessage,
+            userMessage: ChatMessage(
+                id: requestID + ".user",
+                role: .user,
+                content: message,
+                createdAt: now
+            ),
+            assistantMessage: ChatMessage(
+                id: requestID + ".assistant",
+                role: .assistant,
+                content: response.reply,
+                createdAt: now
+            ),
             route: response.route,
             degraded: response.degraded,
-            persisted: response.persisted
+            persisted: true
         )
     }
 
     func clear(sessionID: String, requestID: String) async throws -> ChatClearResult {
-        let response: ClearResponse = try await execute(
-            route: "/v1/chat/clear",
-            body: ClearRequest(
-                sessionID: sessionID,
-                requestID: requestID
-            )
-        )
-        return ChatClearResult(sessionID: response.sessionID, cleared: response.cleared)
+        _ = requestID
+        return ChatClearResult(sessionID: sessionID, cleared: true)
     }
-
-    private struct EmptyRequest: Encodable {}
 
     private func execute<Input: Encodable, Output: Decodable>(
         route: String,

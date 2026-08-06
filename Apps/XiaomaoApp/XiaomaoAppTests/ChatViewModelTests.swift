@@ -302,6 +302,24 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.draft, "合成草稿")
         XCTAssertFalse(viewModel.canRetryHistory)
         XCTAssertTrue(viewModel.canSend)
+        XCTAssertTrue(viewModel.errorMessage.contains("HTTP 503"))
+        XCTAssertFalse(viewModel.requiresReconfiguration)
+    }
+
+    func testUnauthorizedOffersReconfigurationWithoutDiscardingDraft() async {
+        let service = ChatServiceSpy(
+            historyResults: [.success(ChatHistoryResult(sessionID: "server-session", messages: []))],
+            sendResult: .failure(AppError.unauthorized)
+        )
+        let viewModel = ChatViewModel(service: service)
+        await viewModel.loadHistory()
+        viewModel.draft = "synthetic-draft"
+
+        await viewModel.send()
+
+        XCTAssertTrue(viewModel.requiresReconfiguration)
+        XCTAssertTrue(viewModel.errorMessage.contains("授权"))
+        XCTAssertEqual(viewModel.draft, "synthetic-draft")
     }
 
     func testDegradedResponseUpdatesState() async {

@@ -56,11 +56,16 @@ struct DeviceBindingView: View {
     private func saveConfiguration() {
         let trimmedAPI = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedVoice = voiceWebSocketURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDeviceID = deviceIDInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDeviceID = RuntimeCredentialNormalizer.deviceID(deviceIDInput)
         guard let apiURL = URL(string: trimmedAPI), apiURL.scheme?.lowercased() == "https",
               let voiceURL = URL(string: trimmedVoice), voiceURL.scheme?.lowercased() == "wss",
               !trimmedDeviceID.isEmpty else {
             errorMessage = "请输入有效的 HTTPS、WSS 和设备 ID。"
+            return
+        }
+        let normalizedToken = RuntimeCredentialNormalizer.token(token)
+        guard !normalizedToken.isEmpty else {
+            errorMessage = "请输入有效的访问 Token。"
             return
         }
         do {
@@ -69,7 +74,7 @@ struct DeviceBindingView: View {
                 voiceWebSocketURL: voiceURL,
                 deviceID: trimmedDeviceID
             ))
-            try tokenStore.save(token)
+            try tokenStore.save(normalizedToken)
             token = ""
             errorMessage = ""
             completed()
@@ -77,4 +82,5 @@ struct DeviceBindingView: View {
             errorMessage = "安全配置保存失败，请重试。"
         }
     }
+
 }

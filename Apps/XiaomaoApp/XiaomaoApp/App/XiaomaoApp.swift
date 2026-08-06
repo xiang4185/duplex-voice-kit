@@ -60,6 +60,7 @@ private struct RootContainer: View {
 extension Notification.Name {
     static let toggleMuteFromActivity = Notification.Name("xiaomao.toggleMute")
     static let hangupFromActivity = Notification.Name("xiaomao.hangup")
+    static let reconfigureConnection = Notification.Name("xiaomao.reconfigureConnection")
 }
 
 private struct RootView: View {
@@ -83,7 +84,7 @@ private struct RootView: View {
                     configurationMessage: coordinator.environment.runtimeConfigurationMessage,
                     tokenStore: coordinator.tokenStore,
                     runtimeConfigurationStore: KeychainRuntimeConfigurationStore(),
-                    completed: reload
+                    completed: { rebuildAdapters() }
                 )
             case .binding:
                 DeviceBindingView(
@@ -92,9 +93,7 @@ private struct RootView: View {
                     configurationMessage: coordinator.environment.runtimeConfigurationMessage,
                     tokenStore: coordinator.tokenStore,
                     runtimeConfigurationStore: KeychainRuntimeConfigurationStore(),
-                    completed: {
-                        reload()
-                    }
+                    completed: { rebuildAdapters() }
                 )
             case .privacy:
                 PrivacyView(
@@ -133,6 +132,10 @@ private struct RootView: View {
 #endif
         }
         .animation(.easeInOut(duration: 0.25), value: coordinator.screen)
+        .onReceive(NotificationCenter.default.publisher(for: .reconfigureConnection)) { _ in
+            activeCall = false
+            coordinator.screen = .binding
+        }
         .preferredColorScheme(.light)
 #if DEBUG
         .sheet(isPresented: $showingDiagnostics) {
@@ -164,5 +167,12 @@ private struct RootView: View {
     private func requestCall() {
         guard !activeCall else { return }
         activeCall = true
+    }
+
+    private func rebuildAdapters() {
+        Task { @MainActor in
+            await coordinator.voiceController.endCurrentCall()
+            reload()
+        }
     }
 }

@@ -33,7 +33,7 @@ struct ChatView: View {
             .background(Theme.homeBackground.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .confirmationDialog(
-                "清空与小猫的聊天记录？",
+                "清空当前三人聊天？",
                 isPresented: $showClearConfirmation,
                 titleVisibility: .visible
             ) {
@@ -42,7 +42,7 @@ struct ChatView: View {
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("清空后会保留当前会话，但消息时间流会变为空。")
+                Text("只清空本次运行中的本地消息时间流，不调用服务器清空接口。")
             }
             .task {
                 await viewModel.loadHistoryIfNeeded()
@@ -53,20 +53,18 @@ struct ChatView: View {
 
     private var header: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Image(systemName: "cat.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 42, height: 42)
-                .foregroundStyle(Theme.primary)
-                .background(Theme.primarySoft)
-                .clipShape(Circle())
-                .accessibilityHidden(true)
+            HStack(spacing: -8) {
+                participantAvatar("person.fill", label: "你")
+                participantAvatar("cat.fill", label: "小猫")
+                participantAvatar("heart.fill", label: "伙伴")
+            }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xxSmall) {
-                Text("小猫")
+                Text("三人聊天")
                     .font(Theme.headlineFont)
                     .foregroundStyle(Theme.textPrimary)
 
-                Label(modeTitle, systemImage: "wifi.slash")
+                Label(modeTitle, systemImage: "person.3.fill")
                     .font(Theme.captionFont)
                     .foregroundStyle(Theme.textSecondary)
                     .accessibilityIdentifier("chat.mode.mock")
@@ -105,10 +103,21 @@ struct ChatView: View {
         .accessibilityIdentifier("chat.header")
     }
 
+    private func participantAvatar(_ symbol: String, label: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .semibold))
+            .frame(width: 34, height: 34)
+            .foregroundStyle(Theme.primary)
+            .background(Theme.primarySoft)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Theme.bgElevated, lineWidth: 2))
+            .accessibilityLabel(label)
+    }
+
     @ViewBuilder
     private var statusArea: some View {
         if viewModel.isLoadingHistory {
-            Label("正在加载演示历史", systemImage: "clock")
+            Label("正在准备本地消息时间流", systemImage: "clock")
                 .font(Theme.footnoteFont)
                 .foregroundStyle(Theme.textSecondary)
                 .padding(.horizontal, Theme.Spacing.medium)
@@ -123,6 +132,17 @@ struct ChatView: View {
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: Theme.Spacing.small) {
+                    if viewModel.requiresReconfiguration {
+                        Button("重新配置连接") {
+                            NotificationCenter.default.post(
+                                name: .reconfigureConnection,
+                                object: nil
+                            )
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.primary)
+                        .accessibilityIdentifier("chat.reconfigure")
+                    }
                     if viewModel.canRetryHistory {
                         Button("重新加载") {
                             Task { await viewModel.loadHistory() }
@@ -209,7 +229,7 @@ struct ChatView: View {
                 .font(Theme.headlineFont)
                 .foregroundStyle(Theme.textPrimary)
 
-            Text("从一句简单的话开始，离线演示会在当前运行期间保留消息。")
+            Text("从一句简单的话开始。当前版本只在本次运行期间维护消息时间流。")
                 .font(Theme.footnoteFont)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
