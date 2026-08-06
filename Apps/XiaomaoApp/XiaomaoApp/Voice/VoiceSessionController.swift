@@ -196,7 +196,7 @@ final class VoiceSessionController: ObservableObject {
                 && $0.captureTapInstalled
                 && $0.captureCallbackCount > 0
         } ?? isRecording
-        callIsActive
+        return callIsActive
             && webSocketState == .connected
             && audioSessionActive
             && isRecording
