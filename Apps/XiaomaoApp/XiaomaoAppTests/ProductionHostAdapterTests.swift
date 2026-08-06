@@ -639,21 +639,9 @@ private actor RecordingBackendAdapter: BackendAdapter {
         let data = Data(#"""
         {
             "session_id":"session",
+            "reply":"synthetic",
             "route":"direct",
-            "degraded":false,
-            "persisted":true,
-            "user_message":{
-                "id":"user",
-                "role":"user",
-                "content":"synthetic",
-                "created_at":"2026-08-05T00:00:00Z"
-            },
-            "assistant_message":{
-                "id":"assistant",
-                "role":"assistant",
-                "content":"synthetic",
-                "created_at":"2026-08-05T00:00:01Z"
-            }
+            "degraded":false
         }
         """#.utf8)
         return BackendAdapterResponse(statusCode: 200, payload: data)

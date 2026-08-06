@@ -6,7 +6,7 @@ final class ChatUIContractTests: XCTestCase {
     func testChatTabOrderAndInjectedServiceBoundaryRemainStable() throws {
         let main = try source("XiaomaoApp/App/MainTabView.swift")
         let companion = try XCTUnwrap(main.range(of: "CompanionHomeView("))
-        let chat = try XCTUnwrap(main.range(of: "ChatView(viewModel:"))
+        let chat = try XCTUnwrap(main.range(of: "ChatView("))
         let smallThings = try XCTUnwrap(main.range(of: "SmallThingsRootView()"))
         let settings = try XCTUnwrap(main.range(of: "SettingsView("))
 
@@ -77,8 +77,10 @@ final class ChatUIContractTests: XCTestCase {
         let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
 
         XCTAssertTrue(bubble.contains("chat.message.\\(message.id)"))
-        XCTAssertTrue(bubble.contains("你：\\(message.content)"))
-        XCTAssertTrue(bubble.contains("小猫：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("Text(message.senderName)"))
+        XCTAssertTrue(bubble.contains("\\(message.senderName)：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("message.participant == .xiaomao"))
+        XCTAssertTrue(bubble.contains("message.participant == .user"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
     }
