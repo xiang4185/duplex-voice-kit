@@ -93,7 +93,7 @@ struct VoiceCallView: View {
                     .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
                     // P2.8A: 首次连接加载反馈 (idle/connecting 时浮在人物上方, .ready 自动淡出)
                     .overlay {
-                        if !viewModel.controller.isConversationReady,
+                        if !viewModel.controller.hasCompletedInitialConnection,
                            viewModel.controller.state != .failed,
                            viewModel.controller.state != .closed,
                            viewModel.controller.state != .closing {
@@ -317,7 +317,7 @@ struct VoiceCallView: View {
 
     // P2.6J: 通话状态文案 (纯 UI 映射, 不接入连接流程)
     private var callStatusText: String {
-        if !viewModel.controller.isConversationReady,
+        if !viewModel.controller.hasCompletedInitialConnection,
            viewModel.controller.state != .failed,
            viewModel.controller.state != .closed,
            viewModel.controller.state != .closing,
@@ -339,7 +339,7 @@ struct VoiceCallView: View {
 
     // P2.6K: 通话状态点颜色 (与真实 Session 状态一致, 纯 UI 映射)
     private var callStatusColor: Color {
-        if !viewModel.controller.isConversationReady,
+        if !viewModel.controller.hasCompletedInitialConnection,
            viewModel.controller.state != .failed,
            viewModel.controller.state != .closed,
            viewModel.controller.state != .closing,

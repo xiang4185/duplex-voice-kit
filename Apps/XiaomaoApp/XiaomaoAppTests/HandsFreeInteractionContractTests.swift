@@ -1105,6 +1105,14 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("ProgressView"), "连接卡必须包含 ProgressView")
         XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接文案 正在连接小猫")
         XCTAssertTrue(call.contains("通常只需要几秒"), "必须存在首次连接说明文案")
+        XCTAssertTrue(controller.contains("hasCompletedInitialConnection = false"),
+                      "每通新通话必须重置首次连接完成状态")
+        XCTAssertTrue(controller.contains("hasCompletedInitialConnection = true"),
+                      "麦克风真实可用后必须标记首次连接完成")
+        XCTAssertTrue(call.contains("if !viewModel.controller.hasCompletedInitialConnection"),
+                      "连接卡只能由首次连接完成状态控制")
+        XCTAssertFalse(call.contains("if !viewModel.controller.isConversationReady"),
+                       "每轮 processing 不得重新显示首次连接卡")
         XCTAssertFalse(call.contains("DispatchSourceTimer"), "连接反馈不得使用定时器")
 
         // ===== 3. 静音: 单一来源 =====

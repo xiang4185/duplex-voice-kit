@@ -50,6 +50,7 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var callIsActive = false
     @Published private(set) var responseCompletionCount = 0
     @Published private(set) var postResponseCaptureRecoveryCount = 0
+    @Published private(set) var hasCompletedInitialConnection = false
 
     private let environment: AppEnvironment
     private let socket: any VoiceAdapter
@@ -523,6 +524,7 @@ final class VoiceSessionController: ObservableObject {
         lastEndingSilenceMilliseconds = 0
         responseCompletionCount = 0
         postResponseCaptureRecoveryCount = 0
+        hasCompletedInitialConnection = false
         lastResponseCompletionCaptureCallbacks = 0
         postResponseCaptureCallbackDelta = 0
         postResponseCaptureCheckTask?.cancel()
@@ -1301,6 +1303,7 @@ final class VoiceSessionController: ObservableObject {
               webSocketState == .connected,
               callbackConfirmed else { return }
         microphoneReadyAt = Date()
+        hasCompletedInitialConnection = true
     }
 
     private func scheduleMicrophoneReadinessCheck() {

@@ -73,9 +73,21 @@ final class ChatUIContractTests: XCTestCase {
         let theme = try source("XiaomaoApp/Design/Theme.swift")
 
         XCTAssertTrue(composer.contains(".lineLimit(1...5)"))
+        XCTAssertTrue(composer.contains(".frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)"))
+        XCTAssertTrue(composer.contains(".contentShape("))
+        XCTAssertTrue(composer.contains("inputFocused = true"))
         XCTAssertTrue(composer.contains("minWidth: Theme.controlMinimumSize"))
         XCTAssertTrue(composer.contains("minHeight: Theme.controlMinimumSize"))
         XCTAssertTrue(theme.contains("static let controlMinimumSize: CGFloat = 44"))
+    }
+
+    func testTappingOrScrollingConversationDismissesKeyboard() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+
+        XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
+        XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
+        XCTAssertTrue(chat.contains("header\n                .onTapGesture { inputFocused = false }"))
+        XCTAssertTrue(chat.contains("modeFooter\n                .onTapGesture { inputFocused = false }"))
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {

@@ -22,7 +22,7 @@ struct ChatComposerView: View {
                     .font(Theme.bodyFont)
                     .padding(.horizontal, Theme.Spacing.small)
                     .padding(.vertical, 10)
-                    .frame(minHeight: Theme.controlMinimumSize)
+                    .frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)
                     .background(Theme.surface)
                     .clipShape(
                         RoundedRectangle(
@@ -36,6 +36,16 @@ struct ChatComposerView: View {
                             style: .continuous
                         )
                         .stroke(Theme.border, lineWidth: 1)
+                    }
+                    .contentShape(
+                        RoundedRectangle(
+                            cornerRadius: Theme.Radius.medium,
+                            style: .continuous
+                        )
+                    )
+                    .onTapGesture {
+                        guard !isBusy else { return }
+                        inputFocused = true
                     }
                     .disabled(isBusy)
                     .accessibilityLabel("聊天输入框")

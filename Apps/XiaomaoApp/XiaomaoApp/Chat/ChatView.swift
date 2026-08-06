@@ -21,6 +21,7 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .onTapGesture { inputFocused = false }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -50,6 +51,10 @@ struct ChatView: View {
                     .padding(.horizontal, Theme.Spacing.medium)
                     .padding(.vertical, Theme.Spacing.small)
                 }
+                .scrollDismissesKeyboard(.immediately)
+                .simultaneousGesture(
+                    TapGesture().onEnded { _ in inputFocused = false }
+                )
                 .refreshable {
                     await viewModel.refreshHistorySilently()
                 }
@@ -67,6 +72,7 @@ struct ChatView: View {
             }
 
             modeFooter
+                .onTapGesture { inputFocused = false }
 
             ChatComposerView(
                 draft: $viewModel.draft,

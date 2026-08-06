@@ -25,6 +25,26 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.clientSequenceForTesting, 1)
     }
 
+    func testInitialConnectionIndicatorStaysCompletedDuringLaterProcessing() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        XCTAssertFalse(fixture.controller.hasCompletedInitialConnection)
+
+        fixture.audio.emit(pcmFrame(amplitude: 2_000))
+        await settle()
+        XCTAssertTrue(fixture.controller.hasCompletedInitialConnection)
+
+        await fixture.socket.emitServerEvent(
+            .thinkingStarted,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting
+        )
+        await settle()
+
+        XCTAssertEqual(fixture.controller.state, .processing)
+        XCTAssertTrue(fixture.controller.hasCompletedInitialConnection)
+    }
+
     func testEndThenReenterNeverReusesClosedSession() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()

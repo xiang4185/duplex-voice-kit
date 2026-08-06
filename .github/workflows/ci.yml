@@ -191,7 +191,7 @@ jobs:
           test ! -e "$APP_PATH/embedded.mobileprovision"
           test ! -e "$APP_PATH/_CodeSignature"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "$BUNDLE_ID"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "4"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "5"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP_PATH/Info.plist")" = "AppIcon"
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :API_BASE_URL' "$APP_PATH/Info.plist")"
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :VOICE_WS_URL' "$APP_PATH/Info.plist")"
