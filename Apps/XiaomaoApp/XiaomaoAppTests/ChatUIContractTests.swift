@@ -86,7 +86,7 @@ final class ChatUIContractTests: XCTestCase {
 
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
-        XCTAssertTrue(chat.contains("header\n                .onTapGesture { inputFocused = false }"))
+        XCTAssertTrue(chat.contains("header\n                    .onTapGesture { inputFocused = false }"))
         XCTAssertTrue(chat.contains("modeFooter"))
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
