@@ -1343,7 +1343,8 @@ final class VoiceSessionControllerTests: XCTestCase {
         await settle()
 
         XCTAssertFalse(fixture.controller.lastDisconnectRecoverable)
-        XCTAssertEqual(await fixture.socket.connectCountValue(), connectCountBefore,
+        let connectCountAfter = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCountAfter, connectCountBefore,
                        "不可恢复鉴权失败后取消静音不得静默重连")
     }
 
