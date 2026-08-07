@@ -562,7 +562,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 2. Widget 保留真实数据
         XCTAssertTrue(widget.contains("timeString"), "Widget 必须保留真实计时")
-        XCTAssertTrue(widget.contains("characterName"), "Widget 必须保留真实角色名")
+        XCTAssertTrue(attributes.contains("characterName"),
+                      "Live Activity Attributes 必须保留真实角色名")
+        XCTAssertTrue(manager.contains("characterName: characterName"),
+                      "Live Activity 创建时必须把真实角色名写入 Attributes")
         XCTAssertTrue(widget.contains("isMuted"), "Widget 必须保留静音状态")
         XCTAssertTrue(widget.contains("isSpeaking"), "Widget 必须保留真实说话状态")
         XCTAssertTrue(attributes.contains("CallLiveActivityPhase"), "Live Activity 必须保存真实阶段")
