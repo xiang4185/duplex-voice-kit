@@ -42,13 +42,23 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(composer.contains("smallThings.form.type.note"))
         XCTAssertTrue(composer.contains("smallThings.form.type.expense"))
         XCTAssertFalse(composer.contains(".pickerStyle(.segmented)"),
-                       "顶部类型选择必须使用与暖色卡片体系一致的大尺寸入口")
+                       "顶部类型选择不得回退为系统 segmented picker")
         XCTAssertTrue(composer.contains("typeSelectorButton("))
-        XCTAssertTrue(composer.contains(".frame(maxWidth: .infinity, minHeight: 68)"))
+        XCTAssertTrue(composer.contains(".buttonStyle(.borderedProminent)"))
+        XCTAssertTrue(composer.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(composer.contains("Theme.buttonMinimumHeight + 8"))
         XCTAssertTrue(composer.contains("smallThings.form.imagePicker"))
         XCTAssertTrue(composer.contains("smallThings.form.save"))
         XCTAssertTrue(composer.contains("PhotosPicker"))
         XCTAssertTrue(composer.contains("Theme.bg.ignoresSafeArea()"))
+    }
+
+    func testEntryTimestampUsesStableNumericDateToMinute() throws {
+        let entry = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+
+        XCTAssertTrue(entry.contains("dateFormat = \"yyyy/MM/dd HH:mm\""))
+        XCTAssertTrue(entry.contains("Locale(identifier: \"en_US_POSIX\")"))
+        XCTAssertFalse(entry.contains(".dateTime.month().day().hour().minute()"))
     }
 
     func testCommentsRepliesAndImagePreviewHaveBehavioralEntrypoints() throws {

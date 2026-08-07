@@ -65,6 +65,19 @@ private func successfulSend() -> ChatSendResult {
 
 @MainActor
 final class ChatViewModelTests: XCTestCase {
+    func testXiaomaoParticipationDefaultsAlwaysAndPersistsLastSelection() {
+        let suiteName = "ChatViewModelTests.xiaomaoMode.\(UUID().uuidString)"
+        let preferences = UserDefaults(suiteName: suiteName)!
+        defer { preferences.removePersistentDomain(forName: suiteName) }
+
+        let first = ChatViewModel(service: nil, preferences: preferences)
+        XCTAssertEqual(first.xiaomaoMode, .always)
+
+        first.xiaomaoMode = .off
+        let second = ChatViewModel(service: nil, preferences: preferences)
+        XCTAssertEqual(second.xiaomaoMode, .off)
+    }
+
     func testHistoryLoadStoresServerSessionMessagesIDsAndDates() async {
         let messages = [serverMessage(id: "opaque-history-1", role: .user, content: "合成历史")]
         let service = ChatServiceSpy(historyResults: [

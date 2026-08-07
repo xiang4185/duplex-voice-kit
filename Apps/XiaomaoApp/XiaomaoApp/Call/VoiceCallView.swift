@@ -421,7 +421,7 @@ struct VoiceCallView: View {
                     state: viewModel.controller.state,
                     level: viewModel.controller.vadNormalizedRMS
                 )
-                .frame(width: availableSize * 1.58, height: availableSize * 1.58)
+                .frame(width: availableSize * 1.46, height: availableSize * 1.34)
                 .accessibilityHidden(true)
 
                 // 底部光斑 (与 portrait 底部渐隐融合)
@@ -1014,12 +1014,13 @@ struct VoiceAvatarRipples: View {
 
     var body: some View {
         ZStack {
+            // 贴近头像的柔光只做“呼吸”，避免出现清晰圆环边界。
             Circle()
                 .fill(
                     RadialGradient(
                         colors: [
-                            Theme.primarySoft.opacity(0.18 + 0.18 * activityStrength),
-                            Theme.roleGold.opacity(0.08 + 0.12 * activityStrength),
+                            Theme.primarySoft.opacity(0.16 + 0.14 * activityStrength),
+                            Theme.roleGold.opacity(0.06 + 0.08 * activityStrength),
                             .clear
                         ],
                         center: .center,
@@ -1027,35 +1028,51 @@ struct VoiceAvatarRipples: View {
                         endRadius: 150
                     )
                 )
-                .scaleEffect(CGFloat(1.02 + 0.07 * activityStrength))
+                .scaleEffect(CGFloat(1.01 + 0.045 * activityStrength))
+                .blur(radius: 8)
 
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Theme.primary.opacity(0.58),
-                                Theme.roleGold.opacity(0.30),
-                                Theme.primarySoft.opacity(0.08)
+            // 宽而软的“能量带”错相位向外散开。每层椭圆比例/角度固定不同，
+            // 不使用随机数，因此自然但可复现，也不会出现两个硬圆圈同步扩张。
+            ForEach(0..<5, id: \.self) { index in
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.55),
+                                .init(
+                                    color: rippleColor(index)
+                                        .opacity(0.055 + 0.075 * activityStrength),
+                                    location: 0.70
+                                ),
+                                .init(
+                                    color: Theme.primarySoft
+                                        .opacity(0.035 + 0.055 * activityStrength),
+                                    location: 0.82
+                                ),
+                                .init(color: .clear, location: 1.0)
                             ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.0 + CGFloat(activityStrength) * 0.9
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 180
+                        )
                     )
-                    .blur(radius: index == 0 ? 0 : 0.45)
-                    .scaleEffect(reduceMotion ? 1.18 : (expanding ? 1.62 : 0.88))
+                    .rotationEffect(.degrees(rippleRotation(index)))
+                    .scaleEffect(
+                        x: reduceMotion ? 1.08 : (expanding ? rippleEndScaleX(index) : rippleStartScale(index)),
+                        y: reduceMotion ? 1.03 : (expanding ? rippleEndScaleY(index) : rippleStartScale(index))
+                    )
+                    .blur(radius: 2.4 + CGFloat(index) * 0.55)
                     .opacity(
                         reduceMotion
-                            ? 0.14 + 0.18 * activityStrength
-                            : (expanding ? 0 : ringOpacity(index))
+                            ? 0.34 + 0.18 * activityStrength
+                            : (expanding ? 0 : rippleOpacity(index))
                     )
                     .animation(
                         reduceMotion
                             ? nil
-                            : .easeOut(duration: ringDuration(index))
+                            : .timingCurve(0.16, 0.72, 0.30, 1, duration: rippleDuration(index))
                                 .repeatForever(autoreverses: false)
-                                .delay(Double(index) * 0.58),
+                                .delay(Double(index) * 0.52),
                         value: expanding
                     )
             }
@@ -1086,13 +1103,33 @@ struct VoiceAvatarRipples: View {
         }
     }
 
-    private func ringOpacity(_ index: Int) -> Double {
-        let depth = 1.0 - Double(index) * 0.16
-        return (0.20 + 0.36 * activityStrength) * depth
+    private func rippleOpacity(_ index: Int) -> Double {
+        let depth = 1.0 - Double(index) * 0.10
+        return (0.42 + 0.22 * activityStrength) * depth
     }
 
-    private func ringDuration(_ index: Int) -> Double {
-        2.15 + Double(index) * 0.12
+    private func rippleDuration(_ index: Int) -> Double {
+        3.25 + Double(index) * 0.18
+    }
+
+    private func rippleStartScale(_ index: Int) -> CGFloat {
+        0.72 + CGFloat(index) * 0.025
+    }
+
+    private func rippleEndScaleX(_ index: Int) -> CGFloat {
+        1.28 + CGFloat(index) * 0.055 + CGFloat(activityStrength) * 0.08
+    }
+
+    private func rippleEndScaleY(_ index: Int) -> CGFloat {
+        1.18 + CGFloat(index) * 0.047 + CGFloat(activityStrength) * 0.06
+    }
+
+    private func rippleRotation(_ index: Int) -> Double {
+        [-8, 6, -3, 10, -6][index]
+    }
+
+    private func rippleColor(_ index: Int) -> Color {
+        index.isMultiple(of: 2) ? Theme.primary : Theme.roleGold
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct SmallThingEntryCard: View {
     @ObservedObject var store: SmallThingsStore
@@ -97,7 +98,7 @@ struct SmallThingEntryCard: View {
                     Text("·")
                     Text(entry.type == .expense ? "记了一笔账" : "记了一件事")
                     Text("·")
-                    Text(entry.createdAt.formatted(.dateTime.month().day().hour().minute()))
+                    Text(Self.numericDateFormatter.string(from: entry.createdAt))
                 }
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)
@@ -128,6 +129,15 @@ struct SmallThingEntryCard: View {
             }
         }
     }
+
+    private static let numericDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter
+    }()
 
     private var entryTitle: String {
         if entry.type == .expense {

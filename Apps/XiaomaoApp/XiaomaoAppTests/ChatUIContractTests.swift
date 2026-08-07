@@ -95,6 +95,12 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".safeAreaInset(edge: .bottom, spacing: 0)"),
                       "键盘弹出时消息视口必须被底部输入区真实挤压")
+        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
+                      "消息偏移必须跟随系统键盘 frame 动画")
+        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
+                      "消息滚动必须与键盘使用同一时长/曲线")
+        XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
+                       "不得再延迟等待键盘后补滚动")
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {

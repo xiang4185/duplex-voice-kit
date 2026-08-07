@@ -135,45 +135,53 @@ struct SmallThingComposerView: View {
         }
     }
 
+    @ViewBuilder
     private func typeSelectorButton(
         type candidate: SmallThingEntryType,
         title: String,
         subtitle: String,
         systemImage: String
     ) -> some View {
-        let selected = type == candidate
-        return Button {
+        if type == candidate {
+            typeSelectionButton(
+                candidate: candidate,
+                title: title,
+                subtitle: subtitle,
+                systemImage: systemImage
+            )
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.primary)
+        } else {
+            typeSelectionButton(
+                candidate: candidate,
+                title: title,
+                subtitle: subtitle,
+                systemImage: systemImage
+            )
+            .buttonStyle(.bordered)
+            .tint(Theme.primary)
+        }
+    }
+
+    private func typeSelectionButton(
+        candidate: SmallThingEntryType,
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        Button {
             type = candidate
         } label: {
-            HStack(spacing: Theme.Spacing.small) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(selected ? Theme.primaryPressed : Theme.textSecondary)
-                    .frame(width: 30, height: 30)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(Theme.subheadFont.weight(.semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-
-                Spacer(minLength: 0)
+            VStack(spacing: 2) {
+                Label(title, systemImage: systemImage)
+                    .font(Theme.headlineFont)
+                Text(subtitle)
+                    .font(.caption2)
+                    .opacity(0.78)
             }
-            .padding(.horizontal, Theme.Spacing.small)
-            .frame(maxWidth: .infinity, minHeight: 68)
-            .background(selected ? Theme.primarySoft.opacity(0.82) : Theme.bgElevated)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .stroke(selected ? Theme.primary.opacity(0.75) : Theme.border, lineWidth: selected ? 1.5 : 1)
-            }
-            .shadow(color: selected ? Theme.shadowRaised : .clear, radius: 7, y: 2)
+            .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight + 8)
         }
-        .buttonStyle(.plain)
-        .accessibilityValue(selected ? "已选择" : "未选择")
+        .accessibilityValue(type == candidate ? "已选择" : "未选择")
         .accessibilityIdentifier(
             candidate == .note ? "smallThings.form.type.note" : "smallThings.form.type.expense"
         )

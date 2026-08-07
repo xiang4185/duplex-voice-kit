@@ -4,9 +4,14 @@ import Foundation
 @MainActor
 final class ChatViewModel: ObservableObject {
     static let maximumMessageLength = 200
+    private static let xiaomaoModePreferenceKey = "chat.xiaomaoParticipationMode"
 
     @Published var draft = ""
-    @Published var xiaomaoMode: XiaomaoParticipationMode = .auto
+    @Published var xiaomaoMode: XiaomaoParticipationMode {
+        didSet {
+            preferences.set(xiaomaoMode.rawValue, forKey: Self.xiaomaoModePreferenceKey)
+        }
+    }
     @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var sessionID: String?
     @Published private(set) var isLoadingHistory = false
@@ -22,16 +27,26 @@ final class ChatViewModel: ObservableObject {
     private let service: (any ChatServicing)?
     private let requestIDGenerator: @Sendable () -> String
     private let configurationError: String?
+    private let preferences: UserDefaults
     private var hasAttemptedHistoryLoad = false
 
     init(
         service: (any ChatServicing)?,
         configurationError: String? = nil,
-        requestIDGenerator: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() }
+        requestIDGenerator: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
+        preferences: UserDefaults = .standard
     ) {
         self.service = service
         self.configurationError = configurationError
         self.requestIDGenerator = requestIDGenerator
+        self.preferences = preferences
+        if let stored = preferences.string(forKey: Self.xiaomaoModePreferenceKey),
+           let mode = XiaomaoParticipationMode(rawValue: stored) {
+            self.xiaomaoMode = mode
+        } else {
+            // 首次使用默认每轮都有小猫；之后严格恢复用户上一次选择。
+            self.xiaomaoMode = .always
+        }
         if service == nil {
             errorMessage = configurationError ?? "聊天服务配置不可用。"
         }

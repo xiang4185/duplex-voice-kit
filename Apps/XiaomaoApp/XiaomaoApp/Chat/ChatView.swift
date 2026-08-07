@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
@@ -69,14 +70,14 @@ struct ChatView: View {
                         proxy.scrollTo("chat.bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: inputFocused) { _, focused in
-                    guard focused else { return }
-                    Task { @MainActor in
-                        // 等待系统完成键盘 safe-area 更新后再滚动，避免最新消息被键盘覆盖。
-                        try? await Task.sleep(for: .milliseconds(120))
-                        withAnimation(.easeOut(duration: 0.22)) {
-                            proxy.scrollTo("chat.bottom", anchor: .bottom)
-                        }
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: UIResponder.keyboardWillChangeFrameNotification
+                    )
+                ) { notification in
+                    // 跟随系统键盘自己的时长/曲线调整消息偏移，避免键盘先走、聊天记录后追。
+                    withAnimation(keyboardAnimation(from: notification)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
                     }
                 }
             }
@@ -124,6 +125,30 @@ struct ChatView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("服务器中的聊天历史也会被清空，此操作无法撤销。")
+        }
+    }
+
+    private func keyboardAnimation(from notification: Notification) -> Animation {
+        let info = notification.userInfo ?? [:]
+        let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let rawCurve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 0
+
+        guard let curve = UIView.AnimationCurve(rawValue: rawCurve) else {
+            // iOS 键盘有时给出扩展 curve 值；此时使用系统常见 easeInOut 时长，不另加延迟。
+            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
+        }
+
+        switch curve {
+        case .easeIn:
+            return .timingCurve(0.42, 0, 1, 1, duration: duration)
+        case .easeOut:
+            return .timingCurve(0, 0, 0.58, 1, duration: duration)
+        case .linear:
+            return .linear(duration: duration)
+        case .easeInOut:
+            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
+        @unknown default:
+            return .easeInOut(duration: duration)
         }
     }
 
