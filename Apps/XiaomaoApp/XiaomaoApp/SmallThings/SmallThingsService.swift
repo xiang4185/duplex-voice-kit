@@ -47,6 +47,7 @@ protocol SmallThingsServicing: Sendable {
         note: String,
         requestID: String
     ) async throws
+    func deleteEntry(entryID: String, requestID: String) async throws
     func toggleReaction(entryID: String, requestID: String) async throws -> SmallThingsReactionResult
     func createComment(entryID: String, text: String, requestID: String) async throws -> SmallThingsCommentResult
     func createReply(
@@ -318,6 +319,13 @@ actor ProductionSmallThingsService: SmallThingsServicing {
                 "image_metadata": NSNull(),
                 "amount_cents": amountCents
             ]
+        )
+    }
+
+    func deleteEntry(entryID: String, requestID: String) async throws {
+        try await write(
+            route: "/v1/small-things/entries/delete",
+            body: ["request_id": requestID, "entry_id": entryID]
         )
     }
 

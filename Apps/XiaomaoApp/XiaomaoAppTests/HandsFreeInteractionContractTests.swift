@@ -56,8 +56,12 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       "键盘弹出时消息区必须跟随系统键盘 frame 动画")
         XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
                       "键盘与消息滚动必须使用同一动画时序")
-        XCTAssertTrue(chat.contains("keyboardOverlap = keyboardOverlap(from: notification)"),
-                      "键盘 frame 必须驱动页面 overlap")
+        XCTAssertTrue(chat.contains("GeometryReader"),
+                      "键盘覆盖必须使用聊天容器自己的坐标")
+        XCTAssertTrue(chat.contains("containerBottom: geometry.frame(in: .global).maxY"),
+                      "键盘 frame 必须基于聊天容器底边驱动页面 overlap")
+        XCTAssertFalse(chat.contains("UIScreen.main.bounds.height"),
+                       "不得按整屏高度计算键盘覆盖并留下 tab bar 空白")
         XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")

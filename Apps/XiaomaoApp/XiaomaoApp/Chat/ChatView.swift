@@ -21,90 +21,95 @@ struct ChatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .onTapGesture { inputFocused = false }
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                header
+                    .onTapGesture { inputFocused = false }
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 14) {
-                        stateContent
-                        ForEach(viewModel.messages) { message in
-                            ChatMessageBubble(message: message)
-                                .id(message.id)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            stateContent
+                            ForEach(viewModel.messages) { message in
+                                ChatMessageBubble(message: message)
+                                    .id(message.id)
 
-                            if isLastMessageInTurn(message),
-                               viewModel.failedXiaomaoTurns.contains(message.turnID) {
-                                xiaomaoRetryCard(turnID: message.turnID)
+                                if isLastMessageInTurn(message),
+                                   viewModel.failedXiaomaoTurns.contains(message.turnID) {
+                                    xiaomaoRetryCard(turnID: message.turnID)
+                                }
                             }
-                        }
 
-                        if viewModel.isSending {
-                            ChatTypingIndicator()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                            if viewModel.isSending {
+                                ChatTypingIndicator()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
 
-                        if viewModel.lastReplyWasDegraded {
-                            degradedNotice
-                        }
+                            if viewModel.lastReplyWasDegraded {
+                                degradedNotice
+                            }
 
-                        Color.clear.frame(height: 1).id("chat.bottom")
+                            Color.clear.frame(height: 1).id("chat.bottom")
+                        }
+                        .padding(.horizontal, Theme.Spacing.medium)
+                        .padding(.vertical, Theme.Spacing.small)
                     }
-                    .padding(.horizontal, Theme.Spacing.medium)
-                    .padding(.vertical, Theme.Spacing.small)
-                }
-                .scrollDismissesKeyboard(.immediately)
-                .simultaneousGesture(
-                    TapGesture().onEnded { _ in inputFocused = false }
-                )
-                .refreshable {
-                    await viewModel.refreshHistorySilently()
-                }
-                .accessibilityIdentifier("chat.messages")
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: viewModel.isSending) { _, _ in
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
-                    }
-                }
-                .onReceive(
-                    NotificationCenter.default.publisher(
-                        for: UIResponder.keyboardWillChangeFrameNotification
+                    .scrollDismissesKeyboard(.immediately)
+                    .simultaneousGesture(
+                        TapGesture().onEnded { _ in inputFocused = false }
                     )
-                ) { notification in
-                    // 让“消息区 + 输入区”作为同一个页面跟随键盘移动。
-                    // 不再依赖 safeAreaInset 先推输入框、再补滚消息的两段动画。
-                    withAnimation(keyboardAnimation(from: notification)) {
-                        keyboardOverlap = keyboardOverlap(from: notification)
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    .refreshable {
+                        await viewModel.refreshHistorySilently()
+                    }
+                    .accessibilityIdentifier("chat.messages")
+                    .onChange(of: viewModel.messages.count) { _, _ in
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
+                    }
+                    .onChange(of: viewModel.isSending) { _, _ in
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
+                    }
+                    .onReceive(
+                        NotificationCenter.default.publisher(
+                            for: UIResponder.keyboardWillChangeFrameNotification
+                        )
+                    ) { notification in
+                        // TabView 的内容底边位于 tab bar 上方，不能按整块屏幕高度计算键盘覆盖。
+                        // 直接使用当前聊天容器的全局底边，避免多保留一个 tab bar 高度的空白。
+                        withAnimation(keyboardAnimation(from: notification)) {
+                            keyboardOverlap = keyboardOverlap(
+                                from: notification,
+                                containerBottom: geometry.frame(in: .global).maxY
+                            )
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
                     }
                 }
+
+                modeFooter
+                    .onTapGesture { inputFocused = false }
+
+                ChatComposerView(
+                    draft: $viewModel.draft,
+                    canSend: viewModel.canSend,
+                    isBusy: viewModel.isBusy,
+                    isSending: viewModel.isSending,
+                    characterLimit: ChatViewModel.maximumMessageLength,
+                    send: {
+                        inputFocused = false
+                        Task {
+                            await Task.yield()
+                            await viewModel.send()
+                        }
+                    },
+                    inputFocused: $inputFocused
+                )
             }
-
-            modeFooter
-                .onTapGesture { inputFocused = false }
-
-            ChatComposerView(
-                draft: $viewModel.draft,
-                canSend: viewModel.canSend,
-                isBusy: viewModel.isBusy,
-                isSending: viewModel.isSending,
-                characterLimit: ChatViewModel.maximumMessageLength,
-                send: {
-                    inputFocused = false
-                    Task {
-                        await Task.yield()
-                        await viewModel.send()
-                    }
-                },
-                inputFocused: $inputFocused
-            )
+            .padding(.bottom, keyboardOverlap)
         }
-        .padding(.bottom, keyboardOverlap)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Theme.bg.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
@@ -153,21 +158,18 @@ struct ChatView: View {
         }
     }
 
-    private func keyboardOverlap(from notification: Notification) -> CGFloat {
+    private func keyboardOverlap(
+        from notification: Notification,
+        containerBottom: CGFloat
+    ) -> CGFloat {
         guard
             let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
         else { return 0 }
 
-        let screenHeight = UIScreen.main.bounds.height
-        guard endFrame.minY < screenHeight else { return 0 }
-
-        let bottomSafeArea = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: { $0.isKeyWindow })?
-            .safeAreaInsets.bottom ?? 0
-
-        return max(0, screenHeight - endFrame.minY - bottomSafeArea)
+        guard endFrame.minY < containerBottom, endFrame.maxY >= containerBottom else {
+            return 0
+        }
+        return max(0, min(endFrame.height, containerBottom - endFrame.minY))
     }
 
     private var header: some View {

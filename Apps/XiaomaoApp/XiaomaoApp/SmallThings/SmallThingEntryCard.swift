@@ -10,6 +10,7 @@ struct SmallThingEntryCard: View {
     @State private var commentDraft = ""
     @State private var replyTarget: SmallThingReplyTarget?
     @State private var showingImagePreview = false
+    @State private var showsDeleteConfirmation = false
     @State private var hapticTrigger = 0
     @FocusState private var commentFocused: Bool
 
@@ -83,6 +84,18 @@ struct SmallThingEntryCard: View {
         .fullScreenCover(isPresented: $showingImagePreview) {
             SmallThingsImagePreview(imageData: entry.imageData)
         }
+        .confirmationDialog(
+            "删除这件小事？",
+            isPresented: $showsDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                Task { await store.deleteEntryPersisted(entryID: entry.id) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后，这件小事及其评论、回应会从双方时间流中移除，且无法撤销。")
+        }
     }
 
     private var entryHeader: some View {
@@ -127,6 +140,20 @@ struct SmallThingEntryCard: View {
                     "金额 \(entry.amount.formatted(.number.precision(.fractionLength(2)))) 元，状态 \(entry.expenseStatusDisplayName)"
                 )
             }
+
+            Menu {
+                Button("删除这件小事", role: .destructive) {
+                    showsDeleteConfirmation = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: Theme.controlMinimumSize, height: Theme.controlMinimumSize)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("小事选项")
+            .accessibilityIdentifier("smallThings.entry.menu")
         }
     }
 

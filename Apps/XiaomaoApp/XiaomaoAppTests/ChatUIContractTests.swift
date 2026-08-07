@@ -97,12 +97,16 @@ final class ChatUIContractTests: XCTestCase {
                       "聊天页必须关闭系统二次键盘 safe-area 推动，改为单一页面动画")
         XCTAssertTrue(chat.contains(".padding(.bottom, keyboardOverlap)"),
                       "消息区和输入区必须作为同一页面跟随键盘上移")
+        XCTAssertTrue(chat.contains("GeometryReader"),
+                      "键盘覆盖必须基于聊天容器自身坐标，而不是整块屏幕")
         XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
                       "消息偏移必须跟随系统键盘 frame 动画")
         XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
                       "消息滚动必须与键盘使用同一时长/曲线")
-        XCTAssertTrue(chat.contains("keyboardOverlap = keyboardOverlap(from: notification)"),
+        XCTAssertTrue(chat.contains("containerBottom: geometry.frame(in: .global).maxY"),
                       "键盘 frame 必须驱动同一页面的 bottom overlap")
+        XCTAssertFalse(chat.contains("UIScreen.main.bounds.height"),
+                       "TabView 内不得再用整屏高度计算键盘覆盖，否则会保留 tab bar 空白")
         XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
                        "不得再延迟等待键盘后补滚动")
     }

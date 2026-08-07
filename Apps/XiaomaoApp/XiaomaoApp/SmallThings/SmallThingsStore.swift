@@ -152,6 +152,25 @@ final class SmallThingsStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func deleteEntryPersisted(entryID: UUID) async -> Bool {
+        guard let service else { return deleteEntry(entryID: entryID) }
+        guard let entry = entry(id: entryID), let serverID = entry.serverID else {
+            return false
+        }
+        let success = await performRemoteWrite {
+            try await service.deleteEntry(
+                entryID: serverID,
+                requestID: UUID().uuidString.lowercased()
+            )
+        }
+        if success, lastUndo?.entryID == entryID {
+            lastUndo = nil
+            remoteReviewReceipt = nil
+        }
+        return success
+    }
+
     func toggleReactionPersisted(entryID: UUID) async {
         guard let service else {
             toggleReaction(entryID: entryID)
@@ -450,6 +469,19 @@ final class SmallThingsStore: ObservableObject {
     func toggleReaction(entryID: UUID) {
         guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         entries[index].reacted.toggle()
+    }
+
+    @discardableResult
+    func deleteEntry(entryID: UUID) -> Bool {
+        guard entries.contains(where: { $0.id == entryID }) else { return false }
+        entries.removeAll { $0.id == entryID }
+        if lastUndo?.entryID == entryID {
+            lastUndo = nil
+            remoteReviewReceipt = nil
+        }
+        validationMessage = nil
+        operationError = nil
+        return true
     }
 
     @discardableResult

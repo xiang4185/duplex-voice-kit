@@ -89,6 +89,10 @@ final class SmallThingsServiceTests: XCTestCase {
             note: "synthetic-note",
             requestID: "expense"
         )
+        try await service.deleteEntry(
+            entryID: SmallThingsBackendSpy.entryID,
+            requestID: "delete"
+        )
         try await service.toggleReaction(entryID: SmallThingsBackendSpy.entryID, requestID: "reaction")
         try await service.createComment(
             entryID: SmallThingsBackendSpy.entryID,
@@ -121,6 +125,7 @@ final class SmallThingsServiceTests: XCTestCase {
             routes,
             [
                 "/v1/small-things/entries/create",
+                "/v1/small-things/entries/delete",
                 "/v1/small-things/reactions/toggle",
                 "/v1/small-things/comments/create",
                 "/v1/small-things/replies/create",
@@ -324,6 +329,11 @@ private actor SmallThingsServiceSpy: SmallThingsServicing {
         _ = purpose
         _ = amountCents
         _ = note
+        _ = requestID
+    }
+
+    func deleteEntry(entryID: String, requestID: String) async throws {
+        _ = entryID
         _ = requestID
     }
 

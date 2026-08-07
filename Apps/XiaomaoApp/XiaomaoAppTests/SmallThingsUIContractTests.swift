@@ -79,6 +79,21 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(image.contains("LinearGradient"), "Mock 初始图必须由程序生成")
     }
 
+    func testEntryDeleteUsesMenuAndDestructiveConfirmation() throws {
+        let entry = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+        let store = try source("XiaomaoApp/SmallThings/SmallThingsStore.swift")
+        let service = try source("XiaomaoApp/SmallThings/SmallThingsService.swift")
+
+        XCTAssertTrue(entry.contains("smallThings.entry.menu"))
+        XCTAssertTrue(entry.contains("删除这件小事"))
+        XCTAssertTrue(entry.contains("confirmationDialog("))
+        XCTAssertTrue(entry.contains("role: .destructive"))
+        XCTAssertTrue(entry.contains("store.deleteEntryPersisted(entryID: entry.id)"))
+        XCTAssertTrue(store.contains("func deleteEntryPersisted(entryID: UUID) async -> Bool"))
+        XCTAssertTrue(store.contains("entries.removeAll { $0.id == entryID }"))
+        XCTAssertTrue(service.contains("/v1/small-things/entries/delete"))
+    }
+
     func testBindingProvidesCopyShareValidationAndOfflineOutcomes() throws {
         let binding = try source("XiaomaoApp/SmallThings/SmallThingsBindingView.swift")
         let store = try source("XiaomaoApp/SmallThings/SmallThingsStore.swift")
