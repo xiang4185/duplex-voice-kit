@@ -953,6 +953,14 @@ struct VoiceCallView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding(.top, 12)
+                Text(viewModel.controller.latencyDiagnosticText)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
                 Text(viewModel.controller.diagnosticText)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -963,13 +971,19 @@ struct VoiceCallView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(copiedDiagnostics ? "已复制" : "复制诊断信息") {
-                        UIPasteboard.general.string = viewModel.controller.diagnosticText
+                        UIPasteboard.general.string = [
+                            viewModel.controller.latencyDiagnosticText,
+                            viewModel.controller.diagnosticText
+                        ].joined(separator: "\n\n")
                         copiedDiagnostics = true
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") { showDiagnostics = false }
                 }
+            }
+            .task {
+                await viewModel.controller.refreshLatencyProbe()
             }
         }
     }

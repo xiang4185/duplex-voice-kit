@@ -902,6 +902,52 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertTrue(diagnostics.contains("route=b"))
     }
 
+    func testDiagnosticsSplitCommitToFirstAudioIntoObservableStages() async {
+        let fixture = makeFixture()
+        await fixture.controller.startNewCall()
+
+        await fixture.controller.commitAudio()
+        try? await Task.sleep(for: .milliseconds(2))
+        await fixture.socket.emitServerEvent(
+            .transcriptFinal,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: ["text": .string("private transcript must not appear")]
+        )
+        try? await Task.sleep(for: .milliseconds(2))
+        let responseID = "diagnostic-response"
+        await fixture.socket.emitServerEvent(
+            .responseStarted,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: ["response_id": .string(responseID)]
+        )
+        try? await Task.sleep(for: .milliseconds(2))
+        await fixture.socket.emitServerEvent(
+            .responseAudioDelta,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: [
+                "response_id": .string(responseID),
+                "chunk_index": .int(0),
+                "audio": .string(Data(repeating: 1, count: 640).base64EncodedString())
+            ]
+        )
+        await settle()
+
+        let diagnostics = fixture.controller.diagnosticText
+        let latency = fixture.controller.latencyDiagnosticText
+        XCTAssertTrue(diagnostics.contains("commit_to_transcript_final_ms="))
+        XCTAssertTrue(diagnostics.contains("transcript_final_to_response_started_ms="))
+        XCTAssertTrue(diagnostics.contains("response_started_to_first_audio_ms="))
+        XCTAssertTrue(diagnostics.contains("network_ping_ms="))
+        XCTAssertTrue(latency.contains("ASR / 上行"))
+        XCTAssertTrue(latency.contains("模型 / 路由"))
+        XCTAssertTrue(latency.contains("TTS / 下行"))
+        XCTAssertTrue(latency.contains("当前最长阶段"))
+        XCTAssertFalse(diagnostics.contains("private transcript must not appear"))
+    }
+
     func testCloseCleansCapturePlaybackAudioAndTasks() async {
         let fixture = makeFixture(reconnectDelays: [.milliseconds(1)])
         await fixture.controller.startNewCall()
@@ -1226,6 +1272,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         await fixture.controller.startNewCall()
         let sessionID = fixture.controller.sessionIDForTesting
         let initialConnectCount = await fixture.socket.connectCountValue()
+        let initialPingCount = await fixture.socket.pingCountValue()
 
         await fixture.controller.setMuted(true)
         await fixture.controller.setMuted(false)
@@ -1235,7 +1282,43 @@ final class VoiceSessionControllerTests: XCTestCase {
         let connectCount = await fixture.socket.connectCountValue()
         XCTAssertEqual(connectCount, initialConnectCount,
                        "正常取消静音不得增加 WebSocket connect 次数")
+        let pingCount = await fixture.socket.pingCountValue()
+        XCTAssertEqual(pingCount, initialPingCount + 1,
+                       "正常取消静音必须先探测一次 WebSocket 活性")
         XCTAssertTrue(fixture.controller.isRecording)
+    }
+
+    func testUnmutePingFailureTriggersExistingReconnect() async {
+        let fixture = makeFixture(autoResume: false, reconnectDelays: [.milliseconds(1)])
+        await fixture.controller.startNewCall()
+        await waitUntil {
+            fixture.controller.state == .ready
+                && fixture.controller.webSocketState == .connected
+        }
+        let sessionID = fixture.controller.sessionIDForTesting
+
+        await fixture.controller.setMuted(true)
+        XCTAssertTrue(fixture.controller.isMuted)
+        XCTAssertFalse(fixture.controller.isRecording)
+
+        await fixture.socket.failNextPing()
+        await fixture.controller.setMuted(false)
+        await fixture.socket.waitForConnectCount(2)
+        await fixture.socket.waitForSentEvent(.sessionResume)
+
+        XCTAssertFalse(fixture.controller.isRecording,
+                       "半断开链路探测失败后必须等待 resume 成功再恢复采集")
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID,
+                       "取消静音探测失败必须复用原 Session")
+        XCTAssertEqual(fixture.controller.pingFailureCount, 1)
+
+        await fixture.socket.emitResumed()
+        await waitUntil {
+            fixture.controller.state == .ready
+                && fixture.controller.webSocketState == .connected
+                && fixture.controller.isRecording
+        }
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
     }
 
     func testRepeatedUnmuteDoesNotRestartCaptureMultipleTimes() async {
@@ -2287,6 +2370,8 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
     private var sentEvents: [VoiceEvent] = []
     // P2.8A-CI-FIX-2: 失败注入 — 指定类型的下一条 send 抛错 (消费后移除)
     private var failNextSendTypes: [VoiceEventType] = []
+    private var shouldFailNextPing = false
+    private var pingCount = 0
     private var lastSessionStart: VoiceEvent?
     private var lastSessionResume: VoiceEvent?
     private var connectWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
@@ -2361,6 +2446,11 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
 
     func ping() async throws {
         guard connected else { throw AppError.networkUnavailable }
+        pingCount += 1
+        if shouldFailNextPing {
+            shouldFailNextPing = false
+            throw AppError.networkUnavailable
+        }
     }
 
     func disconnect() async {
@@ -2493,11 +2583,15 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
     }
 
     func connectCountValue() -> Int { connectCount }
+    func pingCountValue() -> Int { pingCount }
     func sentTypesValue() -> [VoiceEventType] { sentTypes }
 
     // P2.8A-CI-FIX-2: 注入下一次指定类型 send 失败 (消费后自动移除)
     func failNextSend(_ type: VoiceEventType) {
         failNextSendTypes.append(type)
+    }
+    func failNextPing() {
+        shouldFailNextPing = true
     }
     func sentEventsValue() -> [VoiceEvent] { sentEvents }
 

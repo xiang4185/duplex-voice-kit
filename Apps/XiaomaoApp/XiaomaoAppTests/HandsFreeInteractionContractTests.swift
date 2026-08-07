@@ -48,20 +48,16 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         let composer = try source("XiaomaoApp/SmallThings/SmallThingComposerView.swift")
         let coordinator = try source("XiaomaoApp/App/AppCoordinator.swift")
 
-        XCTAssertTrue(chat.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"),
-                      "聊天页必须使用单一键盘动画来源")
-        XCTAssertTrue(chat.contains(".padding(.bottom, keyboardOverlap)"),
-                      "聊天消息区和输入区必须作为同一页面同步上移")
-        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
-                      "键盘弹出时消息区必须跟随系统键盘 frame 动画")
-        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
-                      "键盘与消息滚动必须使用同一动画时序")
-        XCTAssertTrue(chat.contains("GeometryReader"),
-                      "键盘覆盖必须使用聊天容器自己的坐标")
-        XCTAssertTrue(chat.contains("containerBottom: geometry.frame(in: .global).maxY"),
-                      "键盘 frame 必须基于聊天容器底边驱动页面 overlap")
-        XCTAssertFalse(chat.contains("UIScreen.main.bounds.height"),
-                       "不得按整屏高度计算键盘覆盖并留下 tab bar 空白")
+        XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
+                       "聊天页必须使用系统键盘 safe-area，避免 Tab Bar 留在键盘下方")
+        XCTAssertFalse(chat.contains("keyboardOverlap"),
+                       "聊天页不得再维护手工键盘高度")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
+                      "聊天记录默认必须停在最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
+                      "键盘显示完成后必须锚定最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
+                      "键盘收回完成后必须锚定最新消息")
         XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
@@ -156,6 +152,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
     func testConnectionReadinessUsesRealAudioAndParallelPreparation() throws {
         let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
         let diagnostics = try source("XiaomaoApp/Voice/VoiceDiagnostics.swift")
+        let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
 
         XCTAssertTrue(controller.contains("guard await authorizeMicrophone() else"))
         XCTAssertTrue(controller.contains("async let audioPrepared = activateAudioSession()"))
@@ -163,10 +160,21 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("captureCallbackCount > 0"))
         XCTAssertTrue(controller.contains("isConversationReady"))
         XCTAssertTrue(controller.contains("schedulePostResponseCaptureCheck"))
+        XCTAssertTrue(controller.contains("try await probeWebSocket()"),
+                      "取消静音和心跳必须能主动探测半断开的 WebSocket")
         XCTAssertTrue(diagnostics.contains("presentation_to_audio_session_ms"))
         XCTAssertTrue(diagnostics.contains("presentation_to_websocket_ms"))
         XCTAssertTrue(diagnostics.contains("presentation_to_session_ready_ms"))
         XCTAssertTrue(diagnostics.contains("presentation_to_microphone_ready_ms"))
+        XCTAssertTrue(diagnostics.contains("network_ping_ms"))
+        XCTAssertTrue(diagnostics.contains("commit_to_transcript_final_ms"))
+        XCTAssertTrue(diagnostics.contains("transcript_final_to_response_started_ms"))
+        XCTAssertTrue(diagnostics.contains("response_started_to_first_audio_ms"))
+        XCTAssertTrue(diagnostics.contains("当前最长阶段"))
+        XCTAssertTrue(call.contains("viewModel.controller.latencyDiagnosticText"),
+                      "受控诊断页必须直接展示延迟分段结果")
+        XCTAssertTrue(call.contains("await viewModel.controller.refreshLatencyProbe()"),
+                      "打开诊断页时必须主动刷新一次网络 RTT")
     }
 
     // MARK: P2.6D 多角色预览彩蛋契约

@@ -5,7 +5,6 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
-    @State private var keyboardOverlap: CGFloat = 0
 
     private let isMockMode: Bool
     private let onReconfigure: () -> Void
@@ -21,96 +20,96 @@ struct ChatView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                header
-                    .onTapGesture { inputFocused = false }
+        VStack(spacing: 0) {
+            header
+                .onTapGesture { inputFocused = false }
 
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            stateContent
-                            ForEach(viewModel.messages) { message in
-                                ChatMessageBubble(message: message)
-                                    .id(message.id)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        stateContent
+                        ForEach(viewModel.messages) { message in
+                            ChatMessageBubble(message: message)
+                                .id(message.id)
 
-                                if isLastMessageInTurn(message),
-                                   viewModel.failedXiaomaoTurns.contains(message.turnID) {
-                                    xiaomaoRetryCard(turnID: message.turnID)
-                                }
+                            if isLastMessageInTurn(message),
+                               viewModel.failedXiaomaoTurns.contains(message.turnID) {
+                                xiaomaoRetryCard(turnID: message.turnID)
                             }
+                        }
 
-                            if viewModel.isSending {
-                                ChatTypingIndicator()
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                        if viewModel.isSending {
+                            ChatTypingIndicator()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
-                            if viewModel.lastReplyWasDegraded {
-                                degradedNotice
-                            }
+                        if viewModel.lastReplyWasDegraded {
+                            degradedNotice
+                        }
 
-                            Color.clear.frame(height: 1).id("chat.bottom")
-                        }
-                        .padding(.horizontal, Theme.Spacing.medium)
-                        .padding(.vertical, Theme.Spacing.small)
+                        Color.clear.frame(height: 1).id("chat.bottom")
                     }
-                    .scrollDismissesKeyboard(.immediately)
-                    .simultaneousGesture(
-                        TapGesture().onEnded { _ in inputFocused = false }
-                    )
-                    .refreshable {
-                        await viewModel.refreshHistorySilently()
-                    }
-                    .accessibilityIdentifier("chat.messages")
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        withAnimation(.easeOut(duration: 0.22)) {
-                            proxy.scrollTo("chat.bottom", anchor: .bottom)
-                        }
-                    }
-                    .onChange(of: viewModel.isSending) { _, _ in
-                        withAnimation(.easeOut(duration: 0.22)) {
-                            proxy.scrollTo("chat.bottom", anchor: .bottom)
-                        }
-                    }
-                    .onReceive(
-                        NotificationCenter.default.publisher(
-                            for: UIResponder.keyboardWillChangeFrameNotification
-                        )
-                    ) { notification in
-                        // TabView 的内容底边位于 tab bar 上方，不能按整块屏幕高度计算键盘覆盖。
-                        // 直接使用当前聊天容器的全局底边，避免多保留一个 tab bar 高度的空白。
-                        withAnimation(keyboardAnimation(from: notification)) {
-                            keyboardOverlap = keyboardOverlap(
-                                from: notification,
-                                containerBottom: geometry.frame(in: .global).maxY
-                            )
-                            proxy.scrollTo("chat.bottom", anchor: .bottom)
-                        }
+                    .padding(.horizontal, Theme.Spacing.medium)
+                    .padding(.vertical, Theme.Spacing.small)
+                }
+                .defaultScrollAnchor(.bottom)
+                .scrollDismissesKeyboard(.immediately)
+                .simultaneousGesture(
+                    TapGesture().onEnded { _ in inputFocused = false }
+                )
+                .refreshable {
+                    await viewModel.refreshHistorySilently()
+                }
+                .accessibilityIdentifier("chat.messages")
+                .onChange(of: viewModel.messages.count) { _, _ in
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
                     }
                 }
-
-                modeFooter
-                    .onTapGesture { inputFocused = false }
-
-                ChatComposerView(
-                    draft: $viewModel.draft,
-                    canSend: viewModel.canSend,
-                    isBusy: viewModel.isBusy,
-                    isSending: viewModel.isSending,
-                    characterLimit: ChatViewModel.maximumMessageLength,
-                    send: {
-                        inputFocused = false
-                        Task {
-                            await Task.yield()
-                            await viewModel.send()
-                        }
-                    },
-                    inputFocused: $inputFocused
-                )
+                .onChange(of: viewModel.isSending) { _, _ in
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    }
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: UIResponder.keyboardDidShowNotification
+                    )
+                ) { _ in
+                    // 让系统键盘 safe-area 完成布局后再锚到底部，避免 TabView 自己再算一份键盘高度。
+                    proxy.scrollTo("chat.bottom", anchor: .bottom)
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: UIResponder.keyboardDidHideNotification
+                    )
+                ) { _ in
+                    // 键盘完全收起、Tab Bar 恢复最终高度后再次锚底，避免还要手动再滑一下。
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    }
+                }
             }
-            .padding(.bottom, keyboardOverlap)
+
+            modeFooter
+                .onTapGesture { inputFocused = false }
+
+            ChatComposerView(
+                draft: $viewModel.draft,
+                canSend: viewModel.canSend,
+                isBusy: viewModel.isBusy,
+                isSending: viewModel.isSending,
+                characterLimit: ChatViewModel.maximumMessageLength,
+                send: {
+                    inputFocused = false
+                    Task {
+                        await Task.yield()
+                        await viewModel.send()
+                    }
+                },
+                inputFocused: $inputFocused
+            )
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Theme.bg.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
         .task {
@@ -132,44 +131,6 @@ struct ChatView: View {
         } message: {
             Text("服务器中的聊天历史也会被清空，此操作无法撤销。")
         }
-    }
-
-    private func keyboardAnimation(from notification: Notification) -> Animation {
-        let info = notification.userInfo ?? [:]
-        let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
-        let rawCurve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 0
-
-        guard let curve = UIView.AnimationCurve(rawValue: rawCurve) else {
-            // iOS 键盘有时给出扩展 curve 值；此时使用系统常见 easeInOut 时长，不另加延迟。
-            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
-        }
-
-        switch curve {
-        case .easeIn:
-            return .timingCurve(0.42, 0, 1, 1, duration: duration)
-        case .easeOut:
-            return .timingCurve(0, 0, 0.58, 1, duration: duration)
-        case .linear:
-            return .linear(duration: duration)
-        case .easeInOut:
-            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
-        @unknown default:
-            return .easeInOut(duration: duration)
-        }
-    }
-
-    private func keyboardOverlap(
-        from notification: Notification,
-        containerBottom: CGFloat
-    ) -> CGFloat {
-        guard
-            let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-        else { return 0 }
-
-        guard endFrame.minY < containerBottom, endFrame.maxY >= containerBottom else {
-            return 0
-        }
-        return max(0, min(endFrame.height, containerBottom - endFrame.minY))
     }
 
     private var header: some View {

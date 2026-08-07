@@ -38,8 +38,15 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let webSocketConnectedDurationMilliseconds: Int?
     let lastDisconnectUptimeMilliseconds: Int?
     let endToFirstAudioMilliseconds: Int?
+    let networkPingMilliseconds: Int?
+    let pingFailureCount: Int
+    let commitToTranscriptFinalMilliseconds: Int?
+    let transcriptFinalToResponseStartedMilliseconds: Int?
+    let responseStartedToFirstAudioMilliseconds: Int?
     let firstInputChunkSentAt: Date?
     let audioCommitSentAt: Date?
+    let transcriptFinalReceivedAt: Date?
+    let responseStartedAt: Date?
     let firstAudioDeltaReceivedAt: Date?
     let responseNextSentCount: Int
     let serverPushAudioChunks: Int
@@ -83,6 +90,31 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let lastResponseCompletionCaptureCallbacks: Int
     let postResponseCaptureCallbackDelta: Int
     let generatedAt: Date
+
+    var latencySummary: String {
+        let stages: [(String, Int?)] = [
+            ("网络 RTT", networkPingMilliseconds),
+            ("ASR / 上行", commitToTranscriptFinalMilliseconds),
+            ("模型 / 路由", transcriptFinalToResponseStartedMilliseconds),
+            ("TTS / 下行", responseStartedToFirstAudioMilliseconds)
+        ]
+        let available = stages.compactMap { stage -> (String, Int)? in
+            guard let value = stage.1 else { return nil }
+            return (stage.0, value)
+        }
+        let slowest = available.max { $0.1 < $1.1 }
+        return [
+            "延迟分段（客户端观测）",
+            "网络 RTT: \(optional(networkPingMilliseconds)) ms",
+            "端点静音等待: \(lastEndingSilenceMilliseconds) ms",
+            "ASR / 上行: \(optional(commitToTranscriptFinalMilliseconds)) ms",
+            "模型 / 路由: \(optional(transcriptFinalToResponseStartedMilliseconds)) ms",
+            "TTS / 下行: \(optional(responseStartedToFirstAudioMilliseconds)) ms",
+            "端到首音频: \(optional(endToFirstAudioMilliseconds)) ms",
+            "Ping 失败次数: \(pingFailureCount)",
+            "当前最长阶段: \(slowest.map { "\($0.0) \($0.1) ms" } ?? "数据不足")"
+        ].joined(separator: "\n")
+    }
 
     var text: String {
         let formatter = ISO8601DateFormatter()
@@ -132,8 +164,15 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "websocket_connected_duration_ms=\(optional(webSocketConnectedDurationMilliseconds))",
             "last_disconnect_uptime_ms=\(optional(lastDisconnectUptimeMilliseconds))",
             "end_to_first_audio_ms=\(optional(endToFirstAudioMilliseconds))",
+            "network_ping_ms=\(optional(networkPingMilliseconds))",
+            "ping_failure_count=\(pingFailureCount)",
+            "commit_to_transcript_final_ms=\(optional(commitToTranscriptFinalMilliseconds))",
+            "transcript_final_to_response_started_ms=\(optional(transcriptFinalToResponseStartedMilliseconds))",
+            "response_started_to_first_audio_ms=\(optional(responseStartedToFirstAudioMilliseconds))",
             "first_input_chunk_sent_at=\(date(firstInputChunkSentAt, formatter: formatter))",
             "audio_commit_sent_at=\(date(audioCommitSentAt, formatter: formatter))",
+            "transcript_final_received_at=\(date(transcriptFinalReceivedAt, formatter: formatter))",
+            "response_started_at=\(date(responseStartedAt, formatter: formatter))",
             "first_audio_delta_received_at=\(date(firstAudioDeltaReceivedAt, formatter: formatter))",
             "response_next_sent_count=\(responseNextSentCount)",
             "server_push_audio_chunks=\(serverPushAudioChunks)",

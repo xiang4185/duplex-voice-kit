@@ -86,27 +86,29 @@ final class ChatUIContractTests: XCTestCase {
 
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
-        XCTAssertTrue(chat.contains("header\n                    .onTapGesture { inputFocused = false }"))
+        XCTAssertTrue(chat.contains("header"))
         XCTAssertTrue(chat.contains("modeFooter"))
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
             2,
             "顶部与底部非输入区域都必须可主动收起键盘"
         )
-        XCTAssertTrue(chat.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"),
-                      "聊天页必须关闭系统二次键盘 safe-area 推动，改为单一页面动画")
-        XCTAssertTrue(chat.contains(".padding(.bottom, keyboardOverlap)"),
-                      "消息区和输入区必须作为同一页面跟随键盘上移")
-        XCTAssertTrue(chat.contains("GeometryReader"),
-                      "键盘覆盖必须基于聊天容器自身坐标，而不是整块屏幕")
-        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
-                      "消息偏移必须跟随系统键盘 frame 动画")
-        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
-                      "消息滚动必须与键盘使用同一时长/曲线")
-        XCTAssertTrue(chat.contains("containerBottom: geometry.frame(in: .global).maxY"),
-                      "键盘 frame 必须驱动同一页面的 bottom overlap")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
+                      "聊天记录默认必须锚定最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
+                      "键盘最终布局完成后必须再次锚定最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
+                      "键盘完全收回、Tab Bar 恢复后必须再次锚定最新消息")
+        XCTAssertTrue(chat.contains("DispatchQueue.main.async"),
+                      "收键盘后的滚动必须等最终 safe-area 布局落定")
+        XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
+                       "聊天页必须交回系统键盘 safe-area，不能让 Tab Bar 留在键盘下方形成空白")
+        XCTAssertFalse(chat.contains("keyboardOverlap"),
+                       "不得再手工维护第二套键盘高度")
+        XCTAssertFalse(chat.contains("GeometryReader"),
+                       "键盘布局不得依赖手工屏幕/容器高度推算")
         XCTAssertFalse(chat.contains("UIScreen.main.bounds.height"),
-                       "TabView 内不得再用整屏高度计算键盘覆盖，否则会保留 tab bar 空白")
+                       "不得按整屏高度计算键盘覆盖")
         XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
                        "不得再延迟等待键盘后补滚动")
     }

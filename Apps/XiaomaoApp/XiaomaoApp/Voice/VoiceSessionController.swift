@@ -51,6 +51,8 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var responseCompletionCount = 0
     @Published private(set) var postResponseCaptureRecoveryCount = 0
     @Published private(set) var hasCompletedInitialConnection = false
+    @Published private(set) var lastPingRoundTripMilliseconds: Int?
+    @Published private(set) var pingFailureCount = 0
 
     private let environment: AppEnvironment
     private let socket: any VoiceAdapter
@@ -100,6 +102,8 @@ final class VoiceSessionController: ObservableObject {
     private var lastDisconnectUptimeMilliseconds: Int?
     private var firstInputChunkSentAt: Date?
     private var audioCommitSentAt: Date?
+    private var transcriptFinalReceivedAt: Date?
+    private var responseStartedAt: Date?
     private var firstAudioDeltaReceivedAt: Date?
     private var terminalProtocolErrorCode: String?
     private var terminalLocalAudioFailure = false
@@ -206,6 +210,14 @@ final class VoiceSessionController: ObservableObject {
     }
 
     var diagnosticText: String {
+        diagnosticSnapshot.text
+    }
+
+    var latencyDiagnosticText: String {
+        diagnosticSnapshot.latencySummary
+    }
+
+    private var diagnosticSnapshot: VoiceDiagnosticSnapshot {
         let audioHealth = audioIOHealthReporter?.healthSnapshot ?? .unavailable
         let uploadHealth = audioUploader.diagnostics.snapshot
         return VoiceDiagnosticSnapshot(
@@ -248,8 +260,24 @@ final class VoiceSessionController: ObservableObject {
                 from: audioCommitSentAt,
                 to: firstAudioDeltaReceivedAt
             ),
+            networkPingMilliseconds: lastPingRoundTripMilliseconds,
+            pingFailureCount: pingFailureCount,
+            commitToTranscriptFinalMilliseconds: elapsedMilliseconds(
+                from: audioCommitSentAt,
+                to: transcriptFinalReceivedAt
+            ),
+            transcriptFinalToResponseStartedMilliseconds: elapsedMilliseconds(
+                from: transcriptFinalReceivedAt,
+                to: responseStartedAt
+            ),
+            responseStartedToFirstAudioMilliseconds: elapsedMilliseconds(
+                from: responseStartedAt,
+                to: firstAudioDeltaReceivedAt
+            ),
             firstInputChunkSentAt: firstInputChunkSentAt,
             audioCommitSentAt: audioCommitSentAt,
+            transcriptFinalReceivedAt: transcriptFinalReceivedAt,
+            responseStartedAt: responseStartedAt,
             firstAudioDeltaReceivedAt: firstAudioDeltaReceivedAt,
             responseNextSentCount: responseNextSentCount,
             serverPushAudioChunks: serverPushAudioChunks,
@@ -305,7 +333,7 @@ final class VoiceSessionController: ObservableObject {
             lastResponseCompletionCaptureCallbacks: lastResponseCompletionCaptureCallbacks,
             postResponseCaptureCallbackDelta: postResponseCaptureCallbackDelta,
             generatedAt: Date()
-        ).text
+        )
     }
 
     func markPresentationRequested() {
@@ -313,6 +341,11 @@ final class VoiceSessionController: ObservableObject {
         audioSessionActivatedAt = nil
         sessionReadyAt = nil
         microphoneReadyAt = nil
+    }
+
+    func refreshLatencyProbe() async {
+        guard callIsActive, webSocketState == .connected else { return }
+        try? await probeWebSocket()
     }
 
     func startNewCall() async {
@@ -413,8 +446,8 @@ final class VoiceSessionController: ObservableObject {
 
     /// P2.8A-CI-FIX: 静音/取消静音的确定性控制流.
     /// 设置静音: 本地停采 → 仅连接正常时发送 mute (断开时不向失效连接发送).
-    /// 取消静音: 连接正常 → 发 unmute + 恢复采集; 断开且可恢复 → 不发送 unmute, 直接走现有重连;
-    ///           已关闭/空闲结束/不可恢复 → 无效, 不重连、不新建 Session.
+    /// 取消静音: 先探测连接活性，再发 unmute + 恢复采集; 半断开/已断开 → 直接走现有重连;
+    ///           已关闭/空闲结束/终端本地错误 → 无效, 不重连、不新建 Session.
     func setMuted(_ muted: Bool) async {
         guard callIsActive else { return }
         // 幂等: 重复设置相同状态不重复停启采集/不重复发送静音命令/不重复创建重连任务
@@ -438,20 +471,36 @@ final class VoiceSessionController: ObservableObject {
         // 取消静音
         if webSocketState == .connected {
             do {
+                // 静音期间 URLSessionWebSocketTask 可能尚未回报 close，但真实链路已经半断开。
+                // 取消静音是显式用户动作，先做一次 ping，失败则复用现有 session.resume 重连路径。
+                try await probeWebSocket()
                 try await audioUploader.setMuted(false)
             } catch {
-                // P2.8A-CI-FIX-2: 只有 unmute 发送成功后才能恢复采集;
-                // 发送失败走现有发送失败处理(触发重连流程), 不因本地已置 false 而恢复采集.
+                // 只有链路探测 + unmute 都成功后才能恢复采集。
                 recordSendFailure(error)
                 return
             }
+            syncAudioSessionState()
+            if !audioSessionActive {
+                do {
+                    try audioSession.activate()
+                    audioSession.refreshRoute()
+                    syncAudioSessionState()
+                } catch {
+                    lastErrorCategory = "audio_session_failed"
+                    lastReasonCategory = "unmute_audio_session_reactivation_failed"
+                    errorMessage = "取消静音后无法恢复麦克风，请重试。"
+                    return
+                }
+            }
             await startContinuousCaptureIfPossible()
-        } else if lastDisconnectRecoverable,
+        } else if !idleTimeoutEnded,
                   state != .closed,
-                  state != .failed,
+                  !terminalLocalAudioFailure,
+                  terminalProtocolErrorCode == nil,
                   lastReasonCategory != "idle_timeout" {
-            // P2.8A-CI-FIX: 断开但可恢复 → 不向旧连接发送 unmute, 直接走现有重连
-            // (session.resume, 不新建 Session / 不新发 session.start / 不新增重连循环)
+            // 生命周期事件可能晚于 UI 状态；显式取消静音时只要会话仍可恢复，就直接复用现有重连。
+            lastDisconnectRecoverable = true
             reconnectCurrentCall()
         }
     }
@@ -516,7 +565,11 @@ final class VoiceSessionController: ObservableObject {
         lastDisconnectUptimeMilliseconds = nil
         firstInputChunkSentAt = nil
         audioCommitSentAt = nil
+        transcriptFinalReceivedAt = nil
+        responseStartedAt = nil
         firstAudioDeltaReceivedAt = nil
+        lastPingRoundTripMilliseconds = nil
+        pingFailureCount = 0
         terminalProtocolErrorCode = nil
         terminalLocalAudioFailure = false
         isPlaybackActive = false
@@ -869,11 +922,15 @@ final class VoiceSessionController: ObservableObject {
             state = .listening
         case .listeningStopped, .thinkingStarted:
             state = .processing
-        case .transcriptPartial, .transcriptFinal:
+        case .transcriptPartial:
             transcript = event.payload.string("text") ?? transcript
+        case .transcriptFinal:
+            transcript = event.payload.string("text") ?? transcript
+            transcriptFinalReceivedAt = Date()
         case .responseStarted:
             responseID = event.payload.string("response_id") ?? ""
             metrics.responseID = responseID
+            responseStartedAt = Date()
             automaticBargeInActive = false
             isPlaybackActive = false
             voiceActivityDetector.resetForListening()
@@ -1060,7 +1117,7 @@ final class VoiceSessionController: ObservableObject {
             while !Task.isCancelled, self.callIsActive, !self.suspendedForBackground {
                 do { try await Task.sleep(for: .seconds(20)) } catch { return }
                 do {
-                    try await self.audioUploader.ping()
+                    try await self.probeWebSocket()
                 } catch {
                     self.lastErrorCategory = "connection_lost"
                     self.lastReasonCategory = "heartbeat_failed"
@@ -1069,6 +1126,20 @@ final class VoiceSessionController: ObservableObject {
                     return
                 }
             }
+        }
+    }
+
+    private func probeWebSocket() async throws {
+        let startedAt = Date()
+        do {
+            try await audioUploader.ping()
+            lastPingRoundTripMilliseconds = max(
+                0,
+                Int(Date().timeIntervalSince(startedAt) * 1000)
+            )
+        } catch {
+            pingFailureCount += 1
+            throw error
         }
     }
 
@@ -1167,6 +1238,8 @@ final class VoiceSessionController: ObservableObject {
             }
         case .commitSent:
             audioCommitSentAt = Date()
+            transcriptFinalReceivedAt = nil
+            responseStartedAt = nil
             firstAudioDeltaReceivedAt = nil
             VoiceLog.audio.info("audio_commit_sent chunks=\(self.metrics.inputFrames)")
         case .interruptSent:
@@ -1516,7 +1589,9 @@ final class VoiceSessionController: ObservableObject {
 
     private func elapsedMilliseconds(from start: Date?, to end: Date?) -> Int? {
         guard let start, let end else { return nil }
-        return max(0, Int(end.timeIntervalSince(start) * 1000))
+        let interval = end.timeIntervalSince(start)
+        guard interval >= 0 else { return nil }
+        return Int(interval * 1000)
     }
 
     private func userMessage(for info: VoiceWebSocketDisconnectInfo) -> String {
