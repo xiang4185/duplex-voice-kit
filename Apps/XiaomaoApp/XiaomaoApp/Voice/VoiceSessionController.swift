@@ -494,13 +494,12 @@ final class VoiceSessionController: ObservableObject {
                 }
             }
             await startContinuousCaptureIfPossible()
-        } else if !idleTimeoutEnded,
+        } else if lastDisconnectRecoverable,
+                  !idleTimeoutEnded,
                   state != .closed,
-                  !terminalLocalAudioFailure,
-                  terminalProtocolErrorCode == nil,
+                  state != .failed,
                   lastReasonCategory != "idle_timeout" {
-            // 生命周期事件可能晚于 UI 状态；显式取消静音时只要会话仍可恢复，就直接复用现有重连。
-            lastDisconnectRecoverable = true
+            // 已明确是可恢复断开时，复用现有 session.resume 重连路径。
             reconnectCurrentCall()
         }
     }

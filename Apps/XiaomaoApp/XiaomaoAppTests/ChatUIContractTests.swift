@@ -95,8 +95,10 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
-        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
-                      "键盘最终布局完成后必须再次锚定最新消息")
+        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
+                      "消息滚动必须跟随系统键盘 frame 动画")
+        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
+                      "消息滚动必须与键盘使用同一时长和曲线，避免显示完成后二次跳动")
         XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
                       "键盘完全收回、Tab Bar 恢复后必须再次锚定最新消息")
         XCTAssertTrue(chat.contains("DispatchQueue.main.async"),

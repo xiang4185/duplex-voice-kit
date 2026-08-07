@@ -73,11 +73,13 @@ struct ChatView: View {
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(
-                        for: UIResponder.keyboardDidShowNotification
+                        for: UIResponder.keyboardWillChangeFrameNotification
                     )
-                ) { _ in
-                    // 让系统键盘 safe-area 完成布局后再锚到底部，避免 TabView 自己再算一份键盘高度。
-                    proxy.scrollTo("chat.bottom", anchor: .bottom)
+                ) { notification in
+                    // 只让系统 safe-area 改布局；消息滚动跟随同一键盘动画，不再出现键盘结束后第二次跳动。
+                    withAnimation(keyboardAnimation(from: notification)) {
+                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                    }
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(
@@ -130,6 +132,28 @@ struct ChatView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("服务器中的聊天历史也会被清空，此操作无法撤销。")
+        }
+    }
+
+    private func keyboardAnimation(from notification: Notification) -> Animation {
+        let info = notification.userInfo ?? [:]
+        let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let rawCurve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 0
+
+        guard let curve = UIView.AnimationCurve(rawValue: rawCurve) else {
+            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
+        }
+        switch curve {
+        case .easeIn:
+            return .timingCurve(0.42, 0, 1, 1, duration: duration)
+        case .easeOut:
+            return .timingCurve(0, 0, 0.58, 1, duration: duration)
+        case .linear:
+            return .linear(duration: duration)
+        case .easeInOut:
+            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
+        @unknown default:
+            return .easeInOut(duration: duration)
         }
     }
 

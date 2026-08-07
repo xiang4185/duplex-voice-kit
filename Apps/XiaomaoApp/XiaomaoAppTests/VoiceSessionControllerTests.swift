@@ -1303,8 +1303,12 @@ final class VoiceSessionControllerTests: XCTestCase {
 
         await fixture.socket.failNextPing()
         await fixture.controller.setMuted(false)
-        await fixture.socket.waitForConnectCount(2)
-        await fixture.socket.waitForSentEvent(.sessionResume)
+        let resumeSent = await fixture.socket.waitForSentEvent(
+            .sessionResume,
+            count: 1,
+            timeout: .seconds(1)
+        )
+        XCTAssertTrue(resumeSent, "ping 失败后必须进入现有 session.resume 重连路径")
 
         XCTAssertFalse(fixture.controller.isRecording,
                        "半断开链路探测失败后必须等待 resume 成功再恢复采集")
@@ -1319,6 +1323,28 @@ final class VoiceSessionControllerTests: XCTestCase {
                 && fixture.controller.isRecording
         }
         XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
+    }
+
+    func testUnmuteAfterNonRecoverableDisconnectDoesNotReconnect() async {
+        let fixture = makeFixture(reconnectDelays: [.milliseconds(1)])
+        await fixture.controller.startNewCall()
+        await fixture.controller.setMuted(true)
+
+        let unauthorized = VoiceWebSocketErrorClassifier.classify(
+            error: URLError(.userAuthenticationRequired),
+            closeCode: nil,
+            httpStatus: 401
+        )
+        await fixture.socket.simulateFailure(unauthorized)
+        await waitUntil { fixture.controller.state == .failed }
+        let connectCountBefore = await fixture.socket.connectCountValue()
+
+        await fixture.controller.setMuted(false)
+        await settle()
+
+        XCTAssertFalse(fixture.controller.lastDisconnectRecoverable)
+        XCTAssertEqual(await fixture.socket.connectCountValue(), connectCountBefore,
+                       "不可恢复鉴权失败后取消静音不得静默重连")
     }
 
     func testRepeatedUnmuteDoesNotRestartCaptureMultipleTimes() async {
