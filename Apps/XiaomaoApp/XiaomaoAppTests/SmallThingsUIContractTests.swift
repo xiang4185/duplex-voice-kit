@@ -41,8 +41,10 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertEqual(composer.components(separatedBy: "Text(\"保存\")").count - 1, 1)
         XCTAssertTrue(composer.contains("smallThings.form.type.note"))
         XCTAssertTrue(composer.contains("smallThings.form.type.expense"))
-        XCTAssertTrue(composer.contains(".pickerStyle(.segmented)"))
-        XCTAssertTrue(composer.contains(".frame(maxWidth: .infinity, minHeight: 56)"))
+        XCTAssertFalse(composer.contains(".pickerStyle(.segmented)"),
+                       "顶部类型选择必须使用与暖色卡片体系一致的大尺寸入口")
+        XCTAssertTrue(composer.contains("typeSelectorButton("))
+        XCTAssertTrue(composer.contains(".frame(maxWidth: .infinity, minHeight: 68)"))
         XCTAssertTrue(composer.contains("smallThings.form.imagePicker"))
         XCTAssertTrue(composer.contains("smallThings.form.save"))
         XCTAssertTrue(composer.contains("PhotosPicker"))

@@ -87,7 +87,14 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
         XCTAssertTrue(chat.contains("header\n                .onTapGesture { inputFocused = false }"))
-        XCTAssertTrue(chat.contains("modeFooter\n                .onTapGesture { inputFocused = false }"))
+        XCTAssertTrue(chat.contains("modeFooter"))
+        XCTAssertGreaterThanOrEqual(
+            chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
+            2,
+            "顶部与底部非输入区域都必须可主动收起键盘"
+        )
+        XCTAssertTrue(chat.contains(".safeAreaInset(edge: .bottom, spacing: 0)"),
+                      "键盘弹出时消息视口必须被底部输入区真实挤压")
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {
