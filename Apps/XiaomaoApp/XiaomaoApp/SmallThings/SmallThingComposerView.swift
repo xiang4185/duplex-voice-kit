@@ -118,24 +118,65 @@ struct SmallThingComposerView: View {
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)
 
-            Picker("记录类型", selection: $type) {
-                Text("记个小记")
-                    .tag(SmallThingEntryType.note)
-                    .accessibilityIdentifier("smallThings.form.type.note")
-                Text("记一笔账")
-                    .tag(SmallThingEntryType.expense)
-                    .accessibilityIdentifier("smallThings.form.type.expense")
+            HStack(spacing: Theme.Spacing.small) {
+                typeSelectorButton(
+                    type: .note,
+                    title: "记个小记",
+                    subtitle: "文字 / 图片",
+                    systemImage: "note.text"
+                )
+                typeSelectorButton(
+                    type: .expense,
+                    title: "记一笔账",
+                    subtitle: "金额 / 审批",
+                    systemImage: "creditcard"
+                )
             }
-            .pickerStyle(.segmented)
-            .tint(Theme.primary)
-            .padding(Theme.Spacing.xxSmall)
-            .background(Theme.surfaceWarm)
+        }
+    }
+
+    private func typeSelectorButton(
+        type candidate: SmallThingEntryType,
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        let selected = type == candidate
+        return Button {
+            type = candidate
+        } label: {
+            HStack(spacing: Theme.Spacing.small) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(selected ? Theme.primaryPressed : Theme.textSecondary)
+                    .frame(width: 30, height: 30)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.subheadFont.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.Spacing.small)
+            .frame(maxWidth: .infinity, minHeight: 68)
+            .background(selected ? Theme.primarySoft.opacity(0.82) : Theme.bgElevated)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .stroke(Theme.border.opacity(0.85), lineWidth: 1)
+                    .stroke(selected ? Theme.primary.opacity(0.75) : Theme.border, lineWidth: selected ? 1.5 : 1)
             }
+            .shadow(color: selected ? Theme.shadowRaised : .clear, radius: 7, y: 2)
         }
+        .buttonStyle(.plain)
+        .accessibilityValue(selected ? "已选择" : "未选择")
+        .accessibilityIdentifier(
+            candidate == .note ? "smallThings.form.type.note" : "smallThings.form.type.expense"
+        )
     }
 
     private var noteFields: some View {

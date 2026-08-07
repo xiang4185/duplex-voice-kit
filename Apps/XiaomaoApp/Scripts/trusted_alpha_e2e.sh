@@ -10,7 +10,10 @@ ARCHIVE_PATH="${BUILD_ROOT}/XiaomaoApp.xcarchive"
 EXPORT_PATH="${BUILD_ROOT}/export"
 EXPORT_OPTIONS_PLIST="${XIAOMAO_EXPORT_OPTIONS_PLIST:-}"
 DEVICE_UDID="${XIAOMAO_DEVICE_UDID:-}"
+APP_ICON_SOURCE="${XIAOMAO_APP_ICON_SOURCE:-}"
 SECRETS_FILE="${ROOT}/Config/Secrets.xcconfig"
+APP_ICON_DIR="${ROOT}/XiaomaoApp/Resources/Assets.xcassets/AppIcon.appiconset"
+APP_ICON_BACKUP="${BUILD_ROOT}/.public-appicon-backup"
 
 fail() {
   printf 'error: %s\n' "$1" >&2
@@ -32,6 +35,7 @@ require_command xcodebuild
 require_command xcrun
 require_command python3
 require_command xcodegen
+require_command sips
 
 [[ -f "${SECRETS_FILE}" ]] || fail "copy Config/Secrets.example.xcconfig to ignored Config/Secrets.xcconfig and inject trusted values" 3
 
@@ -49,6 +53,42 @@ grep -Eq '^[[:space:]]*VOICE_WS_URL[[:space:]]*=[[:space:]]*wss://' "${SECRETS_F
 
 mkdir -p "${BUILD_ROOT}"
 cd "${ROOT}"
+
+restore_public_app_icon() {
+  if [[ -d "${APP_ICON_BACKUP}" ]]; then
+    rm -rf "${APP_ICON_DIR}"
+    mv "${APP_ICON_BACKUP}" "${APP_ICON_DIR}"
+  fi
+}
+trap restore_public_app_icon EXIT INT TERM
+
+if [[ -n "${APP_ICON_SOURCE}" ]]; then
+  [[ -f "${APP_ICON_SOURCE}" ]] || fail "XIAOMAO_APP_ICON_SOURCE does not exist" 3
+  width="$(sips -g pixelWidth "${APP_ICON_SOURCE}" 2>/dev/null | awk '/pixelWidth:/ {print $2}')"
+  height="$(sips -g pixelHeight "${APP_ICON_SOURCE}" 2>/dev/null | awk '/pixelHeight:/ {print $2}')"
+  [[ "${width}" =~ ^[0-9]+$ && "${height}" =~ ^[0-9]+$ ]] \
+    || fail "private AppIcon source is not a readable image" 3
+  [[ "${width}" -eq "${height}" ]] || fail "private AppIcon source must be square" 3
+
+  rm -rf "${APP_ICON_BACKUP}"
+  cp -R "${APP_ICON_DIR}" "${APP_ICON_BACKUP}"
+
+  while read -r filename pixels; do
+    sips -s format png -z "${pixels}" "${pixels}" "${APP_ICON_SOURCE}" \
+      --out "${APP_ICON_DIR}/${filename}" >/dev/null
+  done <<'ICONS'
+AppIcon20@2x.png 40
+AppIcon20@3x.png 60
+AppIcon29@2x.png 58
+AppIcon29@3x.png 87
+AppIcon40@2x.png 80
+AppIcon40@3x.png 120
+AppIcon60@2x.png 120
+AppIcon60@3x.png 180
+AppIcon1024.png 1024
+ICONS
+  printf 'Private AppIcon override staged for trusted build.\n'
+fi
 
 python3 Scripts/static_check.py
 xcodegen generate

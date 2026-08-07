@@ -42,6 +42,29 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
+    func testLatestUXRegressionContract() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let entry = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+        let composer = try source("XiaomaoApp/SmallThings/SmallThingComposerView.swift")
+        let coordinator = try source("XiaomaoApp/App/AppCoordinator.swift")
+
+        XCTAssertTrue(chat.contains(".safeAreaInset(edge: .bottom, spacing: 0)"),
+                      "聊天输入区必须通过键盘 safe area 挤压消息区")
+        XCTAssertTrue(chat.contains(".onChange(of: inputFocused)"),
+                      "键盘弹出后必须重新保证最新消息可见")
+        XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
+
+        XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
+        XCTAssertTrue(entry.contains(".dateTime.month().day().hour().minute()"),
+                      "小事应显示固定记录时间并精确到分钟")
+
+        XCTAssertFalse(composer.contains("pickerStyle(.segmented)"),
+                       "记一笔顶部类型选择不得退回过小的系统 segmented control")
+        XCTAssertTrue(composer.contains("minHeight: 68"), "两个记录类型入口必须保持足够点击高度")
+        XCTAssertTrue(coordinator.contains("voiceActivityConfiguration: .xiaomaoRealtime"),
+                      "Xiaomao 宿主必须使用低延迟结束静音配置")
+    }
+
     // P2.6C-REPAIR C: 通话结束统一走 finishCall 单路径关闭 Live Activity
     func testVoiceCallTeardownEndsLiveActivityThroughSinglePath() throws {
         let source = try voiceCallViewSource()
@@ -1119,20 +1142,23 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("@State private var muted"), "VoiceCallView 不得再声明本地 muted")
         XCTAssertTrue(call.contains("viewModel.controller.isMuted"), "UI 必须统一读取 controller.isMuted")
 
-        // ===== 4. 波形: 真实 level 驱动 (限定 VoiceWaveform 范围, 避免命中共情卡 randomManual) =====
+        // ===== 4. 头像涟漪: 删除底部声纹条，真实 level 驱动头像后的自然扩散反馈 =====
+        XCTAssertFalse(call.contains("struct VoiceWaveform: View"), "通话页不得保留旧声纹条")
+        XCTAssertTrue(call.contains("VoiceAvatarRipples("), "头像后必须存在涟漪反馈")
         XCTAssertTrue(call.contains("level: viewModel.controller.vadNormalizedRMS"),
-                      "波形必须接收真实 vadNormalizedRMS")
-        XCTAssertTrue(call.contains("let level: Double"), "VoiceWaveform 必须声明真实 level")
-        XCTAssertTrue(call.contains("min(max(level"), "波形柱高必须钳制上下限")
-        guard let waveStart = call.range(of: "struct VoiceWaveform: View")?.lowerBound else {
-            XCTFail("缺少 VoiceWaveform 范围")
+                      "头像涟漪必须接收真实 vadNormalizedRMS")
+        XCTAssertTrue(call.contains("let level: Double"), "VoiceAvatarRipples 必须声明真实 level")
+        XCTAssertTrue(call.contains("min(max(level"), "涟漪强度必须钳制真实输入音量")
+        guard let rippleStart = call.range(of: "struct VoiceAvatarRipples: View")?.lowerBound else {
+            XCTFail("缺少 VoiceAvatarRipples 范围")
             return
         }
-        let waveformBlock = String(call[waveStart..<call.endIndex])
-        XCTAssertFalse(waveformBlock.contains("TimelineView"), "波形不得使用 TimelineView")
-        XCTAssertFalse(waveformBlock.contains("CADisplayLink"), "波形不得使用 CADisplayLink")
-        XCTAssertFalse(waveformBlock.contains("random"), "波形不得使用随机数")
-        XCTAssertFalse(waveformBlock.contains("Timer"), "波形不得使用 Timer")
+        let rippleBlock = String(call[rippleStart..<call.endIndex])
+        XCTAssertFalse(rippleBlock.contains("CADisplayLink"), "涟漪不得自建 CADisplayLink")
+        XCTAssertFalse(rippleBlock.contains("random"), "涟漪不得使用随机数制造抖动")
+        XCTAssertFalse(rippleBlock.contains("Timer"), "涟漪不得使用 Timer 驱动")
+        XCTAssertTrue(rippleBlock.contains("repeatForever(autoreverses: false)"),
+                      "涟漪应连续向外扩散而不是来回缩放")
 
         // ===== 5. 退出: 左上结束确认 (P2.8A-CI-FIX: 从 topStart 之后找明确边界, 避免命中文件头 MARK) =====
         guard let topStart = call.range(of: "private var topBar")?.lowerBound,

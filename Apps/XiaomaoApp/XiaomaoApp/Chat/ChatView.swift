@@ -69,28 +69,42 @@ struct ChatView: View {
                         proxy.scrollTo("chat.bottom", anchor: .bottom)
                     }
                 }
-            }
-
-            modeFooter
-                .onTapGesture { inputFocused = false }
-
-            ChatComposerView(
-                draft: $viewModel.draft,
-                canSend: viewModel.canSend,
-                isBusy: viewModel.isBusy,
-                isSending: viewModel.isSending,
-                characterLimit: ChatViewModel.maximumMessageLength,
-                send: {
-                    inputFocused = false
-                    Task {
-                        await Task.yield()
-                        await viewModel.send()
+                .onChange(of: inputFocused) { _, focused in
+                    guard focused else { return }
+                    Task { @MainActor in
+                        // 等待系统完成键盘 safe-area 更新后再滚动，避免最新消息被键盘覆盖。
+                        try? await Task.sleep(for: .milliseconds(120))
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
                     }
-                },
-                inputFocused: $inputFocused
-            )
+                }
+            }
         }
         .background(Theme.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                modeFooter
+                    .onTapGesture { inputFocused = false }
+
+                ChatComposerView(
+                    draft: $viewModel.draft,
+                    canSend: viewModel.canSend,
+                    isBusy: viewModel.isBusy,
+                    isSending: viewModel.isSending,
+                    characterLimit: ChatViewModel.maximumMessageLength,
+                    send: {
+                        inputFocused = false
+                        Task {
+                            await Task.yield()
+                            await viewModel.send()
+                        }
+                    },
+                    inputFocused: $inputFocused
+                )
+            }
+            .background(Theme.bgElevated)
+        }
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()

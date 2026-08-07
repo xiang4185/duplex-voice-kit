@@ -84,7 +84,8 @@ final class AppCoordinator: ObservableObject {
             capture: capture,
             playback: playback,
             audioSession: audioSession,
-            networkMonitor: networkMonitor
+            networkMonitor: networkMonitor,
+            voiceActivityConfiguration: .xiaomaoRealtime
         )
     }
 

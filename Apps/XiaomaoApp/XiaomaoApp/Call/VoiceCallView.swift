@@ -2,11 +2,11 @@ import SwiftUI
 import UIKit
 
 // MARK: - 屏 3 陪聊主界面 / 通话中 (VoiceCallView)
-// v6.1 视觉: 呼吸形象(隐私头像) + 情绪气泡 + 波形 + 控制区(关心我/静音/挂断/换个提示)
+// v6.1 视觉: 呼吸形象(隐私头像) + 情绪气泡 + 头像涟漪 + 控制区(关心我/静音/挂断/换个提示)
 // 保留 VoiceCallViewModel 全部逻辑; 挂断二次确认 + 情绪共情浮层
 // P2.7B-HOME-CALL-VISUAL-POLISH:
 // · 主视觉切换为完整形象 portrait 模式 (新小猫图, 2:3 自然比例 + 底部柔边渐隐 + halo 融合)
-// · 整体节奏更清晰: 顶部状态区紧凑 / 中央人物区更有存在感 / 波形与人物关系更自然
+// · 整体节奏更清晰: 顶部状态区紧凑 / 中央人物区更有存在感 / 语音反馈改为头像后自然扩散涟漪
 // · 三按钮(静音/挂断/换个提示)布局更稳, 间距统一
 // · 结束确认弹窗圆角与高光与主页卡片统一 (cardTopHighlight)
 // · 免按键用户提示恢复 (P2.7B-FIX): 普通界面显示"直接说话就好, 小猫在听"
@@ -416,6 +416,14 @@ struct VoiceCallView: View {
                     )
                     .frame(width: 380, height: 380)
 
+                VoiceAvatarRipples(
+                    muted: viewModel.controller.isMuted,
+                    state: viewModel.controller.state,
+                    level: viewModel.controller.vadNormalizedRMS
+                )
+                .frame(width: availableSize * 1.58, height: availableSize * 1.58)
+                .accessibilityHidden(true)
+
                 // 底部光斑 (与 portrait 底部渐隐融合)
                 Ellipse()
                     .fill(
@@ -547,15 +555,6 @@ struct VoiceCallView: View {
             }
             .buttonStyle(PressableButtonStyle())
             .accessibilityIdentifier("call.care")
-
-            // 波形 (与人物关系: 在 hero 之下, 过渡柔和; P2.8A: 真实 vadNormalizedRMS 驱动)
-            VoiceWaveform(
-                active: !viewModel.controller.isMuted,
-                state: viewModel.controller.state,
-                level: viewModel.controller.vadNormalizedRMS
-            )
-            .frame(height: 36)
-            .accessibilityHidden(true)
 
             // 控制按钮行 (P2.7B: 三按钮布局更稳 — 间距统一, 与玻璃容器协调)
             GlassEffectContainer {
@@ -1004,62 +1003,96 @@ struct VoiceCallView: View {
     }
 }
 
-// MARK: - 语音波形 (设计 §4.2, v6.1 西柚玫瑰; P2.8A: 真实 vadNormalizedRMS 驱动)
-struct VoiceWaveform: View {
-    let active: Bool
+// MARK: - 头像后自然扩散涟漪
+struct VoiceAvatarRipples: View {
+    let muted: Bool
     let state: VoiceSessionState
-    /// P2.8A: 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS
+    /// 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS。
     let level: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let barCount = 24
-    private let minBarHeight: CGFloat = 4
-    private let maxBarHeightRatio: CGFloat = 0.92
+    @State private var expanding = false
 
     var body: some View {
-        GeometryReader { geo in
-            let barWidth = geo.size.width / CGFloat(barCount) * 0.4
-            let spacing = (geo.size.width - barWidth * CGFloat(barCount)) / CGFloat(barCount - 1)
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Theme.primarySoft.opacity(0.18 + 0.18 * activityStrength),
+                            Theme.roleGold.opacity(0.08 + 0.12 * activityStrength),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 18,
+                        endRadius: 150
+                    )
+                )
+                .scaleEffect(CGFloat(1.02 + 0.07 * activityStrength))
 
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(0..<barCount, id: \.self) { i in
-                    Capsule()
-                        .fill(barColor(i))
-                        .frame(width: barWidth, height: barHeight(i, geo: geo))
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: level)
-                }
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Theme.primary.opacity(0.58),
+                                Theme.roleGold.opacity(0.30),
+                                Theme.primarySoft.opacity(0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.0 + CGFloat(activityStrength) * 0.9
+                    )
+                    .blur(radius: index == 0 ? 0 : 0.45)
+                    .scaleEffect(reduceMotion ? 1.18 : (expanding ? 1.62 : 0.88))
+                    .opacity(
+                        reduceMotion
+                            ? 0.14 + 0.18 * activityStrength
+                            : (expanding ? 0 : ringOpacity(index))
+                    )
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeOut(duration: ringDuration(index))
+                                .repeatForever(autoreverses: false)
+                                .delay(Double(index) * 0.58),
+                        value: expanding
+                    )
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+        .onAppear { expanding = true }
+        .onDisappear { expanding = false }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: level)
         .accessibilityHidden(true)
     }
 
-    /// 柱高: 静音/不活跃 → 平直低幅; 活跃聆听 → 随 level 变化 (钳制上下限, 避免异常 RMS 越界)
-    private func barHeight(_ i: Int, geo: GeometryProxy) -> CGFloat {
-        let maxH = geo.size.height
-        guard active else { return minBarHeight }
-        // 连接中/失败/结束等非活跃状态不显示活跃波形
+    private var activityStrength: Double {
+        let clampedLevel = min(max(level, 0.0), 1.0)
         switch state {
-        case .ready, .listening, .speaking, .endpointing, .processing:
-            break
+        case .ready, .listening:
+            return muted ? 0.10 : min(1.0, 0.24 + clampedLevel * 2.8)
+        case .endpointing:
+            return muted ? 0.10 : min(0.86, 0.34 + clampedLevel * 2.2)
+        case .processing:
+            return 0.32
+        case .speaking:
+            return 0.78
+        case .interrupting:
+            return 0.62
+        case .reconnecting, .degraded:
+            return 0.18
         default:
-            return minBarHeight
+            return 0.08
         }
-        let clamped = min(max(level, 0.0), 1.0)
-        // 条形间固定相位差 (确定性, 非随机), 使波形有层次但柱高主体随真实音量
-        let variation = 0.72 + 0.28 * sin(Double(i) * 1.7)
-        let target = maxH * CGFloat(clamped) * CGFloat(variation) * maxBarHeightRatio
-        return min(max(target, minBarHeight), maxH)
     }
 
-    private func barColor(_ i: Int) -> Color {
-        guard active else { return Theme.textTertiary.opacity(0.30) }
-        let depth = Double(i % 5) / 5.0
-        return Color(
-            red: 0.85 + depth * 0.05,
-            green: 0.45 - depth * 0.08,
-            blue: 0.55 - depth * 0.10
-        )
+    private func ringOpacity(_ index: Int) -> Double {
+        let depth = 1.0 - Double(index) * 0.16
+        return (0.20 + 0.36 * activityStrength) * depth
+    }
+
+    private func ringDuration(_ index: Int) -> Double {
+        2.15 + Double(index) * 0.12
     }
 }
 

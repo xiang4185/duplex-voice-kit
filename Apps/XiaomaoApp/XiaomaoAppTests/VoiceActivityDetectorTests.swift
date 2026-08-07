@@ -80,6 +80,23 @@ final class VoiceActivityDetectorTests: XCTestCase {
         XCTAssertEqual(commitCount(actions), 0)
     }
 
+    func testXiaomaoRealtimePreservesCoreThresholdsAndShortensOnlyEndSilence() {
+        let xiaomao = VoiceActivityConfiguration.xiaomaoRealtime
+        let core = VoiceActivityConfiguration.realtimeDefault
+
+        XCTAssertEqual(xiaomao.sampleRate, core.sampleRate)
+        XCTAssertEqual(xiaomao.bytesPerSample, core.bytesPerSample)
+        XCTAssertEqual(xiaomao.preRollMilliseconds, core.preRollMilliseconds)
+        XCTAssertEqual(xiaomao.minimumSpeechMilliseconds, core.minimumSpeechMilliseconds)
+        XCTAssertEqual(xiaomao.bargeInMinimumSpeechMilliseconds, core.bargeInMinimumSpeechMilliseconds)
+        XCTAssertEqual(xiaomao.candidateAbortSilenceMilliseconds, core.candidateAbortSilenceMilliseconds)
+        XCTAssertEqual(xiaomao.maximumUtteranceMilliseconds, core.maximumUtteranceMilliseconds)
+        XCTAssertEqual(xiaomao.speechRMSThreshold, core.speechRMSThreshold)
+        XCTAssertEqual(xiaomao.bargeInRMSThreshold, core.bargeInRMSThreshold)
+        XCTAssertEqual(xiaomao.endSilenceMilliseconds, 480)
+        XCTAssertLessThan(xiaomao.endSilenceMilliseconds, core.endSilenceMilliseconds)
+    }
+
     private func frame(amplitude: Int16) -> Data {
         var samples = Array(repeating: amplitude, count: 320)
         return samples.withUnsafeBytes { Data($0) }

@@ -97,7 +97,7 @@ struct SmallThingEntryCard: View {
                     Text("·")
                     Text(entry.type == .expense ? "记了一笔账" : "记了一件事")
                     Text("·")
-                    Text(entry.createdAt, style: .relative)
+                    Text(entry.createdAt.formatted(.dateTime.month().day().hour().minute()))
                 }
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)

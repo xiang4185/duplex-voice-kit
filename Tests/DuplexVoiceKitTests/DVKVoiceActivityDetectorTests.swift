@@ -16,6 +16,23 @@ final class DVKVoiceActivityDetectorTests: XCTestCase {
         XCTAssertEqual(configuration.bargeInRMSThreshold, 0.075)
     }
 
+    func testReplacingEndSilencePreservesAllOtherCoreParameters() {
+        let base = DVKVoiceActivityConfiguration.realtimeDefault
+        let tuned = base.replacingEndSilence(milliseconds: 480)
+
+        XCTAssertEqual(tuned.sampleRate, base.sampleRate)
+        XCTAssertEqual(tuned.bytesPerSample, base.bytesPerSample)
+        XCTAssertEqual(tuned.preRollMilliseconds, base.preRollMilliseconds)
+        XCTAssertEqual(tuned.minimumSpeechMilliseconds, base.minimumSpeechMilliseconds)
+        XCTAssertEqual(tuned.bargeInMinimumSpeechMilliseconds, base.bargeInMinimumSpeechMilliseconds)
+        XCTAssertEqual(tuned.candidateAbortSilenceMilliseconds, base.candidateAbortSilenceMilliseconds)
+        XCTAssertEqual(tuned.maximumUtteranceMilliseconds, base.maximumUtteranceMilliseconds)
+        XCTAssertEqual(tuned.speechRMSThreshold, base.speechRMSThreshold)
+        XCTAssertEqual(tuned.bargeInRMSThreshold, base.bargeInRMSThreshold)
+        XCTAssertEqual(tuned.endSilenceMilliseconds, 480)
+        XCTAssertEqual(base.endSilenceMilliseconds, 700)
+    }
+
     func testSpeechStartsAfterMinimumSpeechAndCommitsAfterEndSilence() {
         var detector = DVKVoiceActivityDetector()
         var started = false
