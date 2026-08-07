@@ -5,6 +5,7 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
+    @State private var keyboardOverlap: CGFloat = 0
 
     private let isMockMode: Bool
     private let onReconfigure: () -> Void
@@ -75,37 +76,37 @@ struct ChatView: View {
                         for: UIResponder.keyboardWillChangeFrameNotification
                     )
                 ) { notification in
-                    // 跟随系统键盘自己的时长/曲线调整消息偏移，避免键盘先走、聊天记录后追。
+                    // 让“消息区 + 输入区”作为同一个页面跟随键盘移动。
+                    // 不再依赖 safeAreaInset 先推输入框、再补滚消息的两段动画。
                     withAnimation(keyboardAnimation(from: notification)) {
+                        keyboardOverlap = keyboardOverlap(from: notification)
                         proxy.scrollTo("chat.bottom", anchor: .bottom)
                     }
                 }
             }
-        }
-        .background(Theme.bg.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                modeFooter
-                    .onTapGesture { inputFocused = false }
 
-                ChatComposerView(
-                    draft: $viewModel.draft,
-                    canSend: viewModel.canSend,
-                    isBusy: viewModel.isBusy,
-                    isSending: viewModel.isSending,
-                    characterLimit: ChatViewModel.maximumMessageLength,
-                    send: {
-                        inputFocused = false
-                        Task {
-                            await Task.yield()
-                            await viewModel.send()
-                        }
-                    },
-                    inputFocused: $inputFocused
-                )
-            }
-            .background(Theme.bgElevated)
+            modeFooter
+                .onTapGesture { inputFocused = false }
+
+            ChatComposerView(
+                draft: $viewModel.draft,
+                canSend: viewModel.canSend,
+                isBusy: viewModel.isBusy,
+                isSending: viewModel.isSending,
+                characterLimit: ChatViewModel.maximumMessageLength,
+                send: {
+                    inputFocused = false
+                    Task {
+                        await Task.yield()
+                        await viewModel.send()
+                    }
+                },
+                inputFocused: $inputFocused
+            )
         }
+        .padding(.bottom, keyboardOverlap)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .background(Theme.bg.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()
@@ -150,6 +151,23 @@ struct ChatView: View {
         @unknown default:
             return .easeInOut(duration: duration)
         }
+    }
+
+    private func keyboardOverlap(from notification: Notification) -> CGFloat {
+        guard
+            let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else { return 0 }
+
+        let screenHeight = UIScreen.main.bounds.height
+        guard endFrame.minY < screenHeight else { return 0 }
+
+        let bottomSafeArea = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: { $0.isKeyWindow })?
+            .safeAreaInsets.bottom ?? 0
+
+        return max(0, screenHeight - endFrame.minY - bottomSafeArea)
     }
 
     private var header: some View {

@@ -44,6 +44,7 @@ final class CallLiveActivityManager {
         let initialState = CallLiveActivityAttributes.ContentState(
             isMuted: controller.isMuted,
             isSpeaking: speakingState(from: controller),
+            phase: phase(from: controller),
             elapsedSeconds: 0,
             progress: 0,
             sessionMinutes: 0,
@@ -110,15 +111,16 @@ final class CallLiveActivityManager {
             .sink { [weak self] _ in self?.pushState() }
             .store(in: &controllerSubscriptions)
 
-        // 会话关闭/失败 → 结束 Activity
-        controller.$state
+        // 真正结束 Session 才移除 Activity。临时 failed/reconnecting 时保留灵动岛，
+        // 让用户能看到重连状态并重新进入当前通话。
+        controller.$callIsActive
             .dropFirst()
-            .sink { [weak self] state in
-                switch state {
-                case .closed, .failed, .closing:
+            .removeDuplicates()
+            .sink { [weak self] active in
+                if active {
+                    self?.pushState()
+                } else {
                     self?.end()
-                default:
-                    break
                 }
             }
             .store(in: &controllerSubscriptions)
@@ -134,6 +136,7 @@ final class CallLiveActivityManager {
             state: CallLiveActivityAttributes.ContentState(
                 isMuted: controller.isMuted,
                 isSpeaking: speakingState(from: controller),
+                phase: phase(from: controller),
                 elapsedSeconds: elapsedSeconds,
                 progress: progress(for: elapsedSeconds),
                 sessionMinutes: max(0, elapsedSeconds / 60),
@@ -171,6 +174,24 @@ final class CallLiveActivityManager {
         case .listening, .endpointing, .processing, .ready, .connecting,
              .reconnecting, .degraded, .idle, .closing, .closed, .failed:
             return false
+        }
+    }
+
+    private func phase(from controller: VoiceSessionController) -> CallLiveActivityPhase {
+        if controller.isMuted {
+            return .calling
+        }
+        switch controller.state {
+        case .ready, .listening, .endpointing:
+            return .listening
+        case .processing:
+            return .thinking
+        case .speaking, .interrupting:
+            return .speaking
+        case .reconnecting, .degraded, .failed:
+            return .reconnecting
+        case .idle, .connecting, .closing, .closed:
+            return .calling
         }
     }
 

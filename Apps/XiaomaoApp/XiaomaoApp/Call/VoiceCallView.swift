@@ -103,26 +103,31 @@ struct VoiceCallView: View {
                     }
 
                 // 名字 (宋体)
-                Text("小猫")
+                Text(CompanionRoleStore.shared.productionRole.displayName)
                     .font(Theme.title3Font)
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.top, 4)
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
 
-                // 转写 / 回复文本 (P2.7B-FIX: lineLimit 2 控制纵向占用)
-                // P2.7B-FINAL-VISUAL-FIX: 通过 displayConversationText 过滤孤立纯标点,
-                // 仅展示包含字母/数字/中文/Emoji 等实质字符的会话文字.
-                if let text = displayConversationText {
-                    Text(text)
-                        .font(Theme.subheadFont)
-                        .foregroundStyle(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 8)
-                        .opacity(appeared ? 1 : 0)
+                // 转写 / 回复文字使用固定高度槽位。
+                // 真机用户说话时 partial transcript 出现/消失不能改变 hero 布局，
+                // 避免人物形象上下跳造成“卡顿”观感。
+                ZStack(alignment: .top) {
+                    Color.clear
+                    if let text = displayConversationText {
+                        Text(text)
+                            .font(Theme.subheadFont)
+                            .foregroundStyle(Theme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, 32)
+                            .transition(.opacity)
+                    }
                 }
+                .frame(height: 46)
+                .padding(.top, 8)
+                .opacity(appeared ? 1 : 0)
 
                 if viewModel.controller.state == .reconnecting {
                     Text(viewModel.controller.reconnectStatusText)
@@ -197,12 +202,6 @@ struct VoiceCallView: View {
         }
         .task {
             UIApplication.shared.isIdleTimerDisabled = true
-            // P2.6A: 启动 Live Activity, 传入 controller 驱动真实状态 (幂等, 前后台不重复创建)
-            // P2.6D: Live Activity 一律使用生产语音角色 (恒为小猫), 不随预览角色变化
-            CallLiveActivityManager.shared.start(
-                characterName: CompanionRoleStore.shared.productionRole.displayName,
-                controller: viewModel.controller
-            )
             // P2.6H: 先显示页面, 再建立语音会话 — 连接耗时不再表现为页面空白/卡顿
             appeared = true
             await Task.yield()
@@ -239,17 +238,6 @@ struct VoiceCallView: View {
             case .active: viewModel.enterForeground()
             default: break
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleMuteFromActivity)) { _ in
-            // 灵动岛静音按钮 → 直通主 App (状态由 controller 统一管理, UI 无需本地 toggle)
-            if viewModel.canMute {
-                viewModel.toggleMute()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .hangupFromActivity)) { _ in
-            // 灵动岛挂断按钮 → 直通主 App (统一结束路径, 防重复由 finishCall 保证)
-            WarmHaptics.action()
-            finishCall()
         }
         .sheet(isPresented: $showDiagnostics) {
             diagnosticsSheet
@@ -924,37 +912,21 @@ struct VoiceCallView: View {
                 .padding(16)
                 .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 
-                HStack(spacing: 12) {
-                    Button {
-                        WarmHaptics.comfort()
-                        withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
-                        withAnimation(.easeOut(duration: 0.3)) { emotionBubbleVisible = true }
-                    } label: {
-                        Text("抱抱我")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                            .background(Theme.primary, in: Capsule())
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                    .accessibilityIdentifier("empathy.hug")
-
-                    Button {
-                        withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            topicIndex = (topicIndex + 1) % topics.count
-                        }
-                    } label: {
-                        Text("换个话题")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("empathy.topic")
+                // 不再放“抱抱我 / 换个话题”这类看起来会改变会话、实际却只是本地 UI 的假操作。
+                // 关心卡只负责展示陪伴文案；真正会改变通话的操作仍只有麦克风、挂断和真实语音输入。
+                Button {
+                    WarmHaptics.comfort()
+                    withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
+                } label: {
+                    Text("继续通话")
+                        .font(Theme.headlineFont)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Theme.primary, in: Capsule())
                 }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityIdentifier("empathy.continue")
                 .padding(.top, 4)
 
                 Text(reasonCopy)

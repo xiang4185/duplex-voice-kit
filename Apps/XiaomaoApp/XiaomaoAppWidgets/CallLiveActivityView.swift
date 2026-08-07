@@ -18,7 +18,7 @@ struct LockScreenView: View {
                     Text("小猫 · 通话中")
                         .font(.headline)
                         .foregroundStyle(.white)
-                    Text("\(context.attributes.characterName) 正在陪你")
+                    Text(statusText)
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -34,7 +34,7 @@ struct LockScreenView: View {
 
             // P2.6K: 删除无真实来源的固定目标与进度; 底部仅保留真实计时与静音状态
             HStack {
-                Text(context.state.isMuted ? "已静音" : "通话进行中")
+                Text(context.state.isMuted ? "已静音 · 通话继续" : statusText)
                 Spacer()
                 Text("本次陪伴 \(context.state.sessionMinutes) 分钟")
             }
@@ -71,6 +71,17 @@ struct LockScreenView: View {
         return h > 0
             ? String(format: "%02d:%02d:%02d", h, m, sec)
             : String(format: "%02d:%02d", m, sec)
+    }
+
+    private var statusText: String {
+        if context.state.isMuted { return "已静音" }
+        switch context.state.phase {
+        case .calling: return "通话中"
+        case .listening: return "正在听"
+        case .thinking: return "正在想"
+        case .speaking: return "正在说"
+        case .reconnecting: return "正在重连"
+        }
     }
 }
 

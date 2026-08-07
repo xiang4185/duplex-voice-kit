@@ -93,12 +93,16 @@ final class ChatUIContractTests: XCTestCase {
             2,
             "顶部与底部非输入区域都必须可主动收起键盘"
         )
-        XCTAssertTrue(chat.contains(".safeAreaInset(edge: .bottom, spacing: 0)"),
-                      "键盘弹出时消息视口必须被底部输入区真实挤压")
+        XCTAssertTrue(chat.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"),
+                      "聊天页必须关闭系统二次键盘 safe-area 推动，改为单一页面动画")
+        XCTAssertTrue(chat.contains(".padding(.bottom, keyboardOverlap)"),
+                      "消息区和输入区必须作为同一页面跟随键盘上移")
         XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
                       "消息偏移必须跟随系统键盘 frame 动画")
         XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
                       "消息滚动必须与键盘使用同一时长/曲线")
+        XCTAssertTrue(chat.contains("keyboardOverlap = keyboardOverlap(from: notification)"),
+                      "键盘 frame 必须驱动同一页面的 bottom overlap")
         XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
                        "不得再延迟等待键盘后补滚动")
     }

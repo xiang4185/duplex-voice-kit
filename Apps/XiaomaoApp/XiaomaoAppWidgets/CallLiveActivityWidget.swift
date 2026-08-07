@@ -15,6 +15,7 @@ struct CallLiveActivityWidget: Widget {
             LockScreenView(context: context)
                 .activityBackgroundTint(Color.black.opacity(0.6))
                 .activitySystemActionForegroundColor(.white)
+                .widgetURL(URL(string: "xiaomao://call/open"))
         } dynamicIsland: { context in
             DynamicIsland {
                 // 扩展态
@@ -23,7 +24,7 @@ struct CallLiveActivityWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 4) {
-                        Text("\(context.attributes.characterName) 正在陪你")
+                        Text(statusText(context.state))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.white)
                         MiniIslandWave(active: context.state.isSpeaking, mode: .primary, barCount: 7)
@@ -57,16 +58,19 @@ struct CallLiveActivityWidget: Widget {
                 avatarDot(size: 20)
             } compactTrailing: {
                 HStack(spacing: 6) {
-                    MiniIslandWave(active: context.state.isSpeaking, mode: .gold, barCount: 5)
-                        .frame(width: 34, height: 12)
+                    Text(compactStatusText(context.state))
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white)
                     Text(timeString(context))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.white.opacity(0.85))
                 }
             } minimal: {
-                MiniIslandWave(active: context.state.isSpeaking, mode: .gold, barCount: 5)
-                    .frame(width: 30, height: 12)
+                Image(systemName: context.state.isSpeaking ? "waveform" : "phone.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.white)
             }
+            .widgetURL(URL(string: "xiaomao://call/open"))
         }
     }
 
@@ -92,6 +96,28 @@ struct CallLiveActivityWidget: Widget {
         return h > 0
             ? String(format: "%02d:%02d:%02d", h, m, sec)
             : String(format: "%02d:%02d", m, sec)
+    }
+
+    private func statusText(_ state: CallLiveActivityAttributes.ContentState) -> String {
+        if state.isMuted { return "已静音 · 通话继续" }
+        switch state.phase {
+        case .calling: return "通话中"
+        case .listening: return "正在听"
+        case .thinking: return "正在想"
+        case .speaking: return "正在说"
+        case .reconnecting: return "正在重连"
+        }
+    }
+
+    private func compactStatusText(_ state: CallLiveActivityAttributes.ContentState) -> String {
+        if state.isMuted { return "静音" }
+        switch state.phase {
+        case .calling: return "通话中"
+        case .listening: return "在听"
+        case .thinking: return "在想"
+        case .speaking: return "在说"
+        case .reconnecting: return "重连"
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 @main
@@ -12,6 +13,8 @@ struct XiaomaoApp: App {
     private func handleCallURL(_ url: URL) {
         guard url.scheme == "xiaomao" else { return }
         switch url.path {
+        case "/call/open":
+            NotificationCenter.default.post(name: .openCallFromActivity, object: nil)
         case "/call/mute":
             NotificationCenter.default.post(name: .toggleMuteFromActivity, object: nil)
         case "/call/hangup":
@@ -46,6 +49,8 @@ private struct RootContainer: View {
     private func handleCallURL(_ url: URL) {
         guard url.scheme == "xiaomao" else { return }
         switch url.path {
+        case "/call/open":
+            NotificationCenter.default.post(name: .openCallFromActivity, object: nil)
         case "/call/mute":
             NotificationCenter.default.post(name: .toggleMuteFromActivity, object: nil)
         case "/call/hangup":
@@ -58,6 +63,7 @@ private struct RootContainer: View {
 
 // MARK: - Live Activity 控制通知
 extension Notification.Name {
+    static let openCallFromActivity = Notification.Name("xiaomao.openCall")
     static let toggleMuteFromActivity = Notification.Name("xiaomao.toggleMute")
     static let hangupFromActivity = Notification.Name("xiaomao.hangup")
     static let reconfigureConnection = Notification.Name("xiaomao.reconfigureConnection")
@@ -141,6 +147,35 @@ private struct RootView: View {
             activeCall = false
             coordinator.screen = .binding
         }
+        .onReceive(coordinator.voiceController.$callIsActive.removeDuplicates()) { active in
+            if active {
+                CallLiveActivityManager.shared.start(
+                    characterName: CompanionRoleStore.shared.productionRole.displayName,
+                    controller: coordinator.voiceController
+                )
+            } else {
+                CallLiveActivityManager.shared.end()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openCallFromActivity)) { _ in
+            guard coordinator.voiceController.callIsActive else { return }
+            requestCall()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleMuteFromActivity)) { _ in
+            let controller = coordinator.voiceController
+            guard controller.callIsActive, controller.canMute || controller.isMuted else { return }
+            Task { @MainActor in
+                await controller.setMuted(!controller.isMuted)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .hangupFromActivity)) { _ in
+            guard coordinator.voiceController.callIsActive else { return }
+            activeCall = false
+            CallLiveActivityManager.shared.end()
+            Task { @MainActor in
+                await coordinator.voiceController.endCurrentCall()
+            }
+        }
         .preferredColorScheme(.light)
 #if DEBUG
         .sheet(isPresented: $showingDiagnostics) {
@@ -171,7 +206,11 @@ private struct RootView: View {
     // 不使用人工延迟, 点击后立即置 activeCall.
     private func requestCall() {
         guard !activeCall else { return }
-        coordinator.voiceController.markPresentationRequested()
+        // 只有新通话才记录首次展示时间；从迷你条/灵动岛回到当前通话时
+        // 不重置既有 Session 的连接耗时诊断。
+        if !coordinator.voiceController.callIsActive {
+            coordinator.voiceController.markPresentationRequested()
+        }
         activeCall = true
     }
 
