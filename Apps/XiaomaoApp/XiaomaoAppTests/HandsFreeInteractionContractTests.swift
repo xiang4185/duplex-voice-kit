@@ -50,17 +50,22 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         XCTAssertTrue(chat.contains(".safeAreaInset(edge: .bottom, spacing: 0)"),
                       "聊天输入区必须通过键盘 safe area 挤压消息区")
-        XCTAssertTrue(chat.contains(".onChange(of: inputFocused)"),
-                      "键盘弹出后必须重新保证最新消息可见")
+        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
+                      "键盘弹出时消息区必须跟随系统键盘 frame 动画")
+        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
+                      "键盘与消息滚动必须使用同一动画时序")
         XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
-        XCTAssertTrue(entry.contains(".dateTime.month().day().hour().minute()"),
-                      "小事应显示固定记录时间并精确到分钟")
+        XCTAssertTrue(entry.contains("dateFormat = \"yyyy/MM/dd HH:mm\""),
+                      "小事应显示纯数字固定记录时间并精确到分钟")
 
         XCTAssertFalse(composer.contains("pickerStyle(.segmented)"),
                        "记一笔顶部类型选择不得退回过小的系统 segmented control")
-        XCTAssertTrue(composer.contains("minHeight: 68"), "两个记录类型入口必须保持足够点击高度")
+        XCTAssertTrue(composer.contains("Theme.buttonMinimumHeight + 8"),
+                      "两个记录类型入口必须保持足够点击高度并复用统一按钮体系")
+        XCTAssertTrue(composer.contains(".buttonStyle(.borderedProminent)"))
+        XCTAssertTrue(composer.contains(".buttonStyle(.bordered)"))
         XCTAssertTrue(coordinator.contains("voiceActivityConfiguration: .xiaomaoRealtime"),
                       "Xiaomao 宿主必须使用低延迟结束静音配置")
     }

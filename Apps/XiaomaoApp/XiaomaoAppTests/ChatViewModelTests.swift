@@ -114,7 +114,8 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages, authoritative.messages)
         XCTAssertEqual(viewModel.messages.first?.createdAt, timestamp)
         XCTAssertTrue(viewModel.messages.first?.id.hasPrefix("mock-user-") == true)
-        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-developer-") == true)
+        XCTAssertTrue(viewModel.messages.contains { $0.id.hasPrefix("mock-developer-") })
+        XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-xiaomao-") == true)
     }
 
     func testHistoryFailureDoesNotCreateSessionAndCanRetry() async {
@@ -223,7 +224,12 @@ final class ChatViewModelTests: XCTestCase {
         await viewModel.send()
 
         XCTAssertEqual(service.sendRequests, [
-            .init(message: "合成发送", sessionID: "server-session", requestID: "opaque-request-id")
+            .init(
+                message: "合成发送",
+                sessionID: "server-session",
+                requestID: "opaque-request-id",
+                xiaomaoMode: .always
+            )
         ])
         XCTAssertEqual(viewModel.messages, originalMessages + [user, developer])
         XCTAssertEqual(viewModel.messages.suffix(2).map(\.id), ["opaque-user", "opaque-developer"])
