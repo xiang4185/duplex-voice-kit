@@ -1117,6 +1117,7 @@ final class VoiceSessionController: ObservableObject {
                 do { try await Task.sleep(for: .seconds(20)) } catch { return }
                 do {
                     try await self.probeWebSocket()
+                    try await self.audioUploader.ping()
                 } catch {
                     self.lastErrorCategory = "connection_lost"
                     self.lastReasonCategory = "heartbeat_failed"
@@ -1131,7 +1132,7 @@ final class VoiceSessionController: ObservableObject {
     private func probeWebSocket() async throws {
         let startedAt = Date()
         do {
-            try await audioUploader.ping()
+            try await socket.ping()
             lastPingRoundTripMilliseconds = max(
                 0,
                 Int(Date().timeIntervalSince(startedAt) * 1000)
