@@ -95,12 +95,18 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
-        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
-                      "消息滚动必须跟随系统键盘 frame 动画")
-        XCTAssertTrue(chat.contains("keyboardAnimation(from: notification)"),
-                      "消息滚动必须与键盘使用同一时长和曲线，避免显示完成后二次跳动")
+        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
+                      "键盘最终布局完成后只能做一次锚底")
         XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
                       "键盘完全收回、Tab Bar 恢复后必须再次锚定最新消息")
+        XCTAssertTrue(chat.contains("scrollToBottomWithoutAnimation(proxy)"),
+                      "键盘稳定后的锚底不得再叠加第二套滚动动画")
+        XCTAssertTrue(chat.contains("transaction.disablesAnimations = true"),
+                      "键盘锚底必须禁用额外 SwiftUI 动画")
+        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
+                       "不得监听输入法 frame 连续变化，否则候选栏会反复推动页面")
+        XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
+                       "不得复制系统键盘动画驱动 ScrollView")
         XCTAssertTrue(chat.contains("DispatchQueue.main.async"),
                       "收键盘后的滚动必须等最终 safe-area 布局落定")
         XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),

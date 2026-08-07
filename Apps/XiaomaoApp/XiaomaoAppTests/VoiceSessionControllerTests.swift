@@ -912,7 +912,11 @@ final class VoiceSessionControllerTests: XCTestCase {
             .transcriptFinal,
             sessionID: fixture.controller.sessionIDForTesting,
             traceID: fixture.controller.traceIDForTesting,
-            payload: ["text": .string("private transcript must not appear")]
+            payload: [
+                "text": .string("private transcript must not appear"),
+                "server_commit_forward_ms": .int(7),
+                "server_commit_to_transcript_final_ms": .int(211)
+            ]
         )
         try? await Task.sleep(for: .milliseconds(2))
         let responseID = "diagnostic-response"
@@ -920,7 +924,11 @@ final class VoiceSessionControllerTests: XCTestCase {
             .responseStarted,
             sessionID: fixture.controller.sessionIDForTesting,
             traceID: fixture.controller.traceIDForTesting,
-            payload: ["response_id": .string(responseID)]
+            payload: [
+                "response_id": .string(responseID),
+                "server_commit_forward_ms": .int(7),
+                "server_transcript_final_to_response_started_ms": .int(123)
+            ]
         )
         try? await Task.sleep(for: .milliseconds(2))
         await fixture.socket.emitServerEvent(
@@ -930,7 +938,8 @@ final class VoiceSessionControllerTests: XCTestCase {
             payload: [
                 "response_id": .string(responseID),
                 "chunk_index": .int(0),
-                "audio": .string(Data(repeating: 1, count: 640).base64EncodedString())
+                "audio": .string(Data(repeating: 1, count: 640).base64EncodedString()),
+                "server_response_started_to_first_audio_ms": .int(89)
             ]
         )
         await settle()
@@ -941,10 +950,19 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertTrue(diagnostics.contains("transcript_final_to_response_started_ms="))
         XCTAssertTrue(diagnostics.contains("response_started_to_first_audio_ms="))
         XCTAssertTrue(diagnostics.contains("network_ping_ms="))
+        XCTAssertTrue(diagnostics.contains("server_commit_forward_ms=7"))
+        XCTAssertTrue(diagnostics.contains("server_commit_to_transcript_final_ms=211"))
+        XCTAssertTrue(diagnostics.contains("server_transcript_final_to_response_started_ms=123"))
+        XCTAssertTrue(diagnostics.contains("server_response_started_to_first_audio_ms=89"))
+        XCTAssertTrue(diagnostics.contains("latency_sample_count=1"))
+        XCTAssertTrue(diagnostics.contains("latency_recent_window=1"))
         XCTAssertTrue(latency.contains("ASR / 上行"))
         XCTAssertTrue(latency.contains("模型 / 路由"))
         XCTAssertTrue(latency.contains("TTS / 下行"))
         XCTAssertTrue(latency.contains("当前最长阶段"))
+        XCTAssertTrue(latency.contains("最近 1 轮统计（median / p95）"))
+        XCTAssertTrue(latency.contains("服务端分段（最后一轮）"))
+        XCTAssertTrue(latency.contains("commit 入队→Provider: 7 ms"))
         XCTAssertFalse(diagnostics.contains("private transcript must not appear"))
     }
 

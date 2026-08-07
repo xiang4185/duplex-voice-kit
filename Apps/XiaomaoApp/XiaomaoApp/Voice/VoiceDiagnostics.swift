@@ -1,6 +1,19 @@
 import CryptoKit
 import Foundation
 
+struct VoiceLatencySample: Equatable, Sendable {
+    let networkPingMilliseconds: Int?
+    let endpointSilenceMilliseconds: Int
+    let commitToTranscriptFinalMilliseconds: Int?
+    let transcriptFinalToResponseStartedMilliseconds: Int?
+    let responseStartedToFirstAudioMilliseconds: Int?
+    let endToFirstAudioMilliseconds: Int?
+    let serverCommitForwardMilliseconds: Int?
+    let serverCommitToTranscriptFinalMilliseconds: Int?
+    let serverTranscriptFinalToResponseStartedMilliseconds: Int?
+    let serverResponseStartedToFirstAudioMilliseconds: Int?
+}
+
 struct VoiceDiagnosticSnapshot: Sendable {
     let appBuildSHA: String
     let appBuildTime: String
@@ -43,6 +56,11 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let commitToTranscriptFinalMilliseconds: Int?
     let transcriptFinalToResponseStartedMilliseconds: Int?
     let responseStartedToFirstAudioMilliseconds: Int?
+    let serverCommitForwardMilliseconds: Int?
+    let serverCommitToTranscriptFinalMilliseconds: Int?
+    let serverTranscriptFinalToResponseStartedMilliseconds: Int?
+    let serverResponseStartedToFirstAudioMilliseconds: Int?
+    let latencySamples: [VoiceLatencySample]
     let firstInputChunkSentAt: Date?
     let audioCommitSentAt: Date?
     let transcriptFinalReceivedAt: Date?
@@ -103,7 +121,8 @@ struct VoiceDiagnosticSnapshot: Sendable {
             return (stage.0, value)
         }
         let slowest = available.max { $0.1 < $1.1 }
-        return [
+        let recent = Array(latencySamples.suffix(10))
+        var lines = [
             "延迟分段（客户端观测）",
             "网络 RTT: \(optional(networkPingMilliseconds)) ms",
             "端点静音等待: \(lastEndingSilenceMilliseconds) ms",
@@ -113,7 +132,34 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "端到首音频: \(optional(endToFirstAudioMilliseconds)) ms",
             "Ping 失败次数: \(pingFailureCount)",
             "当前最长阶段: \(slowest.map { "\($0.0) \($0.1) ms" } ?? "数据不足")"
-        ].joined(separator: "\n")
+        ]
+
+        if !recent.isEmpty {
+            lines.append("")
+            lines.append("最近 \(recent.count) 轮统计（median / p95）")
+            lines.append("网络 RTT: \(aggregate(recent, \.networkPingMilliseconds)) ms")
+            lines.append("端点静音等待: \(aggregate(recent, \.endpointSilenceMilliseconds)) ms")
+            lines.append("ASR / 上行: \(aggregate(recent, \.commitToTranscriptFinalMilliseconds)) ms")
+            lines.append("模型 / 路由: \(aggregate(recent, \.transcriptFinalToResponseStartedMilliseconds)) ms")
+            lines.append("TTS / 下行: \(aggregate(recent, \.responseStartedToFirstAudioMilliseconds)) ms")
+            lines.append("端到首音频: \(aggregate(recent, \.endToFirstAudioMilliseconds)) ms")
+        }
+
+        let serverStages: [(String, Int?)] = [
+            ("commit 入队→Provider", serverCommitForwardMilliseconds),
+            ("commit→ASR final", serverCommitToTranscriptFinalMilliseconds),
+            ("ASR final→response.started", serverTranscriptFinalToResponseStartedMilliseconds),
+            ("response.started→首音频", serverResponseStartedToFirstAudioMilliseconds)
+        ]
+        if serverStages.contains(where: { $0.1 != nil }) {
+            lines.append("")
+            lines.append("服务端分段（最后一轮）")
+            for stage in serverStages {
+                lines.append("\(stage.0): \(optional(stage.1)) ms")
+            }
+        }
+
+        return lines.joined(separator: "\n")
     }
 
     var text: String {
@@ -169,6 +215,14 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "commit_to_transcript_final_ms=\(optional(commitToTranscriptFinalMilliseconds))",
             "transcript_final_to_response_started_ms=\(optional(transcriptFinalToResponseStartedMilliseconds))",
             "response_started_to_first_audio_ms=\(optional(responseStartedToFirstAudioMilliseconds))",
+            "server_commit_forward_ms=\(optional(serverCommitForwardMilliseconds))",
+            "server_commit_to_transcript_final_ms=\(optional(serverCommitToTranscriptFinalMilliseconds))",
+            "server_transcript_final_to_response_started_ms=\(optional(serverTranscriptFinalToResponseStartedMilliseconds))",
+            "server_response_started_to_first_audio_ms=\(optional(serverResponseStartedToFirstAudioMilliseconds))",
+            "latency_sample_count=\(latencySamples.count)",
+            "latency_recent_window=\(min(10, latencySamples.count))",
+            "latency_recent_end_to_first_audio_median_ms=\(aggregateValue(latencySamples.suffix(10), \.endToFirstAudioMilliseconds, percentile: 0.50))",
+            "latency_recent_end_to_first_audio_p95_ms=\(aggregateValue(latencySamples.suffix(10), \.endToFirstAudioMilliseconds, percentile: 0.95))",
             "first_input_chunk_sent_at=\(date(firstInputChunkSentAt, formatter: formatter))",
             "audio_commit_sent_at=\(date(audioCommitSentAt, formatter: formatter))",
             "transcript_final_received_at=\(date(transcriptFinalReceivedAt, formatter: formatter))",
@@ -228,6 +282,40 @@ struct VoiceDiagnosticSnapshot: Sendable {
 
     private func optional(_ value: Int?) -> String {
         value.map(String.init) ?? "none"
+    }
+
+    private func aggregate(
+        _ samples: [VoiceLatencySample],
+        _ keyPath: KeyPath<VoiceLatencySample, Int?>
+    ) -> String {
+        let median = aggregateValue(samples[...], keyPath, percentile: 0.50)
+        let p95 = aggregateValue(samples[...], keyPath, percentile: 0.95)
+        return "\(median) / \(p95)"
+    }
+
+    private func aggregate(
+        _ samples: [VoiceLatencySample],
+        _ keyPath: KeyPath<VoiceLatencySample, Int>
+    ) -> String {
+        let values = samples.map { Optional($0[keyPath: keyPath]) }
+        let median = percentile(values.compactMap { $0 }, 0.50)
+        let p95 = percentile(values.compactMap { $0 }, 0.95)
+        return "\(optional(median)) / \(optional(p95))"
+    }
+
+    private func aggregateValue(
+        _ samples: ArraySlice<VoiceLatencySample>,
+        _ keyPath: KeyPath<VoiceLatencySample, Int?>,
+        percentile requestedPercentile: Double
+    ) -> String {
+        optional(percentile(samples.compactMap { $0[keyPath: keyPath] }, requestedPercentile))
+    }
+
+    private func percentile(_ values: [Int], _ requestedPercentile: Double) -> Int? {
+        guard !values.isEmpty else { return nil }
+        let ordered = values.sorted()
+        let rawIndex = Int((Double(ordered.count - 1) * requestedPercentile).rounded())
+        return ordered[max(0, min(ordered.count - 1, rawIndex))]
     }
 
     private func date(_ value: Date?, formatter: ISO8601DateFormatter) -> String {

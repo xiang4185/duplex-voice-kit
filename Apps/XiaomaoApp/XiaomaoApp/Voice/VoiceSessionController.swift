@@ -105,6 +105,11 @@ final class VoiceSessionController: ObservableObject {
     private var transcriptFinalReceivedAt: Date?
     private var responseStartedAt: Date?
     private var firstAudioDeltaReceivedAt: Date?
+    private var serverCommitForwardMilliseconds: Int?
+    private var serverCommitToTranscriptFinalMilliseconds: Int?
+    private var serverTranscriptFinalToResponseStartedMilliseconds: Int?
+    private var serverResponseStartedToFirstAudioMilliseconds: Int?
+    private var latencySamples: [VoiceLatencySample] = []
     private var terminalProtocolErrorCode: String?
     private var terminalLocalAudioFailure = false
     private var presentationRequestedAt: Date?
@@ -274,6 +279,11 @@ final class VoiceSessionController: ObservableObject {
                 from: responseStartedAt,
                 to: firstAudioDeltaReceivedAt
             ),
+            serverCommitForwardMilliseconds: serverCommitForwardMilliseconds,
+            serverCommitToTranscriptFinalMilliseconds: serverCommitToTranscriptFinalMilliseconds,
+            serverTranscriptFinalToResponseStartedMilliseconds: serverTranscriptFinalToResponseStartedMilliseconds,
+            serverResponseStartedToFirstAudioMilliseconds: serverResponseStartedToFirstAudioMilliseconds,
+            latencySamples: latencySamples,
             firstInputChunkSentAt: firstInputChunkSentAt,
             audioCommitSentAt: audioCommitSentAt,
             transcriptFinalReceivedAt: transcriptFinalReceivedAt,
@@ -567,6 +577,11 @@ final class VoiceSessionController: ObservableObject {
         transcriptFinalReceivedAt = nil
         responseStartedAt = nil
         firstAudioDeltaReceivedAt = nil
+        serverCommitForwardMilliseconds = nil
+        serverCommitToTranscriptFinalMilliseconds = nil
+        serverTranscriptFinalToResponseStartedMilliseconds = nil
+        serverResponseStartedToFirstAudioMilliseconds = nil
+        latencySamples.removeAll(keepingCapacity: true)
         lastPingRoundTripMilliseconds = nil
         pingFailureCount = 0
         terminalProtocolErrorCode = nil
@@ -926,10 +941,20 @@ final class VoiceSessionController: ObservableObject {
         case .transcriptFinal:
             transcript = event.payload.string("text") ?? transcript
             transcriptFinalReceivedAt = Date()
+            serverCommitForwardMilliseconds = event.payload.int("server_commit_forward_ms")
+                ?? serverCommitForwardMilliseconds
+            serverCommitToTranscriptFinalMilliseconds = event.payload.int(
+                "server_commit_to_transcript_final_ms"
+            ) ?? serverCommitToTranscriptFinalMilliseconds
         case .responseStarted:
             responseID = event.payload.string("response_id") ?? ""
             metrics.responseID = responseID
             responseStartedAt = Date()
+            serverCommitForwardMilliseconds = event.payload.int("server_commit_forward_ms")
+                ?? serverCommitForwardMilliseconds
+            serverTranscriptFinalToResponseStartedMilliseconds = event.payload.int(
+                "server_transcript_final_to_response_started_ms"
+            ) ?? serverTranscriptFinalToResponseStartedMilliseconds
             automaticBargeInActive = false
             isPlaybackActive = false
             voiceActivityDetector.resetForListening()
@@ -956,7 +981,11 @@ final class VoiceSessionController: ObservableObject {
             let receivedAt = Date()
             if metrics.firstAudioAt == nil { metrics.firstAudioAt = receivedAt }
             if firstAudioDeltaReceivedAt == nil {
+                serverResponseStartedToFirstAudioMilliseconds = event.payload.int(
+                    "server_response_started_to_first_audio_ms"
+                ) ?? serverResponseStartedToFirstAudioMilliseconds
                 firstAudioDeltaReceivedAt = receivedAt
+                recordLatencySample()
             }
             isPlaybackActive = true
             state = .speaking
@@ -1241,6 +1270,10 @@ final class VoiceSessionController: ObservableObject {
             transcriptFinalReceivedAt = nil
             responseStartedAt = nil
             firstAudioDeltaReceivedAt = nil
+            serverCommitForwardMilliseconds = nil
+            serverCommitToTranscriptFinalMilliseconds = nil
+            serverTranscriptFinalToResponseStartedMilliseconds = nil
+            serverResponseStartedToFirstAudioMilliseconds = nil
             VoiceLog.audio.info("audio_commit_sent chunks=\(self.metrics.inputFrames)")
         case .interruptSent:
             interruptSentCount += 1
@@ -1580,6 +1613,37 @@ final class VoiceSessionController: ObservableObject {
         audioSessionActive = audioSession.isActive
         audioRouteDescription = audioSession.routeDescription
         microphonePermission = audioSession.permissionState
+    }
+
+    private func recordLatencySample() {
+        let sample = VoiceLatencySample(
+            networkPingMilliseconds: lastPingRoundTripMilliseconds,
+            endpointSilenceMilliseconds: lastEndingSilenceMilliseconds,
+            commitToTranscriptFinalMilliseconds: elapsedMilliseconds(
+                from: audioCommitSentAt,
+                to: transcriptFinalReceivedAt
+            ),
+            transcriptFinalToResponseStartedMilliseconds: elapsedMilliseconds(
+                from: transcriptFinalReceivedAt,
+                to: responseStartedAt
+            ),
+            responseStartedToFirstAudioMilliseconds: elapsedMilliseconds(
+                from: responseStartedAt,
+                to: firstAudioDeltaReceivedAt
+            ),
+            endToFirstAudioMilliseconds: elapsedMilliseconds(
+                from: audioCommitSentAt,
+                to: firstAudioDeltaReceivedAt
+            ),
+            serverCommitForwardMilliseconds: serverCommitForwardMilliseconds,
+            serverCommitToTranscriptFinalMilliseconds: serverCommitToTranscriptFinalMilliseconds,
+            serverTranscriptFinalToResponseStartedMilliseconds: serverTranscriptFinalToResponseStartedMilliseconds,
+            serverResponseStartedToFirstAudioMilliseconds: serverResponseStartedToFirstAudioMilliseconds
+        )
+        latencySamples.append(sample)
+        if latencySamples.count > 20 {
+            latencySamples.removeFirst(latencySamples.count - 20)
+        }
     }
 
     private func elapsedMilliseconds(since start: Date?) -> Int? {

@@ -5,6 +5,7 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
+    @State private var keyboardVisible = false
 
     private let isMockMode: Bool
     private let onReconfigure: () -> Void
@@ -73,22 +74,25 @@ struct ChatView: View {
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(
-                        for: UIResponder.keyboardWillChangeFrameNotification
+                        for: UIResponder.keyboardDidShowNotification
                     )
-                ) { notification in
-                    // 只让系统 safe-area 改布局；消息滚动跟随同一键盘动画，不再出现键盘结束后第二次跳动。
-                    withAnimation(keyboardAnimation(from: notification)) {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
-                    }
+                ) { _ in
+                    guard !keyboardVisible else { return }
+                    keyboardVisible = true
+                    // safe-area 已落到最终高度，只做一次无动画锚底。
+                    // 不再监听 willChangeFrame，避免候选栏/输入法内部 frame 变化反复推动页面。
+                    scrollToBottomWithoutAnimation(proxy)
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(
                         for: UIResponder.keyboardDidHideNotification
                     )
                 ) { _ in
-                    // 键盘完全收起、Tab Bar 恢复最终高度后再次锚底，避免还要手动再滑一下。
+                    guard keyboardVisible else { return }
+                    keyboardVisible = false
+                    // 键盘完全收起、Tab Bar 恢复最终高度后只锚一次，避免还要手动再滑一下。
                     DispatchQueue.main.async {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        scrollToBottomWithoutAnimation(proxy)
                     }
                 }
             }
@@ -135,25 +139,11 @@ struct ChatView: View {
         }
     }
 
-    private func keyboardAnimation(from notification: Notification) -> Animation {
-        let info = notification.userInfo ?? [:]
-        let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
-        let rawCurve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 0
-
-        guard let curve = UIView.AnimationCurve(rawValue: rawCurve) else {
-            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
-        }
-        switch curve {
-        case .easeIn:
-            return .timingCurve(0.42, 0, 1, 1, duration: duration)
-        case .easeOut:
-            return .timingCurve(0, 0, 0.58, 1, duration: duration)
-        case .linear:
-            return .linear(duration: duration)
-        case .easeInOut:
-            return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
-        @unknown default:
-            return .easeInOut(duration: duration)
+    private func scrollToBottomWithoutAnimation(_ proxy: ScrollViewProxy) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo("chat.bottom", anchor: .bottom)
         }
     }
 
