@@ -6,6 +6,7 @@ struct DeviceBindingView: View {
     @State private var voiceWebSocketURL = ""
     @State private var deviceIDInput = ""
     @State private var errorMessage = ""
+    @State private var hasStoredToken = false
     let deviceID: String
     let configurationReady: Bool
     let configurationMessage: String
@@ -33,7 +34,7 @@ struct DeviceBindingView: View {
             SecureField("设备 ID", text: $deviceIDInput)
                 .textContentType(.none)
                 .textFieldStyle(.roundedBorder)
-            SecureField("访问 Token", text: $token)
+            SecureField(hasStoredToken ? "访问 Token（留空则保留现有）" : "访问 Token", text: $token)
                 .textFieldStyle(.roundedBorder)
                 .textContentType(.password)
             if !errorMessage.isEmpty {
@@ -45,11 +46,20 @@ struct DeviceBindingView: View {
                 saveConfiguration()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(token.isEmpty || apiBaseURL.isEmpty || voiceWebSocketURL.isEmpty || deviceIDInput.isEmpty)
+            .disabled((token.isEmpty && !hasStoredToken) || apiBaseURL.isEmpty || voiceWebSocketURL.isEmpty || deviceIDInput.isEmpty)
         }
         .padding(32)
         .onAppear {
-            deviceIDInput = deviceID
+            if let existing = runtimeConfigurationStore.load() {
+                apiBaseURL = existing.apiBaseURL.absoluteString
+                voiceWebSocketURL = existing.voiceWebSocketURL.absoluteString
+                deviceIDInput = existing.deviceID
+            } else {
+                deviceIDInput = deviceID
+            }
+            hasStoredToken = !RuntimeCredentialNormalizer
+                .token(tokenStore.load() ?? "")
+                .isEmpty
         }
     }
 
@@ -64,7 +74,7 @@ struct DeviceBindingView: View {
             return
         }
         let normalizedToken = RuntimeCredentialNormalizer.token(token)
-        guard !normalizedToken.isEmpty else {
+        guard hasStoredToken || !normalizedToken.isEmpty else {
             errorMessage = "请输入有效的访问 Token。"
             return
         }
@@ -74,7 +84,9 @@ struct DeviceBindingView: View {
                 voiceWebSocketURL: voiceURL,
                 deviceID: trimmedDeviceID
             ))
-            try tokenStore.save(normalizedToken)
+            if !normalizedToken.isEmpty {
+                try tokenStore.save(normalizedToken)
+            }
             token = ""
             errorMessage = ""
             completed()
