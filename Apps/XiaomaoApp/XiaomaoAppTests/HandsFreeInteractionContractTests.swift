@@ -1147,23 +1147,29 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("@State private var muted"), "VoiceCallView 不得再声明本地 muted")
         XCTAssertTrue(call.contains("viewModel.controller.isMuted"), "UI 必须统一读取 controller.isMuted")
 
-        // ===== 4. 头像涟漪: 删除底部声纹条，真实 level 驱动头像后的自然扩散反馈 =====
+        // ===== 4. 头像氛围光: 删除底部声纹条与同心圆扩张，真实 level 只驱动光强 =====
         XCTAssertFalse(call.contains("struct VoiceWaveform: View"), "通话页不得保留旧声纹条")
-        XCTAssertTrue(call.contains("VoiceAvatarRipples("), "头像后必须存在涟漪反馈")
+        XCTAssertTrue(call.contains("VoiceAvatarAura("), "头像后必须存在流体氛围光反馈")
         XCTAssertTrue(call.contains("level: viewModel.controller.vadNormalizedRMS"),
-                      "头像涟漪必须接收真实 vadNormalizedRMS")
-        XCTAssertTrue(call.contains("let level: Double"), "VoiceAvatarRipples 必须声明真实 level")
-        XCTAssertTrue(call.contains("min(max(level"), "涟漪强度必须钳制真实输入音量")
-        guard let rippleStart = call.range(of: "struct VoiceAvatarRipples: View")?.lowerBound else {
-            XCTFail("缺少 VoiceAvatarRipples 范围")
+                      "头像氛围光必须接收真实 vadNormalizedRMS")
+        XCTAssertTrue(call.contains("let level: Double"), "VoiceAvatarAura 必须声明真实 level")
+        XCTAssertTrue(call.contains("min(max(level"), "氛围光强度必须钳制真实输入音量")
+        guard let auraStart = call.range(of: "struct VoiceAvatarAura: View")?.lowerBound,
+              let auraEnd = call.range(of: "// MARK: - 预览", range: auraStart..<call.endIndex)?.lowerBound else {
+            XCTFail("缺少 VoiceAvatarAura 范围")
             return
         }
-        let rippleBlock = String(call[rippleStart..<call.endIndex])
-        XCTAssertFalse(rippleBlock.contains("CADisplayLink"), "涟漪不得自建 CADisplayLink")
-        XCTAssertFalse(rippleBlock.contains("random"), "涟漪不得使用随机数制造抖动")
-        XCTAssertFalse(rippleBlock.contains("Timer"), "涟漪不得使用 Timer 驱动")
-        XCTAssertTrue(rippleBlock.contains("repeatForever(autoreverses: false)"),
-                      "涟漪应连续向外扩散而不是来回缩放")
+        let auraBlock = String(call[auraStart..<auraEnd])
+        XCTAssertFalse(auraBlock.contains("CADisplayLink"), "氛围光不得自建 CADisplayLink")
+        XCTAssertFalse(auraBlock.contains("random"), "氛围光不得使用随机数制造抖动")
+        XCTAssertFalse(auraBlock.contains("Timer"), "氛围光不得使用 Timer 驱动")
+        XCTAssertFalse(auraBlock.contains(".stroke("), "氛围光不得出现圆环描边")
+        XCTAssertFalse(auraBlock.contains("scaleEffect("), "氛围光不得靠几何缩放制造向外扩张")
+        XCTAssertFalse(auraBlock.contains("autoreverses: false"), "不得再使用单向外扩循环")
+        XCTAssertTrue(auraBlock.contains("repeatForever(autoreverses: true)"),
+                      "氛围光应做缓慢往返漂移而不是向外扩张")
+        XCTAssertTrue(auraBlock.contains(".offset("), "流体感应由非对称光团漂移产生")
+        XCTAssertTrue(auraBlock.contains("RadialGradient"), "氛围光应由无轮廓渐变光团构成")
 
         // ===== 5. 退出: 左上结束确认 (P2.8A-CI-FIX: 从 topStart 之后找明确边界, 避免命中文件头 MARK) =====
         guard let topStart = call.range(of: "private var topBar")?.lowerBound,

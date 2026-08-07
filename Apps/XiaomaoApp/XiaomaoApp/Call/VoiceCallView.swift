@@ -416,12 +416,12 @@ struct VoiceCallView: View {
                     )
                     .frame(width: 380, height: 380)
 
-                VoiceAvatarRipples(
+                VoiceAvatarAura(
                     muted: viewModel.controller.isMuted,
                     state: viewModel.controller.state,
                     level: viewModel.controller.vadNormalizedRMS
                 )
-                .frame(width: availableSize * 1.46, height: availableSize * 1.34)
+                .frame(width: availableSize * 1.52, height: availableSize * 1.38)
                 .accessibilityHidden(true)
 
                 // 底部光斑 (与 portrait 底部渐隐融合)
@@ -1003,82 +1003,75 @@ struct VoiceCallView: View {
     }
 }
 
-// MARK: - 头像后自然扩散涟漪
-struct VoiceAvatarRipples: View {
+// MARK: - 头像后流体氛围光
+struct VoiceAvatarAura: View {
     let muted: Bool
     let state: VoiceSessionState
     /// 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS。
     let level: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var expanding = false
+    @State private var drifting = false
 
     var body: some View {
         ZStack {
-            // 贴近头像的柔光只做“呼吸”，避免出现清晰圆环边界。
-            Circle()
+            // 稳定的近场柔光：只随语音强度改变亮度，不改变几何尺寸。
+            Ellipse()
                 .fill(
                     RadialGradient(
                         colors: [
-                            Theme.primarySoft.opacity(0.16 + 0.14 * activityStrength),
-                            Theme.roleGold.opacity(0.06 + 0.08 * activityStrength),
+                            Theme.primarySoft.opacity(0.22 + 0.18 * activityStrength),
+                            Theme.roleGold.opacity(0.08 + 0.10 * activityStrength),
                             .clear
                         ],
                         center: .center,
-                        startRadius: 18,
-                        endRadius: 150
+                        startRadius: 10,
+                        endRadius: 170
                     )
                 )
-                .scaleEffect(CGFloat(1.01 + 0.045 * activityStrength))
-                .blur(radius: 8)
+                .blur(radius: 18)
+                .opacity(0.72 + 0.18 * activityStrength)
 
-            // 宽而软的“能量带”错相位向外散开。每层椭圆比例/角度固定不同，
-            // 不使用随机数，因此自然但可复现，也不会出现两个硬圆圈同步扩张。
-            ForEach(0..<5, id: \.self) { index in
+            // 成熟语音产品常用“纹理/光流变化”而不是同心圆扩张。
+            // 这里用几团无轮廓、非对称的柔光缓慢漂移；真实音量只改变光强。
+            ForEach(0..<4, id: \.self) { index in
                 Ellipse()
                     .fill(
                         RadialGradient(
-                            stops: [
-                                .init(color: .clear, location: 0.55),
-                                .init(
-                                    color: rippleColor(index)
-                                        .opacity(0.055 + 0.075 * activityStrength),
-                                    location: 0.70
-                                ),
-                                .init(
-                                    color: Theme.primarySoft
-                                        .opacity(0.035 + 0.055 * activityStrength),
-                                    location: 0.82
-                                ),
-                                .init(color: .clear, location: 1.0)
+                            colors: [
+                                auraColor(index).opacity(0.12 + 0.16 * activityStrength),
+                                auraColor(index).opacity(0.045 + 0.075 * activityStrength),
+                                .clear
                             ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 180
+                            center: auraCenter(index),
+                            startRadius: 8,
+                            endRadius: 135 + CGFloat(index) * 10
                         )
                     )
-                    .rotationEffect(.degrees(rippleRotation(index)))
-                    .scaleEffect(
-                        x: reduceMotion ? 1.08 : (expanding ? rippleEndScaleX(index) : rippleStartScale(index)),
-                        y: reduceMotion ? 1.03 : (expanding ? rippleEndScaleY(index) : rippleStartScale(index))
-                    )
-                    .blur(radius: 2.4 + CGFloat(index) * 0.55)
-                    .opacity(
+                    .frame(width: auraWidth(index), height: auraHeight(index))
+                    .rotationEffect(.degrees(
                         reduceMotion
-                            ? 0.34 + 0.18 * activityStrength
-                            : (expanding ? 0 : rippleOpacity(index))
+                            ? auraRotationA(index)
+                            : (drifting ? auraRotationB(index) : auraRotationA(index))
+                    ))
+                    .offset(
+                        x: reduceMotion ? 0 : (drifting ? auraOffsetB(index).width : auraOffsetA(index).width),
+                        y: reduceMotion ? 0 : (drifting ? auraOffsetB(index).height : auraOffsetA(index).height)
                     )
+                    .blur(radius: 24 + CGFloat(index) * 3)
+                    .opacity(0.56 + 0.24 * activityStrength)
                     .animation(
                         reduceMotion
                             ? nil
-                            : .timingCurve(0.16, 0.72, 0.30, 1, duration: rippleDuration(index))
-                                .repeatForever(autoreverses: false)
-                                .delay(Double(index) * 0.52),
-                        value: expanding
+                            : .easeInOut(duration: auraDuration(index))
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.33),
+                        value: drifting
                     )
             }
         }
-        .onAppear { expanding = true }
-        .onDisappear { expanding = false }
+        .compositingGroup()
+        .onAppear { drifting = true }
+        .onDisappear { drifting = false }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: level)
         .accessibilityHidden(true)
     }
@@ -1103,33 +1096,59 @@ struct VoiceAvatarRipples: View {
         }
     }
 
-    private func rippleOpacity(_ index: Int) -> Double {
-        let depth = 1.0 - Double(index) * 0.10
-        return (0.42 + 0.22 * activityStrength) * depth
+    private func auraDuration(_ index: Int) -> Double {
+        [5.8, 6.6, 7.2, 6.1][index]
     }
 
-    private func rippleDuration(_ index: Int) -> Double {
-        3.25 + Double(index) * 0.18
+    private func auraWidth(_ index: Int) -> CGFloat {
+        [230, 205, 250, 190][index]
     }
 
-    private func rippleStartScale(_ index: Int) -> CGFloat {
-        0.72 + CGFloat(index) * 0.025
+    private func auraHeight(_ index: Int) -> CGFloat {
+        [170, 225, 155, 210][index]
     }
 
-    private func rippleEndScaleX(_ index: Int) -> CGFloat {
-        1.28 + CGFloat(index) * 0.055 + CGFloat(activityStrength) * 0.08
+    private func auraRotationA(_ index: Int) -> Double {
+        [-18, 14, -8, 22][index]
     }
 
-    private func rippleEndScaleY(_ index: Int) -> CGFloat {
-        1.18 + CGFloat(index) * 0.047 + CGFloat(activityStrength) * 0.06
+    private func auraRotationB(_ index: Int) -> Double {
+        [8, -12, 15, -6][index]
     }
 
-    private func rippleRotation(_ index: Int) -> Double {
-        [-8, 6, -3, 10, -6][index]
+    private func auraOffsetA(_ index: Int) -> CGSize {
+        [
+            CGSize(width: -24, height: -16),
+            CGSize(width: 30, height: -8),
+            CGSize(width: -8, height: 28),
+            CGSize(width: 20, height: 24)
+        ][index]
     }
 
-    private func rippleColor(_ index: Int) -> Color {
-        index.isMultiple(of: 2) ? Theme.primary : Theme.roleGold
+    private func auraOffsetB(_ index: Int) -> CGSize {
+        [
+            CGSize(width: 14, height: -28),
+            CGSize(width: 18, height: 20),
+            CGSize(width: -26, height: 8),
+            CGSize(width: 34, height: -2)
+        ][index]
+    }
+
+    private func auraCenter(_ index: Int) -> UnitPoint {
+        [
+            UnitPoint(x: 0.34, y: 0.42),
+            UnitPoint(x: 0.68, y: 0.38),
+            UnitPoint(x: 0.43, y: 0.68),
+            UnitPoint(x: 0.70, y: 0.66)
+        ][index]
+    }
+
+    private func auraColor(_ index: Int) -> Color {
+        switch index {
+        case 0, 2: Theme.primary
+        case 1: Theme.roleGold
+        default: Theme.primarySoft
+        }
     }
 }
 
