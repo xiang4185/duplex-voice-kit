@@ -981,6 +981,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         if inputQueue {
             diagnostics.update { $0.inputBackpressureCount += 1 }
         }
+        await outboundWriter.invalidate(generation: generation)
         ingress.deactivateCaptureOffers()
         active = false
         ready = false

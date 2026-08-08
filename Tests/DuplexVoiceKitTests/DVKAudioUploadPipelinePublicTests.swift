@@ -17,6 +17,7 @@ final class DVKAudioUploadPipelinePublicTests: XCTestCase {
             XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
         }
         await transport.waitForAudioCount(4)
+        await waitUntil { pipeline.diagnosticsSnapshot.nextChunkIndex == 4 }
 
         let audio = await transport.messages().filter { $0.type == "audio.append" }
         XCTAssertEqual(audio.compactMap(chunkIndex), [0, 1, 2, 3])
@@ -87,6 +88,7 @@ final class DVKAudioUploadPipelinePublicTests: XCTestCase {
         await pipeline.activateCaptureGeneration(2)
         XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 2)))
         await transport.waitForAudioCount(1)
+        await waitUntil { pipeline.diagnosticsSnapshot.sentAudioChunks == 1 }
         XCTAssertEqual(pipeline.diagnosticsSnapshot.sentAudioChunks, 1)
     }
 
@@ -131,9 +133,13 @@ final class DVKAudioUploadPipelinePublicTests: XCTestCase {
         }
     }
 
-    func testBoundedQueueReportsBackpressureWithoutBlockingOffer() async throws {
+    func testBlockedTransportDoesNotBackpressureCaptureProcessing() async throws {
         let transport = BlockingAudioOutboundTransport()
-        let pipeline = DVKAudioUploadPipeline(outboundTransport: transport, queueCapacity: 1)
+        let pipeline = DVKAudioUploadPipeline(
+            outboundTransport: transport,
+            queueCapacity: 1,
+            outboundQueueCapacity: 4
+        )
         await pipeline.configure(
             processor: { frame in [.beginUtterance(interruptResponseID: nil), .audio(frame)] },
             notificationHandler: { _ in }
@@ -142,17 +148,51 @@ final class DVKAudioUploadPipelinePublicTests: XCTestCase {
 
         XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
         await transport.waitUntilAudioSendStarts()
-        let acceptedSecond = pipeline.offer(.pcm16(frame(), captureGeneration: 1))
-        let acceptedThird = pipeline.offer(.pcm16(frame(), captureGeneration: 1))
+        XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
+        await waitUntil { pipeline.diagnosticsSnapshot.outboundQueueDepth == 1 }
+        XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
+        await waitUntil { pipeline.diagnosticsSnapshot.outboundQueueDepth == 2 }
 
-        XCTAssertTrue(acceptedSecond)
-        XCTAssertFalse(acceptedThird)
+        let blockedSnapshot = pipeline.diagnosticsSnapshot
+        XCTAssertEqual(blockedSnapshot.inputBackpressureCount, 0)
+        XCTAssertEqual(blockedSnapshot.outboundBackpressureCount, 0)
+        XCTAssertGreaterThanOrEqual(blockedSnapshot.outboundQueueHighWater, 2)
+        XCTAssertTrue(blockedSnapshot.active)
+
         await transport.releaseAudio()
+        await waitUntil { pipeline.diagnosticsSnapshot.sentAudioChunks == 3 }
+    }
+
+    func testBoundedOutboundQueueFailsClosedWithoutFillingCaptureIngress() async throws {
+        let transport = BlockingAudioOutboundTransport()
+        let pipeline = DVKAudioUploadPipeline(
+            outboundTransport: transport,
+            queueCapacity: 1,
+            outboundQueueCapacity: 1
+        )
+        await pipeline.configure(
+            processor: { frame in [.beginUtterance(interruptResponseID: nil), .audio(frame)] },
+            notificationHandler: { _ in }
+        )
+        try await openAndActivate(pipeline, generation: 1)
+
+        XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
+        await transport.waitUntilAudioSendStarts()
+        XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
+        await waitUntil { pipeline.diagnosticsSnapshot.outboundQueueDepth == 1 }
+        XCTAssertTrue(pipeline.offer(.pcm16(frame(), captureGeneration: 1)))
+
         await waitUntil {
             let snapshot = pipeline.diagnosticsSnapshot
-            return snapshot.inputBackpressureCount == 1 && !snapshot.active
+            return snapshot.outboundBackpressureCount == 1 && !snapshot.active
         }
-        XCTAssertFalse(pipeline.diagnosticsSnapshot.active)
+        let failedSnapshot = pipeline.diagnosticsSnapshot
+        XCTAssertEqual(failedSnapshot.inputBackpressureCount, 0)
+        XCTAssertEqual(failedSnapshot.outboundBackpressureCount, 1)
+        XCTAssertFalse(failedSnapshot.active)
+        XCTAssertEqual(failedSnapshot.outboundQueueDepth, 0)
+
+        await transport.releaseAudio()
     }
 
     func testPublicVADDefaultsMatchExtractedParameters() {
