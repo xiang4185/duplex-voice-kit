@@ -192,7 +192,7 @@ jobs:
           test ! -e "$APP_PATH/_CodeSignature"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "$BUNDLE_ID"
           BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
-          test "$BUILD_NUMBER" = "13"
+          test "$BUILD_NUMBER" = "14"
           WIDGET_PATH="$APP_PATH/PlugIns/XiaomaoAppWidgets.appex"
           test -d "$WIDGET_PATH"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$WIDGET_PATH/Info.plist")" = "$BUILD_NUMBER"

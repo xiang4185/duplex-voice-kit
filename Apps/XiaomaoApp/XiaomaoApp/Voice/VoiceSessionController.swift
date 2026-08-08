@@ -192,7 +192,6 @@ final class VoiceSessionController: ObservableObject {
             && microphonePermission == .granted
             && audioSessionActive
             && webSocketState == .connected
-            && !isMuted
             && !isRecording
     }
 
@@ -493,64 +492,13 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
-    /// P2.8A-CI-FIX: 静音/取消静音的确定性控制流.
-    /// 设置静音: 本地停采 → 仅连接正常时发送 mute (断开时不向失效连接发送).
-    /// 取消静音: 先探测连接活性，再发 unmute + 恢复采集; 半断开/已断开 → 直接走现有重连;
-    ///           已关闭/空闲结束/终端本地错误 → 无效, 不重连、不新建 Session.
+    /// 静音只控制本机扬声器输出，不暂停麦克风、不改变 Provider 会话、不触发重连。
+    /// 播放节点继续按实时节奏消费音频，取消静音时不会补播静音期间的旧音频。
     func setMuted(_ muted: Bool) async {
         guard callIsActive else { return }
-        // 幂等: 重复设置相同状态不重复停启采集/不重复发送静音命令/不重复创建重连任务
         guard isMuted != muted else { return }
         isMuted = muted
-
-        if muted {
-            // 静音: 先本地停采
-            await audioUploader.pauseCapture()
-            stopContinuousCapture(resetVAD: true)
-            // 仅连接正常才向服务端发送 mute; 断开的失效连接不发送
-            guard webSocketState == .connected else { return }
-            do {
-                try await audioUploader.setMuted(true)
-            } catch {
-                recordSendFailure(error)
-            }
-            return
-        }
-
-        // 取消静音
-        if webSocketState == .connected {
-            do {
-                // 静音期间 URLSessionWebSocketTask 可能尚未回报 close，但真实链路已经半断开。
-                // 取消静音是显式用户动作，先做一次 ping，失败则复用现有 session.resume 重连路径。
-                try await probeWebSocket()
-                try await audioUploader.setMuted(false)
-            } catch {
-                // 只有链路探测 + unmute 都成功后才能恢复采集。
-                recordSendFailure(error)
-                return
-            }
-            syncAudioSessionState()
-            if !audioSessionActive {
-                do {
-                    try audioSession.activate()
-                    audioSession.refreshRoute()
-                    syncAudioSessionState()
-                } catch {
-                    lastErrorCategory = "audio_session_failed"
-                    lastReasonCategory = "unmute_audio_session_reactivation_failed"
-                    errorMessage = "取消静音后无法恢复麦克风，请重试。"
-                    return
-                }
-            }
-            await startContinuousCaptureIfPossible()
-        } else if lastDisconnectRecoverable,
-                  !idleTimeoutEnded,
-                  state != .closed,
-                  state != .failed,
-                  lastReasonCategory != "idle_timeout" {
-            // 已明确是可恢复断开时，复用现有 session.resume 重连路径。
-            reconnectCurrentCall()
-        }
+        playback.setMuted(muted)
     }
 
     func appDidEnterBackground() async {
@@ -580,6 +528,7 @@ final class VoiceSessionController: ObservableObject {
         idleWarningRemainingSeconds = nil
         idleTimeoutEnded = false
         isMuted = false
+        playback.setMuted(false)
         isRecording = false
         commitSentForCurrentPress = false
         expectedReadyEvent = nil
@@ -996,8 +945,7 @@ final class VoiceSessionController: ObservableObject {
             resetProviderGenerationAfterResume()
             // P2.8A-CI-FIX-3: 保持 .reconnecting 状态进入 markReady (不提前提升为 .ready)
             await audioUploader.markReady()
-            // P2.8A-CI-FIX: Resume 成功后同步静音状态到已恢复的连接
-            // (未静音 → 发一次 unmute 后恢复采集; 静音 → 发一次 mute 不启动采集)
+            // Resume 成功后只恢复本地扬声器静音状态；采集始终按正常通话恢复。
             // P2.8A-CI-FIX-3: 同步失败立即返回 — 保持 .reconnecting, 不得清空 errorMessage /
             // reconnectAttempt, 不恢复采集, 不标记 Resume 成功 (lastReadyEvent 不设);
             // 由当前重连流程的 waitForReady 超时可靠进入下一次恢复或明确失败
@@ -1261,7 +1209,6 @@ final class VoiceSessionController: ObservableObject {
     private func uploadIntents(for data: Data) -> [AudioUploadIntent] {
         guard callIsActive,
               isRecording,
-              !isMuted,
               webSocketState == .connected else { return [] }
 
         let mode: VoiceActivityMode
@@ -1412,30 +1359,21 @@ final class VoiceSessionController: ObservableObject {
         terminalProtocolErrorCode = nil
     }
 
-    /// P2.8A-CI-FIX: Resume 成功后向已恢复的连接同步静音状态.
-    /// 未静音 → 发送一次 unmute (随后恢复采集); 静音 → 发送一次 mute (不启动采集).
-    /// 同步失败走现有发送失败处理 (recordSendFailure), 不新增独立重试循环.
-    /// 返回是否同步成功: 失败时调用方不得恢复采集、不得标记 Resume 成功.
+    /// 输出静音完全是本地播放状态。重连后只恢复本地音量状态，不向 Provider 发送 mute/unmute。
     @discardableResult
     private func syncMuteStateAfterResume() async -> Bool {
-        do {
-            try await audioUploader.setMuted(isMuted)
-            return true
-        } catch {
-            recordSendFailure(error)
-            return false
-        }
+        playback.setMuted(isMuted)
+        return true
     }
 
     private func startContinuousCaptureIfPossible() async {
         guard callIsActive,
               !suspendedForBackground,
-              !isMuted,
               !isRecording,
               microphonePermission == .granted,
               audioSessionActive,
               webSocketState == .connected,
-              // P2.8A: 允许 .listening 状态恢复采集, 避免用户在聆听期静音后无法重新启动
+              // 允许 .listening 状态恢复持续采集
               state == .ready || state == .listening || state == .speaking else { return }
         do {
             try capture.start()
@@ -1533,7 +1471,6 @@ final class VoiceSessionController: ObservableObject {
             guard let self,
                   self.callIsActive,
                   self.sessionID == expectedSessionID,
-                  !self.isMuted,
                   self.webSocketState == .connected,
                   self.state == .ready || self.state == .listening else { return }
 
@@ -1590,7 +1527,6 @@ final class VoiceSessionController: ObservableObject {
     private func checkCaptureHealth() async {
         guard callIsActive,
               !suspendedForBackground,
-              !isMuted,
               isRecording,
               audioSessionActive,
               state != .failed,

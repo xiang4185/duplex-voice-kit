@@ -739,9 +739,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(avatar.contains("lock.open.fill"), "解锁必须展示 lock.open.fill")
         XCTAssertTrue(avatar.contains(".symbolEffect(.replace)"), "解锁必须使用 symbolEffect")
 
-        // 13. Reduce Motion 对 Symbol 动效生效 (P2.8A: 静音状态改为 controller 单一来源)
-        XCTAssertTrue(call.contains("guard !viewModel.controller.isMuted, !reduceMotion"),
-                      "麦克风 pulse 必须受 Reduce Motion 与 controller 静音状态控制")
+        // 13. Reduce Motion 对 Symbol 动效生效；扬声器静音不影响麦克风 pulse
+        XCTAssertTrue(call.contains("guard !reduceMotion else { return false }"),
+                      "麦克风 pulse 只受 Reduce Motion 控制，不得被扬声器静音停掉")
         XCTAssertTrue(avatar.contains("reduceMotion"), "头像解锁动效必须遵循 Reduce Motion")
 
         // 14. 本轮禁止新增的模式

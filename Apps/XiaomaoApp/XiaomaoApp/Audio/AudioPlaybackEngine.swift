@@ -4,6 +4,7 @@ import Foundation
 protocol AudioPlaying: AnyObject {
     func enqueue(_ data: Data, responseID: String, chunkIndex: Int)
     func cancel(responseID: String?)
+    func setMuted(_ muted: Bool)
 }
 
 final class AudioPlaybackEngine: AudioPlaying {
@@ -55,6 +56,12 @@ final class AudioPlaybackEngine: AudioPlaying {
         }
     }
 
+    func setMuted(_ muted: Bool) {
+        queue.async { [weak self] in
+            self?.player.volume = muted ? 0 : 1
+        }
+    }
+
     private func scheduleReadyChunks() {
         while let data = pending.removeValue(forKey: nextIndex) {
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
@@ -71,11 +78,15 @@ final class AudioPlaybackEngine: AudioPlaying {
 
 final class MockAudioPlayback: AudioPlaying {
     private(set) var chunks: [(String, Int)] = []
+    private(set) var isMuted = false
     func enqueue(_ data: Data, responseID: String, chunkIndex: Int) {
         _ = data
         chunks.append((responseID, chunkIndex))
     }
     func cancel(responseID: String?) {
         chunks.removeAll { responseID == nil || $0.0 == responseID }
+    }
+    func setMuted(_ muted: Bool) {
+        isMuted = muted
     }
 }

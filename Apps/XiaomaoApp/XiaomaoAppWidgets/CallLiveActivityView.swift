@@ -30,11 +30,11 @@ struct LockScreenView: View {
 
             MiniIslandWave(active: context.state.isSpeaking, mode: .primary, barCount: 9)
                 .frame(height: 18)
-                .opacity(context.state.isMuted ? 0.3 : 0.9)
+                .opacity(0.9)
 
-            // P2.6K: 删除无真实来源的固定目标与进度; 底部仅保留真实计时与静音状态
+            // 底部仅保留真实计时与本地扬声器静音状态
             HStack {
-                Text(context.state.isMuted ? "已静音 · 通话继续" : statusText)
+                Text(context.state.isMuted ? "扬声器已静音 · 通话继续" : statusText)
                 Spacer()
                 Text("本次陪伴 \(context.state.sessionMinutes) 分钟")
             }
@@ -74,7 +74,7 @@ struct LockScreenView: View {
     }
 
     private var statusText: String {
-        if context.state.isMuted { return "已静音" }
+        if context.state.isMuted { return "扬声器已静音" }
         switch context.state.phase {
         case .calling: return "通话中"
         case .listening: return "正在听"

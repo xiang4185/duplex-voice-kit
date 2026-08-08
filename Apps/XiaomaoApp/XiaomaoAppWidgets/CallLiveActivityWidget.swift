@@ -29,7 +29,7 @@ struct CallLiveActivityWidget: Widget {
                             .foregroundStyle(.white)
                         MiniIslandWave(active: context.state.isSpeaking, mode: .primary, barCount: 7)
                             .frame(width: 80, height: 14)
-                            .opacity(context.state.isMuted ? 0.3 : 0.9)
+                            .opacity(0.9)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -40,7 +40,7 @@ struct CallLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack(spacing: 16) {
                         Link(destination: URL(string: "xiaomao://call/mute")!) {
-                            Image(systemName: context.state.isMuted ? "mic.slash.fill" : "mic.fill")
+                            Image(systemName: context.state.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                                 .font(.system(size: 16))
                                 .frame(width: 32, height: 32)
                                 .background(.white.opacity(0.15), in: Circle())
@@ -99,7 +99,7 @@ struct CallLiveActivityWidget: Widget {
     }
 
     private func statusText(_ state: CallLiveActivityAttributes.ContentState) -> String {
-        if state.isMuted { return "已静音 · 通话继续" }
+        if state.isMuted { return "扬声器已静音 · 通话继续" }
         switch state.phase {
         case .calling: return "通话中"
         case .listening: return "正在听"
@@ -110,7 +110,7 @@ struct CallLiveActivityWidget: Widget {
     }
 
     private func compactStatusText(_ state: CallLiveActivityAttributes.ContentState) -> String {
-        if state.isMuted { return "静音" }
+        if state.isMuted { return "静音输出" }
         switch state.phase {
         case .calling: return "通话中"
         case .listening: return "在听"

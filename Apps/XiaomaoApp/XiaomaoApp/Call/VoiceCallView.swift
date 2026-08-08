@@ -351,9 +351,9 @@ struct VoiceCallView: View {
     // P2.7B-FINAL-MESH: 删除背景循环光效状态; 仅保留人物极轻呼吸
     @State private var avatarBreathScale = false
 
-    // P2.7A: 正在聆听时麦克风轻微 pulse (ready/listening/endpointing 且未静音; Reduce Motion 停止; 非 Timer 驱动)
+    // 正在聆听时麦克风轻微 pulse；扬声器静音不影响持续采集。
     private var micPulseActive: Bool {
-        guard !viewModel.controller.isMuted, !reduceMotion else { return false }
+        guard !reduceMotion else { return false }
         switch viewModel.controller.state {
         case .ready, .listening, .endpointing: return true
         default: return false
@@ -548,7 +548,7 @@ struct VoiceCallView: View {
             GlassEffectContainer {
                 HStack(spacing: 36) {
                     controlButton(
-                        icon: viewModel.controller.isMuted ? "mic.slash.fill" : "mic.fill",
+                        icon: viewModel.controller.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                         title: viewModel.controller.isMuted ? "取消静音" : "静音",
                         style: viewModel.controller.isMuted ? .active : .normal,
                         identifier: "call.mute",
@@ -556,7 +556,6 @@ struct VoiceCallView: View {
                     ) {
                         viewModel.toggleMute()
                     }
-                    // P2.8A: 已静音时保持可点 — 断连但可恢复状态下取消静音会触发现有重连
                     .disabled(!viewModel.canMute && !viewModel.controller.isMuted)
                     .opacity((viewModel.canMute || viewModel.controller.isMuted) ? 1 : 0.4)
 
@@ -613,7 +612,7 @@ struct VoiceCallView: View {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(iconColor(style))
-                    // P2.7A: 静音图标 Symbol 替换过渡 (每次状态改变执行一次)
+                    // 扬声器静音图标 Symbol 替换过渡 (每次状态改变执行一次)
                     .contentTransition(.symbolEffect(.replace))
                     // P2.7A: 正在聆听时麦克风状态驱动轻微 pulse (非 Timer, 跟随 Reduce Motion)
                     .symbolEffect(.pulse, options: .repeating, isActive: micPulse)

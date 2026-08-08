@@ -7,7 +7,7 @@ import XiaomaoShared
 // P2.6A: Live Activity 准确反映通话状态。
 // 设计原则:
 //   - 计时器只更新 elapsedSeconds, 绝不覆盖 isMuted/isSpeaking 真实状态
-//   - 静音/说话状态由 VoiceSessionController 驱动 (controller.isMuted / controller.state)
+//   - 扬声器静音/说话状态由 VoiceSessionController 驱动 (controller.isMuted / controller.state)
 //   - 通话开始只创建一次 Activity; 后台/前台切换不重复创建 (activity 已存在则直接复用)
 //   - 挂断/失败/主动退出时结束 Activity
 //   - 保留 URL Scheme 控制, 本任务不扩展 App Intent
@@ -99,7 +99,7 @@ final class CallLiveActivityManager {
         // 每次 start 先清空旧订阅再重挂, 避免重复订阅
         controllerSubscriptions.removeAll()
 
-        // 静音状态变化 → 立即推送 (灵动岛即时显示静音)
+        // 扬声器静音状态变化 → 立即推送
         controller.$isMuted
             .dropFirst()
             .sink { [weak self] _ in self?.pushState() }
@@ -178,9 +178,6 @@ final class CallLiveActivityManager {
     }
 
     private func phase(from controller: VoiceSessionController) -> CallLiveActivityPhase {
-        if controller.isMuted {
-            return .calling
-        }
         switch controller.state {
         case .ready, .listening, .endpointing:
             return .listening
