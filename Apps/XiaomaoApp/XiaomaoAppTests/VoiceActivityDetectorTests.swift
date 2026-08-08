@@ -93,7 +93,7 @@ final class VoiceActivityDetectorTests: XCTestCase {
         XCTAssertEqual(xiaomao.maximumUtteranceMilliseconds, core.maximumUtteranceMilliseconds)
         XCTAssertEqual(xiaomao.speechRMSThreshold, core.speechRMSThreshold)
         XCTAssertEqual(xiaomao.bargeInRMSThreshold, core.bargeInRMSThreshold)
-        XCTAssertEqual(xiaomao.endSilenceMilliseconds, 480)
+        XCTAssertEqual(xiaomao.endSilenceMilliseconds, 400)
         XCTAssertLessThan(xiaomao.endSilenceMilliseconds, core.endSilenceMilliseconds)
     }
 

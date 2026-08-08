@@ -118,7 +118,7 @@ final class ChatViewModel: ObservableObject {
             sessionID = nil
             hasLoadedHistory = false
             errorMessage = Self.userFacingMessage(for: error, action: "加载聊天记录")
-            requiresReconfiguration = Self.requiresReconfiguration(for: error)
+            requiresReconfiguration = requiresReconfigurationAndNotify(for: error)
         }
     }
 
@@ -145,7 +145,7 @@ final class ChatViewModel: ObservableObject {
             if Self.isSessionInvalidatingError(error) {
                 invalidateSession()
                 errorMessage = Self.userFacingMessage(for: error, action: "刷新聊天记录")
-                requiresReconfiguration = Self.requiresReconfiguration(for: error)
+                requiresReconfiguration = requiresReconfigurationAndNotify(for: error)
             }
         }
     }
@@ -197,7 +197,7 @@ final class ChatViewModel: ObservableObject {
                 invalidateSession()
             }
             errorMessage = Self.userFacingMessage(for: error, action: "发送消息")
-            requiresReconfiguration = Self.requiresReconfiguration(for: error)
+            requiresReconfiguration = requiresReconfigurationAndNotify(for: error)
         }
     }
 
@@ -229,7 +229,7 @@ final class ChatViewModel: ObservableObject {
                 invalidateSession()
             }
             errorMessage = Self.userFacingMessage(for: error, action: "重试小猫回复")
-            requiresReconfiguration = Self.requiresReconfiguration(for: error)
+            requiresReconfiguration = requiresReconfigurationAndNotify(for: error)
         }
     }
 
@@ -261,7 +261,7 @@ final class ChatViewModel: ObservableObject {
                 invalidateSession()
             }
             errorMessage = Self.userFacingMessage(for: error, action: "清空聊天记录")
-            requiresReconfiguration = Self.requiresReconfiguration(for: error)
+            requiresReconfiguration = requiresReconfigurationAndNotify(for: error)
         }
     }
 
@@ -335,6 +335,15 @@ final class ChatViewModel: ObservableObject {
         default:
             return false
         }
+    }
+
+    private func requiresReconfigurationAndNotify(for error: Error) -> Bool {
+        let required = Self.requiresReconfiguration(for: error)
+        if let appError = error as? AppError,
+           case .unauthorized = appError {
+            NotificationCenter.default.post(name: .credentialsExpired, object: nil)
+        }
+        return required
     }
 }
 

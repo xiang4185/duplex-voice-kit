@@ -96,6 +96,11 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let uploadLastFiveSentChunkIndices: [Int]
     let uploadLastSendFailureCategory: String
     let uploadGenerationStartedAt: Date?
+    let uploadCaptureToProcessingLagMilliseconds: Int
+    let uploadMaxCaptureToProcessingLagMilliseconds: Int
+    let uploadLastCapturePacketMilliseconds: Int
+    let uploadMaxCapturePacketMilliseconds: Int
+    let uploadOutboundBatchBytes: Int
     let playbackActive: Bool
     let lastSpeechDurationMilliseconds: Int
     let lastEndingSilenceMilliseconds: Int
@@ -126,12 +131,14 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "延迟分段（客户端观测）",
             "网络 RTT: \(optional(networkPingMilliseconds)) ms",
             "端点静音等待: \(lastEndingSilenceMilliseconds) ms",
+            "采集→处理排队: \(uploadCaptureToProcessingLagMilliseconds) ms（峰值 \(uploadMaxCaptureToProcessingLagMilliseconds) ms）",
             "ASR / 上行: \(optional(commitToTranscriptFinalMilliseconds)) ms",
             "模型 / 路由: \(optional(transcriptFinalToResponseStartedMilliseconds)) ms",
             "TTS / 下行: \(optional(responseStartedToFirstAudioMilliseconds)) ms",
-            "端到首音频: \(optional(endToFirstAudioMilliseconds)) ms",
+            "commit→首音频: \(optional(endToFirstAudioMilliseconds)) ms",
             "Ping 失败次数: \(pingFailureCount)",
-            "当前最长阶段: \(slowest.map { "\($0.0) \($0.1) ms" } ?? "数据不足")"
+            "当前最长阶段: \(slowest.map { "\($0.0) \($0.1) ms" } ?? "数据不足")",
+            "口径: commit→首音频从提交发送开始；提交前的采集排队单列显示"
         ]
 
         if !recent.isEmpty {
@@ -142,7 +149,7 @@ struct VoiceDiagnosticSnapshot: Sendable {
             lines.append("ASR / 上行: \(aggregate(recent, \.commitToTranscriptFinalMilliseconds)) ms")
             lines.append("模型 / 路由: \(aggregate(recent, \.transcriptFinalToResponseStartedMilliseconds)) ms")
             lines.append("TTS / 下行: \(aggregate(recent, \.responseStartedToFirstAudioMilliseconds)) ms")
-            lines.append("端到首音频: \(aggregate(recent, \.endToFirstAudioMilliseconds)) ms")
+            lines.append("commit→首音频: \(aggregate(recent, \.endToFirstAudioMilliseconds)) ms")
         }
 
         let serverStages: [(String, Int?)] = [
@@ -258,6 +265,11 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "upload_max_active_drain_tasks=\(uploadMaxActiveDrainTasks)",
             "upload_last_five_sent_chunk_indices=\(uploadLastFiveSentChunkIndices.map(String.init).joined(separator: ","))",
             "upload_last_send_failure_category=\(safe(uploadLastSendFailureCategory, fallback: "none"))",
+            "upload_capture_to_processing_lag_ms=\(uploadCaptureToProcessingLagMilliseconds)",
+            "upload_max_capture_to_processing_lag_ms=\(uploadMaxCaptureToProcessingLagMilliseconds)",
+            "upload_last_capture_packet_ms=\(uploadLastCapturePacketMilliseconds)",
+            "upload_max_capture_packet_ms=\(uploadMaxCapturePacketMilliseconds)",
+            "upload_outbound_batch_bytes=\(uploadOutboundBatchBytes)",
             "upload_generation_started_at=\(date(uploadGenerationStartedAt, formatter: formatter))",
             "playback_active=\(playbackActive)",
             "last_speech_duration_ms=\(lastSpeechDurationMilliseconds)",

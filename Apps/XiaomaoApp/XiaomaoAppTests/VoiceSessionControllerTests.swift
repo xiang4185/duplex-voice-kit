@@ -990,7 +990,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.vadState, .idleListening)
     }
 
-    func testSilenceDoesNotSendAudioOrCommit() async {
+    func testSilenceStreamsToProviderWithoutCommitting() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         for _ in 0..<12 {
@@ -998,7 +998,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         }
         await settle()
         let sent = await fixture.socket.sentTypesValue()
-        XCTAssertFalse(sent.contains(.audioAppend))
+        XCTAssertTrue(sent.contains(.audioAppend))
         XCTAssertFalse(sent.contains(.audioCommit))
     }
 
@@ -1965,7 +1965,8 @@ final class VoiceSessionControllerTests: XCTestCase {
             networkMonitor: TestNetworkMonitor(),
             reconnectDelays: reconnectDelays,
             protocolReadyTimeout: protocolReadyTimeout,
-            voiceActivityConfiguration: testVADConfiguration
+            voiceActivityConfiguration: testVADConfiguration,
+            outboundAudioBatchBytes: 640
         )
         addTeardownBlock { [controller] in
             await controller.endCurrentCall()
@@ -2010,6 +2011,7 @@ final class VoiceSessionControllerTests: XCTestCase {
             reconnectDelays: [.milliseconds(1)],
             protocolReadyTimeout: .milliseconds(200),
             voiceActivityConfiguration: testVADConfiguration,
+            outboundAudioBatchBytes: 640,
             captureWatchdogInterval: captureWatchdogInterval,
             captureStallThreshold: captureStallThreshold
         )

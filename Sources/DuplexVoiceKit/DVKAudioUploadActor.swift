@@ -45,6 +45,11 @@ public struct DVKAudioUploadDiagnosticsSnapshot: Sendable, Equatable {
     public internal(set) var lastFiveSentChunkIndices: [Int] = []
     public internal(set) var lastSendFailureCategory = ""
     public internal(set) var generationStartedAt: Date?
+    public internal(set) var captureToProcessingLagMilliseconds = 0
+    public internal(set) var maxCaptureToProcessingLagMilliseconds = 0
+    public internal(set) var lastCapturePacketMilliseconds = 0
+    public internal(set) var maxCapturePacketMilliseconds = 0
+    public internal(set) var outboundBatchBytes = 0
 }
 
 final class DVKAudioUploadDiagnosticsStore: @unchecked Sendable {
@@ -265,12 +270,22 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
     private var acceptingAudio = false
     private var utteranceOpen = false
     private var pendingPCM16 = Data()
+    private var pendingOutboundPCM16 = Data()
+    private let outboundBatchBytes: Int
+    private let allowsContinuousInput: Bool
     private var activeDrainTasks = 0
     private var failureNotifiedGeneration: Int?
     private var backpressureNotifiedGeneration: Int?
 
-    init(transport: any DVKOutboundTransport, queueCapacity: Int = 100) {
+    init(
+        transport: any DVKOutboundTransport,
+        queueCapacity: Int = 100,
+        outboundBatchBytes: Int = 640,
+        allowsContinuousInput: Bool = false
+    ) {
         self.transport = transport
+        self.outboundBatchBytes = max(640, outboundBatchBytes - (outboundBatchBytes % 2))
+        self.allowsContinuousInput = allowsContinuousInput
         ingress = DVKAudioUploadIngress(capacity: queueCapacity)
     }
 
@@ -313,6 +328,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         nextChunkIndex = 0
         captureGeneration = 0
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         utteranceOpen = false
         active = true
         ready = false
@@ -325,6 +341,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         freshDiagnostics.active = true
         freshDiagnostics.maxActiveDrainTasks = activeDrainTasks
         freshDiagnostics.generationStartedAt = Date()
+        freshDiagnostics.outboundBatchBytes = outboundBatchBytes
         diagnostics.reset(freshDiagnostics)
         publishDiagnostics()
         if let lastReceivedServerSequence {
@@ -347,6 +364,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         captureGeneration = generation
         acceptingAudio = true
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         publishDiagnostics()
     }
 
@@ -354,6 +372,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         acceptingAudio = false
         captureGeneration &+= 1
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         publishDiagnostics()
     }
 
@@ -389,6 +408,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         acceptingAudio = false
         utteranceOpen = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.inactiveConnection
@@ -459,9 +479,30 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
             diagnostics.update { $0.rejectedAfterCloseCommands += 1 }
             return
         }
+        let processingLagMilliseconds = max(
+            0,
+            Int(Date().timeIntervalSince(packet.capturedAt) * 1_000)
+        )
+        let packetMilliseconds = max(
+            0,
+            Int((Double(packet.frameCount) / Double(max(1, packet.sampleRate))) * 1_000)
+        )
+        diagnostics.update {
+            $0.captureToProcessingLagMilliseconds = processingLagMilliseconds
+            $0.maxCaptureToProcessingLagMilliseconds = max(
+                $0.maxCaptureToProcessingLagMilliseconds,
+                processingLagMilliseconds
+            )
+            $0.lastCapturePacketMilliseconds = packetMilliseconds
+            $0.maxCapturePacketMilliseconds = max(
+                $0.maxCapturePacketMilliseconds,
+                packetMilliseconds
+            )
+        }
         if packet.captureGeneration > captureGeneration {
             captureGeneration = packet.captureGeneration
             pendingPCM16.removeAll(keepingCapacity: false)
+            pendingOutboundPCM16.removeAll(keepingCapacity: false)
             publishDiagnostics()
         } else if packet.captureGeneration < captureGeneration {
             diagnostics.update { $0.droppedStaleGenerationChunks += 1 }
@@ -516,7 +557,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                 await notificationHandler?(.interruptSent(responseID: responseID))
             }
         case .audio(let data):
-            guard utteranceOpen else {
+            guard utteranceOpen || allowsContinuousInput else {
                 diagnostics.update { $0.rejectedAfterCloseCommands += 1 }
                 return
             }
@@ -524,41 +565,18 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                   data.count.isMultiple(of: 2) else {
                 throw DVKAudioUploadError.invalidAudioChunk
             }
-            let index = nextChunkIndex
-            let message = codec.makeMessage(
-                type: .audioAppend,
-                sessionID: sessionID,
-                traceID: traceID,
-                payload: [
-                    "format": .string(DVKProtocolCodec.format),
-                    "sample_rate": .int(DVKProtocolCodec.sampleRate),
-                    "channels": .int(DVKProtocolCodec.channels),
-                    "chunk_index": .int(index),
-                    "audio": .string(data.base64EncodedString())
-                ]
-            )
-            do {
-                try await transport.send(message)
-            } catch {
-                await failSend(error, generation: sendingGeneration)
-                throw DVKAudioUploadError.sendFailed
+            pendingOutboundPCM16.append(data)
+            while pendingOutboundPCM16.count >= outboundBatchBytes {
+                let batch = Data(pendingOutboundPCM16.prefix(outboundBatchBytes))
+                pendingOutboundPCM16.removeFirst(outboundBatchBytes)
+                try await sendAudioChunk(
+                    batch,
+                    connectionGeneration: sendingGeneration
+                )
             }
-            guard active,
-                  sendingGeneration == activeConnectionGeneration else {
-                throw DVKAudioUploadError.inactiveConnection
-            }
-            nextChunkIndex += 1
-            diagnostics.update {
-                $0.nextChunkIndex = nextChunkIndex
-                $0.sentAudioChunks += 1
-                $0.lastFiveSentChunkIndices.append(index)
-                if $0.lastFiveSentChunkIndices.count > 5 {
-                    $0.lastFiveSentChunkIndices.removeFirst()
-                }
-            }
-            await notificationHandler?(.audioSent(bytes: data.count, chunkIndex: index))
         case .commit:
             guard utteranceOpen else { return }
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
             try await sendMessage(
                 .audioCommit,
                 connectionGeneration: sendingGeneration
@@ -586,6 +604,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                 connectionGeneration: sendingGeneration
             )
         case .audioCommit:
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
             try await sendMessage(
                 .audioCommit,
                 connectionGeneration: sendingGeneration
@@ -610,6 +629,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                 connectionGeneration: sendingGeneration
             )
         case .sessionEnd:
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
             try await sendMessage(.sessionEnd, connectionGeneration: sendingGeneration)
         case .ping:
             try await sendMessage(.ping, connectionGeneration: sendingGeneration)
@@ -644,6 +664,62 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         diagnostics.update { $0.sentControlCommands += 1 }
     }
 
+    private func flushPendingAudio(connectionGeneration sendingGeneration: Int) async throws {
+        guard !pendingOutboundPCM16.isEmpty else { return }
+        let data = pendingOutboundPCM16
+        pendingOutboundPCM16.removeAll(keepingCapacity: true)
+        try await sendAudioChunk(data, connectionGeneration: sendingGeneration)
+    }
+
+    private func sendAudioChunk(
+        _ data: Data,
+        connectionGeneration sendingGeneration: Int
+    ) async throws {
+        guard active,
+              ready,
+              sendingGeneration == activeConnectionGeneration else {
+            throw DVKAudioUploadError.inactiveConnection
+        }
+        guard !data.isEmpty,
+              data.count <= DVKProtocolCodec.maximumChunkBytes,
+              data.count.isMultiple(of: 2) else {
+            throw DVKAudioUploadError.invalidAudioChunk
+        }
+        let index = nextChunkIndex
+        let message = codec.makeMessage(
+            type: .audioAppend,
+            sessionID: sessionID,
+            traceID: traceID,
+            payload: [
+                "format": .string(DVKProtocolCodec.format),
+                "sample_rate": .int(DVKProtocolCodec.sampleRate),
+                "channels": .int(DVKProtocolCodec.channels),
+                "chunk_index": .int(index),
+                "audio": .string(data.base64EncodedString())
+            ]
+        )
+        do {
+            try await transport.send(message)
+        } catch {
+            await failSend(error, generation: sendingGeneration)
+            throw DVKAudioUploadError.sendFailed
+        }
+        guard active,
+              sendingGeneration == activeConnectionGeneration else {
+            throw DVKAudioUploadError.inactiveConnection
+        }
+        nextChunkIndex += 1
+        diagnostics.update {
+            $0.nextChunkIndex = nextChunkIndex
+            $0.sentAudioChunks += 1
+            $0.lastFiveSentChunkIndices.append(index)
+            if $0.lastFiveSentChunkIndices.count > 5 {
+                $0.lastFiveSentChunkIndices.removeFirst()
+            }
+        }
+        await notificationHandler?(.audioSent(bytes: data.count, chunkIndex: index))
+    }
+
     private func failBackpressure(generation: Int) async {
         guard generation == activeConnectionGeneration else { return }
         guard active else { return }
@@ -655,6 +731,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         ready = false
         acceptingAudio = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.queueBackpressure
@@ -681,6 +758,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         ready = false
         acceptingAudio = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.sendFailed

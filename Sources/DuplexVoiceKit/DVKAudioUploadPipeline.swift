@@ -16,11 +16,15 @@ public final class DVKAudioUploadPipeline: @unchecked Sendable, DVKAudioCaptureS
     /// Creates a serial upload pipeline that sends through the host application's existing transport.
     public init(
         outboundTransport: any DVKOutboundTransport,
-        queueCapacity: Int = DVKAudioConfiguration.realtimeVoice.uploadQueueCapacity
+        queueCapacity: Int = DVKAudioConfiguration.realtimeVoice.uploadQueueCapacity,
+        outboundAudioBatchBytes: Int = 640,
+        allowsContinuousInput: Bool = false
     ) {
         actor = DVKAudioUploadActor(
             transport: outboundTransport,
-            queueCapacity: queueCapacity
+            queueCapacity: queueCapacity,
+            outboundBatchBytes: outboundAudioBatchBytes,
+            allowsContinuousInput: allowsContinuousInput
         )
     }
 

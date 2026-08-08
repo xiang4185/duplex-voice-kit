@@ -97,7 +97,7 @@ final class SmallThingsStore: ObservableObject {
             entries = state.entries
             await hydrateRemoteImages(using: service)
         } catch {
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
         }
     }
 
@@ -193,7 +193,7 @@ final class SmallThingsStore: ObservableObject {
             if let currentIndex = entries.firstIndex(where: { $0.id == entryID }) {
                 entries[currentIndex].reacted = previous
             }
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
         }
     }
 
@@ -225,7 +225,7 @@ final class SmallThingsStore: ObservableObject {
             if let currentEntryIndex = entries.firstIndex(where: { $0.id == entryID }) {
                 entries[currentEntryIndex].comments.removeAll { $0.id == temporaryID }
             }
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
             return false
         }
     }
@@ -293,7 +293,7 @@ final class SmallThingsStore: ObservableObject {
                let currentCommentIndex = entries[currentEntryIndex].comments.firstIndex(where: { $0.id == commentID }) {
                 entries[currentEntryIndex].comments[currentCommentIndex].replies.removeAll { $0.id == temporaryID }
             }
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
             return false
         }
     }
@@ -335,7 +335,7 @@ final class SmallThingsStore: ObservableObject {
             await hydrateRemoteImages(using: service)
             return true
         } catch {
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
             return false
         }
     }
@@ -373,7 +373,7 @@ final class SmallThingsStore: ObservableObject {
             bindingFeedback = .idle
             return true
         } catch {
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
             return false
         }
     }
@@ -609,7 +609,7 @@ final class SmallThingsStore: ObservableObject {
             await hydrateRemoteImages(using: service)
             return true
         } catch {
-            operationError = Self.userFacingMessage(for: error)
+            operationError = handleServiceError(error)
             validationMessage = operationError
             return false
         }
@@ -658,6 +658,14 @@ final class SmallThingsStore: ObservableObject {
         case .audio:
             return "操作失败，请稍后重试。"
         }
+    }
+
+    private func handleServiceError(_ error: Error) -> String {
+        if let appError = error as? AppError,
+           case .unauthorized = appError {
+            NotificationCenter.default.post(name: .credentialsExpired, object: nil)
+        }
+        return Self.userFacingMessage(for: error)
     }
 
     static func validAmount(from text: String) -> Double? {

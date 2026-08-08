@@ -137,6 +137,7 @@ final class VoiceSessionController: ObservableObject {
         ],
         protocolReadyTimeout: Duration = .seconds(8),
         voiceActivityConfiguration: VoiceActivityConfiguration = .realtimeDefault,
+        outboundAudioBatchBytes: Int = 3_200,
         captureWatchdogInterval: Duration = .seconds(1),
         captureStallThreshold: Duration = .seconds(2),
         maxCaptureRecoveryAttempts: Int = 2
@@ -154,7 +155,11 @@ final class VoiceSessionController: ObservableObject {
         self.maxCaptureRecoveryAttempts = max(1, maxCaptureRecoveryAttempts)
         self.audioIOHealthReporter = capture as? RealtimeAudioIOHealthReporting
         self.usesSharedAudioIO = (capture as AnyObject) === (playback as AnyObject)
-        let audioUploader = AudioUploadActor(socket: socket)
+        let audioUploader = AudioUploadActor(
+            socket: socket,
+            outboundAudioBatchBytes: outboundAudioBatchBytes,
+            allowsContinuousInput: true
+        )
         self.audioUploader = audioUploader
         self.voiceActivityDetector = VoiceActivityDetector(
             configuration: voiceActivityConfiguration
@@ -319,6 +324,11 @@ final class VoiceSessionController: ObservableObject {
             uploadLastFiveSentChunkIndices: uploadHealth.lastFiveSentChunkIndices,
             uploadLastSendFailureCategory: uploadHealth.lastSendFailureCategory,
             uploadGenerationStartedAt: uploadHealth.generationStartedAt,
+            uploadCaptureToProcessingLagMilliseconds: uploadHealth.captureToProcessingLagMilliseconds,
+            uploadMaxCaptureToProcessingLagMilliseconds: uploadHealth.maxCaptureToProcessingLagMilliseconds,
+            uploadLastCapturePacketMilliseconds: uploadHealth.lastCapturePacketMilliseconds,
+            uploadMaxCapturePacketMilliseconds: uploadHealth.maxCapturePacketMilliseconds,
+            uploadOutboundBatchBytes: uploadHealth.outboundBatchBytes,
             playbackActive: isPlaybackActive,
             lastSpeechDurationMilliseconds: lastSpeechDurationMilliseconds,
             lastEndingSilenceMilliseconds: lastEndingSilenceMilliseconds,
@@ -853,6 +863,9 @@ final class VoiceSessionController: ObservableObject {
         if info.errorCategory != "cancelled" {
             errorMessage = userMessage(for: info)
         }
+        if info.errorCategory == "unauthorized" {
+            NotificationCenter.default.post(name: .credentialsExpired, object: nil)
+        }
         VoiceLog.websocket.error(
             "websocket_closed code=\(info.closeCode ?? 0) category=\(info.errorCategory) recoverable=\(info.recoverable)"
         )
@@ -1191,7 +1204,13 @@ final class VoiceSessionController: ObservableObject {
         vadState = analysis.state
         vadNormalizedRMS = analysis.normalizedRMS
         vadEnergyBand = analysis.energyBand
-        var intents: [AudioUploadIntent] = []
+        // In normal listening mode the Provider must see the microphone clock in
+        // realtime, including leading/trailing silence. Local VAD is control-plane
+        // only: it reports speech state and decides when to commit, but it must not
+        // hold the first ~200 ms of speech behind candidate confirmation/pre-roll.
+        // During assistant playback we retain the existing barge-in pre-roll behavior
+        // so unconfirmed echo/noise is not streamed upstream.
+        var intents: [AudioUploadIntent] = mode == .listening ? [.audio(data)] : []
 
         for action in analysis.actions {
             switch action {
@@ -1218,10 +1237,14 @@ final class VoiceSessionController: ObservableObject {
                 let interruptResponseID = bargeIn ? prepareAutomaticBargeIn() : nil
                 if !bargeIn { state = .listening }
                 intents.append(.beginUtterance(interruptResponseID: interruptResponseID))
-                intents.append(contentsOf: frames.map(AudioUploadIntent.audio))
+                if bargeIn {
+                    intents.append(contentsOf: frames.map(AudioUploadIntent.audio))
+                }
 
             case .audio(let frame):
-                intents.append(.audio(frame))
+                if mode == .bargeIn {
+                    intents.append(.audio(frame))
+                }
 
             case .commit(_, let speechDuration, let endingSilence):
                 automaticCommitCount += 1

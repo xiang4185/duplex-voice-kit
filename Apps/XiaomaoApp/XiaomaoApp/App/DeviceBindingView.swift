@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DeviceBindingView: View {
+    @State private var connectionBundle = ""
     @State private var token = ""
     @State private var apiBaseURL = ""
     @State private var voiceWebSocketURL = ""
@@ -23,6 +24,24 @@ struct DeviceBindingView: View {
                  : configurationMessage)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            SecureField("一键配置串（XM1…）", text: $connectionBundle)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.password)
+                .textFieldStyle(.roundedBorder)
+            Button("导入并继续") {
+                importBundleAndSave()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(connectionBundle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text("一次粘贴即可导入 Backend、Voice、设备 ID 和 Token。配置串按密钥处理，不会显示其中内容。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Divider()
+            Text("或手动填写")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             TextField("Backend HTTPS URL", text: $apiBaseURL)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
@@ -60,6 +79,22 @@ struct DeviceBindingView: View {
             hasStoredToken = !RuntimeCredentialNormalizer
                 .token(tokenStore.load() ?? "")
                 .isEmpty
+        }
+    }
+
+    private func importBundleAndSave() {
+        do {
+            let bundle = try RuntimeConnectionBundle.decode(connectionBundle)
+            apiBaseURL = bundle.configuration.apiBaseURL.absoluteString
+            voiceWebSocketURL = bundle.configuration.voiceWebSocketURL.absoluteString
+            deviceIDInput = bundle.configuration.deviceID
+            token = bundle.token
+            errorMessage = ""
+            saveConfiguration()
+            connectionBundle = ""
+        } catch {
+            token = ""
+            errorMessage = "配置串无效，请重新复制完整的 XM1 配置串。"
         }
     }
 

@@ -67,6 +67,7 @@ extension Notification.Name {
     static let toggleMuteFromActivity = Notification.Name("xiaomao.toggleMute")
     static let hangupFromActivity = Notification.Name("xiaomao.hangup")
     static let reconfigureConnection = Notification.Name("xiaomao.reconfigureConnection")
+    static let credentialsExpired = Notification.Name("xiaomao.credentialsExpired")
 }
 
 private struct RootView: View {
@@ -146,6 +147,14 @@ private struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .reconfigureConnection)) { _ in
             activeCall = false
             coordinator.screen = .binding
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .credentialsExpired)) { _ in
+            activeCall = false
+            Task { @MainActor in
+                await coordinator.voiceController.endCurrentCall()
+                try? coordinator.tokenStore.clear()
+                coordinator.screen = .binding
+            }
         }
         .onReceive(coordinator.voiceController.$callIsActive.removeDuplicates()) { active in
             if active {

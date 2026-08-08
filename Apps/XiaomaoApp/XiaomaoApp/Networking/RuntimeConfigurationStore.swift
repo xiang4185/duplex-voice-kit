@@ -7,6 +7,96 @@ struct RuntimeConfiguration: Codable, Equatable, Sendable {
     let deviceID: String
 }
 
+enum RuntimeConnectionBundleError: Error, Equatable {
+    case invalidFormat
+    case invalidConfiguration
+}
+
+struct RuntimeConnectionBundle: Equatable, Sendable {
+    private struct Payload: Codable, Equatable, Sendable {
+        let backend: String
+        let voice: String
+        let device: String
+        let token: String
+    }
+
+    static let prefix = "XM1."
+
+    let configuration: RuntimeConfiguration
+    let token: String
+
+    static func decode(_ value: String) throws -> RuntimeConnectionBundle {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.hasPrefix(prefix) else {
+            throw RuntimeConnectionBundleError.invalidFormat
+        }
+        let encoded = String(normalized.dropFirst(prefix.count))
+        guard !encoded.isEmpty,
+              let data = Data(base64URLString: encoded),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            throw RuntimeConnectionBundleError.invalidFormat
+        }
+
+        let backend = payload.backend.trimmingCharacters(in: .whitespacesAndNewlines)
+        let voice = payload.voice.trimmingCharacters(in: .whitespacesAndNewlines)
+        let device = RuntimeCredentialNormalizer.deviceID(payload.device)
+        let token = RuntimeCredentialNormalizer.token(payload.token)
+        guard let backendURL = URL(string: backend),
+              backendURL.scheme?.lowercased() == "https",
+              backendURL.host?.isEmpty == false,
+              let voiceURL = URL(string: voice),
+              voiceURL.scheme?.lowercased() == "wss",
+              voiceURL.host?.isEmpty == false,
+              !device.isEmpty,
+              !token.isEmpty else {
+            throw RuntimeConnectionBundleError.invalidConfiguration
+        }
+        return RuntimeConnectionBundle(
+            configuration: RuntimeConfiguration(
+                apiBaseURL: backendURL,
+                voiceWebSocketURL: voiceURL,
+                deviceID: device
+            ),
+            token: token
+        )
+    }
+
+    static func encode(configuration: RuntimeConfiguration, token: String) throws -> String {
+        let normalizedToken = RuntimeCredentialNormalizer.token(token)
+        guard !normalizedToken.isEmpty else {
+            throw RuntimeConnectionBundleError.invalidConfiguration
+        }
+        let payload = Payload(
+            backend: configuration.apiBaseURL.absoluteString,
+            voice: configuration.voiceWebSocketURL.absoluteString,
+            device: RuntimeCredentialNormalizer.deviceID(configuration.deviceID),
+            token: normalizedToken
+        )
+        let data = try JSONEncoder().encode(payload)
+        return prefix + data.base64URLEncodedString()
+    }
+}
+
+private extension Data {
+    init?(base64URLString: String) {
+        var base64 = base64URLString
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder != 0 {
+            base64.append(String(repeating: "=", count: 4 - remainder))
+        }
+        self.init(base64Encoded: base64)
+    }
+
+    func base64URLEncodedString() -> String {
+        base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+}
+
 protocol RuntimeConfigurationStoring: Sendable {
     func load() -> RuntimeConfiguration?
     func save(_ configuration: RuntimeConfiguration) throws

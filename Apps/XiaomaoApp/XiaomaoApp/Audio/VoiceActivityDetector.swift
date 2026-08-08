@@ -13,5 +13,5 @@ extension DVKVoiceActivityConfiguration {
     /// Xiaomao host tuning: preserve the proven Core thresholds and only shorten
     /// the end-of-utterance silence window so a completed sentence is committed
     /// earlier. Public Core defaults remain unchanged for other hosts.
-    static let xiaomaoRealtime = realtimeDefault.replacingEndSilence(milliseconds: 480)
+    static let xiaomaoRealtime = realtimeDefault.replacingEndSilence(milliseconds: 400)
 }
