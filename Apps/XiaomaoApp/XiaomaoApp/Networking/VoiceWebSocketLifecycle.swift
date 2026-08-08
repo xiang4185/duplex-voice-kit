@@ -139,7 +139,7 @@ enum VoiceWebSocketErrorClassifier {
         error: Error? = nil
     ) -> VoiceWebSocketDisconnectInfo {
         let nsError = error.map { $0 as NSError }
-        VoiceWebSocketDisconnectInfo(
+        return VoiceWebSocketDisconnectInfo(
             closeCode: closeCode,
             recoverable: recoverable,
             errorCategory: errorCategory,
