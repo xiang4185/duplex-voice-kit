@@ -166,8 +166,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(controller.contains("captureCallbackCount > 0"))
         XCTAssertTrue(controller.contains("isConversationReady"))
         XCTAssertTrue(controller.contains("schedulePostResponseCaptureCheck"))
-        XCTAssertTrue(controller.contains("try await probeWebSocket()"),
-                      "取消静音和心跳必须能主动探测半断开的 WebSocket")
+        XCTAssertTrue(controller.contains("try await self.probeWebSocket()"),
+                      "心跳必须能主动探测半断开的 WebSocket")
+        XCTAssertTrue(controller.contains("playback.setMuted(muted)"),
+                      "静音必须只走本地播放输出路径")
         XCTAssertTrue(diagnostics.contains("presentation_to_audio_session_ms"))
         XCTAssertTrue(diagnostics.contains("presentation_to_websocket_ms"))
         XCTAssertTrue(diagnostics.contains("presentation_to_session_ready_ms"))
