@@ -66,6 +66,13 @@ public final class DVKAudioSessionController {
             options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
         )
         try session.setPreferredSampleRate(configuration.captureSampleRate)
+        // Match the capture packet clock to the realtime upload clock. AVAudioEngine's
+        // tap bufferSize is only a request; without an IO-buffer preference some real
+        // devices deliver much larger callback buffers, which creates bursty upload
+        // work and can put VAD behind the microphone clock.
+        let preferredIOBufferDuration = Double(configuration.captureBufferFrames)
+            / configuration.captureSampleRate
+        try? session.setPreferredIOBufferDuration(preferredIOBufferDuration)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
         isActive = true
         refreshRoute()

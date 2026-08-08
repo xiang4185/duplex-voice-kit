@@ -5,67 +5,93 @@ struct ChatMessageBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
-            if message.role == .user {
-                Spacer(minLength: Theme.Spacing.xxxLarge)
+            if message.participant == .user {
+                Spacer(minLength: 56)
+                bubble
             } else {
                 avatar
-            }
-
-            VStack(
-                alignment: message.role == .user ? .trailing : .leading,
-                spacing: Theme.Spacing.xxSmall
-            ) {
-                Text(message.content)
-                    .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textPrimary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, 10)
-                    .background(bubbleSurface)
-                    .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: Theme.Radius.medium,
-                            style: .continuous
-                        )
-                    )
-
-                Text(message.createdAt, style: .time)
-                    .font(Theme.captionFont)
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.horizontal, Theme.Spacing.xxSmall)
-            }
-
-            if message.role == .assistant {
-                Spacer(minLength: Theme.Spacing.xxxLarge)
+                bubble
+                Spacer(minLength: 44)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, Theme.Spacing.medium)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(message.participant.displayName)：\(message.content)")
         .accessibilityIdentifier("chat.message.\(message.id)")
     }
 
+    private var bubble: some View {
+        VStack(
+            alignment: message.participant == .user ? .trailing : .leading,
+            spacing: 5
+        ) {
+            if message.participant != .user {
+                Text(message.participant.displayName)
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 3)
+            }
+
+            Text(message.content)
+                .font(Theme.bodyFont)
+                .foregroundStyle(Theme.textPrimary)
+                .textSelection(.enabled)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(bubbleSurface)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(bubbleBorder, lineWidth: 1)
+                }
+                .shadow(color: Theme.shadowRaised, radius: 5, x: 0, y: 2)
+
+            Text(message.createdAt, style: .time)
+                .font(.system(size: 10, weight: .regular, design: .rounded))
+                .foregroundStyle(Theme.textTertiary)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    @ViewBuilder
     private var avatar: some View {
-        Image(systemName: "cat.fill")
-            .font(.system(size: 15, weight: .semibold))
-            .frame(width: 32, height: 32)
-            .foregroundStyle(Theme.primary)
-            .background(Theme.primarySoft)
-            .clipShape(Circle())
-            .accessibilityHidden(true)
+        switch message.participant {
+        case .developer:
+            Text("开")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Theme.primary)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+        case .xiaomao:
+            Text("🐱")
+                .font(.system(size: 20))
+                .frame(width: 34, height: 34)
+                .background(Color(hex: 0xFFF0E7))
+                .clipShape(Circle())
+                .overlay { Circle().stroke(Theme.border, lineWidth: 1) }
+                .accessibilityHidden(true)
+        case .user:
+            EmptyView()
+        }
     }
 
     private var bubbleSurface: Color {
-        message.role == .user
-            ? Theme.userMessageSurface
-            : Theme.assistantMessageSurface
+        switch message.participant {
+        case .user: Color(hex: 0xF9DCE3)
+        case .developer: Theme.surface
+        case .xiaomao: Color(hex: 0xFBEADF)
+        }
     }
 
-    private var accessibilityText: String {
-        message.role == .user
-            ? "你：\(message.content)"
-            : "小猫：\(message.content)"
+    private var bubbleBorder: Color {
+        switch message.participant {
+        case .user: Theme.primary.opacity(0.14)
+        case .developer: Theme.border.opacity(0.85)
+        case .xiaomao: Color(hex: 0xF3D8C8)
+        }
     }
 }

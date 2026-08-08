@@ -1,13 +1,39 @@
 import SwiftUI
 
 struct SmallThingsRootView: View {
-    @StateObject private var store = SmallThingsStore()
+    @ObservedObject var store: SmallThingsStore
     @State private var path: [SmallThingsRoute] = []
+
+    init(store: SmallThingsStore) {
+        self.store = store
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 LazyVStack(spacing: Theme.Spacing.medium) {
+                    if store.isLoading && store.entries.isEmpty {
+                        ProgressView("正在加载小事…")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.xLarge)
+                    }
+
+                    if let error = store.operationError {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text(error)
+                                .font(Theme.subheadFont)
+                                .foregroundStyle(Theme.textPrimary)
+                            Button("重试") {
+                                Task { await store.refreshFromBackend() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.primary)
+                        }
+                        .padding(Theme.Spacing.medium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .warmCard()
+                    }
+
                     SmallThingsLedgerCard(
                         store: store,
                         addExpense: { path.append(.composer(.expense)) },
@@ -39,6 +65,11 @@ struct SmallThingsRootView: View {
             }
         }
         .accessibilityIdentifier("smallThings.root")
+        .task {
+            if store.isProduction {
+                await store.refreshFromBackend()
+            }
+        }
     }
 
     private var flowHeader: some View {

@@ -2,11 +2,11 @@ import SwiftUI
 import UIKit
 
 // MARK: - 屏 3 陪聊主界面 / 通话中 (VoiceCallView)
-// v6.1 视觉: 呼吸形象(隐私头像) + 情绪气泡 + 波形 + 控制区(关心我/静音/挂断/换个提示)
+// v6.1 视觉: 呼吸形象(隐私头像) + 情绪气泡 + 头像涟漪 + 控制区(关心我/静音/挂断/换个提示)
 // 保留 VoiceCallViewModel 全部逻辑; 挂断二次确认 + 情绪共情浮层
 // P2.7B-HOME-CALL-VISUAL-POLISH:
 // · 主视觉切换为完整形象 portrait 模式 (新小猫图, 2:3 自然比例 + 底部柔边渐隐 + halo 融合)
-// · 整体节奏更清晰: 顶部状态区紧凑 / 中央人物区更有存在感 / 波形与人物关系更自然
+// · 整体节奏更清晰: 顶部状态区紧凑 / 中央人物区更有存在感 / 语音反馈改为头像后自然扩散涟漪
 // · 三按钮(静音/挂断/换个提示)布局更稳, 间距统一
 // · 结束确认弹窗圆角与高光与主页卡片统一 (cardTopHighlight)
 // · 免按键用户提示恢复 (P2.7B-FIX): 普通界面显示"直接说话就好, 小猫在听"
@@ -93,34 +93,41 @@ struct VoiceCallView: View {
                     .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
                     // P2.8A: 首次连接加载反馈 (idle/connecting 时浮在人物上方, .ready 自动淡出)
                     .overlay {
-                        if viewModel.controller.state == .idle
-                            || viewModel.controller.state == .connecting {
+                        if !viewModel.controller.hasCompletedInitialConnection,
+                           viewModel.controller.state != .failed,
+                           viewModel.controller.state != .closed,
+                           viewModel.controller.state != .closing {
                             connectingCard
                                 .transition(.opacity)
                         }
                     }
 
                 // 名字 (宋体)
-                Text("小猫")
+                Text(CompanionRoleStore.shared.productionRole.displayName)
                     .font(Theme.title3Font)
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.top, 4)
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
 
-                // 转写 / 回复文本 (P2.7B-FIX: lineLimit 2 控制纵向占用)
-                // P2.7B-FINAL-VISUAL-FIX: 通过 displayConversationText 过滤孤立纯标点,
-                // 仅展示包含字母/数字/中文/Emoji 等实质字符的会话文字.
-                if let text = displayConversationText {
-                    Text(text)
-                        .font(Theme.subheadFont)
-                        .foregroundStyle(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 8)
-                        .opacity(appeared ? 1 : 0)
+                // 转写 / 回复文字使用固定高度槽位。
+                // 真机用户说话时 partial transcript 出现/消失不能改变 hero 布局，
+                // 避免人物形象上下跳造成“卡顿”观感。
+                ZStack(alignment: .top) {
+                    Color.clear
+                    if let text = displayConversationText {
+                        Text(text)
+                            .font(Theme.subheadFont)
+                            .foregroundStyle(Theme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, 32)
+                            .transition(.opacity)
+                    }
                 }
+                .frame(height: 46)
+                .padding(.top, 8)
+                .opacity(appeared ? 1 : 0)
 
                 if viewModel.controller.state == .reconnecting {
                     Text(viewModel.controller.reconnectStatusText)
@@ -195,12 +202,6 @@ struct VoiceCallView: View {
         }
         .task {
             UIApplication.shared.isIdleTimerDisabled = true
-            // P2.6A: 启动 Live Activity, 传入 controller 驱动真实状态 (幂等, 前后台不重复创建)
-            // P2.6D: Live Activity 一律使用生产语音角色 (恒为小猫), 不随预览角色变化
-            CallLiveActivityManager.shared.start(
-                characterName: CompanionRoleStore.shared.productionRole.displayName,
-                controller: viewModel.controller
-            )
             // P2.6H: 先显示页面, 再建立语音会话 — 连接耗时不再表现为页面空白/卡顿
             appeared = true
             await Task.yield()
@@ -230,8 +231,6 @@ struct VoiceCallView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
-            // P2.6B-FIX-1: 统一结束路径 — 视图已消失, 无需手动 close
-            finishCall(closePage: false)
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -239,17 +238,6 @@ struct VoiceCallView: View {
             case .active: viewModel.enterForeground()
             default: break
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleMuteFromActivity)) { _ in
-            // 灵动岛静音按钮 → 直通主 App (状态由 controller 统一管理, UI 无需本地 toggle)
-            if viewModel.canMute {
-                viewModel.toggleMute()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .hangupFromActivity)) { _ in
-            // 灵动岛挂断按钮 → 直通主 App (统一结束路径, 防重复由 finishCall 保证)
-            WarmHaptics.action()
-            finishCall()
         }
         .sheet(isPresented: $showDiagnostics) {
             diagnosticsSheet
@@ -272,13 +260,12 @@ struct VoiceCallView: View {
         }
     }
 
-    // MARK: 顶部栏 (P2.7B-FIX: 移除公开 stethoscope 诊断按钮; P2.8A: 左上为结束确认, 不直接结束)
+    // MARK: 顶部栏 — 左上仅收起页面，通话生命周期保持不变
     private var topBar: some View {
         HStack {
             Button {
-                // P2.8A: 左上关闭 → 显示挂断确认 (与底部挂断共用同一确认浮层), 不直接 finishCall
                 WarmHaptics.action()
-                withAnimation(.easeOut(duration: 0.28)) { showHangupConfirm = true }
+                close()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 17, weight: .medium))
@@ -287,7 +274,8 @@ struct VoiceCallView: View {
                     .background(Theme.surface.opacity(0.7), in: Circle())
                     .overlay(Circle().stroke(Theme.border, lineWidth: 1))
             }
-            .accessibilityLabel("结束通话")
+            .accessibilityLabel("收起通话")
+            .accessibilityHint("通话会继续，可从当前通话状态条重新进入")
             .accessibilityIdentifier("call.close")
 
             Spacer()
@@ -317,6 +305,14 @@ struct VoiceCallView: View {
 
     // P2.6J: 通话状态文案 (纯 UI 映射, 不接入连接流程)
     private var callStatusText: String {
+        if !viewModel.controller.hasCompletedInitialConnection,
+           viewModel.controller.state != .failed,
+           viewModel.controller.state != .closed,
+           viewModel.controller.state != .closing,
+           viewModel.controller.state != .reconnecting,
+           viewModel.controller.state != .degraded {
+            return "正在准备麦克风"
+        }
         switch viewModel.controller.state {
         case .idle, .connecting: return "正在连接小猫"
         case .ready, .listening, .endpointing: return "小猫正在听你说话"
@@ -331,6 +327,14 @@ struct VoiceCallView: View {
 
     // P2.6K: 通话状态点颜色 (与真实 Session 状态一致, 纯 UI 映射)
     private var callStatusColor: Color {
+        if !viewModel.controller.hasCompletedInitialConnection,
+           viewModel.controller.state != .failed,
+           viewModel.controller.state != .closed,
+           viewModel.controller.state != .closing,
+           viewModel.controller.state != .reconnecting,
+           viewModel.controller.state != .degraded {
+            return Theme.textTertiary
+        }
         switch viewModel.controller.state {
         case .idle, .connecting, .closing, .closed:
             return Theme.textTertiary
@@ -347,9 +351,9 @@ struct VoiceCallView: View {
     // P2.7B-FINAL-MESH: 删除背景循环光效状态; 仅保留人物极轻呼吸
     @State private var avatarBreathScale = false
 
-    // P2.7A: 正在聆听时麦克风轻微 pulse (ready/listening/endpointing 且未静音; Reduce Motion 停止; 非 Timer 驱动)
+    // 正在聆听时麦克风轻微 pulse；扬声器静音不影响持续采集。
     private var micPulseActive: Bool {
-        guard !viewModel.controller.isMuted, !reduceMotion else { return false }
+        guard !reduceMotion else { return false }
         switch viewModel.controller.state {
         case .ready, .listening, .endpointing: return true
         default: return false
@@ -399,6 +403,14 @@ struct VoiceCallView: View {
                         )
                     )
                     .frame(width: 380, height: 380)
+
+                VoiceAvatarAura(
+                    muted: viewModel.controller.isMuted,
+                    state: viewModel.controller.state,
+                    level: viewModel.controller.vadNormalizedRMS
+                )
+                .frame(width: availableSize * 1.52, height: availableSize * 1.38)
+                .accessibilityHidden(true)
 
                 // 底部光斑 (与 portrait 底部渐隐融合)
                 Ellipse()
@@ -532,20 +544,11 @@ struct VoiceCallView: View {
             .buttonStyle(PressableButtonStyle())
             .accessibilityIdentifier("call.care")
 
-            // 波形 (与人物关系: 在 hero 之下, 过渡柔和; P2.8A: 真实 vadNormalizedRMS 驱动)
-            VoiceWaveform(
-                active: !viewModel.controller.isMuted,
-                state: viewModel.controller.state,
-                level: viewModel.controller.vadNormalizedRMS
-            )
-            .frame(height: 36)
-            .accessibilityHidden(true)
-
             // 控制按钮行 (P2.7B: 三按钮布局更稳 — 间距统一, 与玻璃容器协调)
             GlassEffectContainer {
                 HStack(spacing: 36) {
                     controlButton(
-                        icon: viewModel.controller.isMuted ? "mic.slash.fill" : "mic.fill",
+                        icon: viewModel.controller.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                         title: viewModel.controller.isMuted ? "取消静音" : "静音",
                         style: viewModel.controller.isMuted ? .active : .normal,
                         identifier: "call.mute",
@@ -553,7 +556,6 @@ struct VoiceCallView: View {
                     ) {
                         viewModel.toggleMute()
                     }
-                    // P2.8A: 已静音时保持可点 — 断连但可恢复状态下取消静音会触发现有重连
                     .disabled(!viewModel.canMute && !viewModel.controller.isMuted)
                     .opacity((viewModel.canMute || viewModel.controller.isMuted) ? 1 : 0.4)
 
@@ -610,7 +612,7 @@ struct VoiceCallView: View {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(iconColor(style))
-                    // P2.7A: 静音图标 Symbol 替换过渡 (每次状态改变执行一次)
+                    // 扬声器静音图标 Symbol 替换过渡 (每次状态改变执行一次)
                     .contentTransition(.symbolEffect(.replace))
                     // P2.7A: 正在聆听时麦克风状态驱动轻微 pulse (非 Timer, 跟随 Reduce Motion)
                     .symbolEffect(.pulse, options: .repeating, isActive: micPulse)
@@ -909,37 +911,21 @@ struct VoiceCallView: View {
                 .padding(16)
                 .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 
-                HStack(spacing: 12) {
-                    Button {
-                        WarmHaptics.comfort()
-                        withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
-                        withAnimation(.easeOut(duration: 0.3)) { emotionBubbleVisible = true }
-                    } label: {
-                        Text("抱抱我")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                            .background(Theme.primary, in: Capsule())
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                    .accessibilityIdentifier("empathy.hug")
-
-                    Button {
-                        withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            topicIndex = (topicIndex + 1) % topics.count
-                        }
-                    } label: {
-                        Text("换个话题")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("empathy.topic")
+                // 不再放“抱抱我 / 换个话题”这类看起来会改变会话、实际却只是本地 UI 的假操作。
+                // 关心卡只负责展示陪伴文案；真正会改变通话的操作仍只有麦克风、挂断和真实语音输入。
+                Button {
+                    WarmHaptics.comfort()
+                    withAnimation(.easeIn(duration: 0.2)) { showEmpathy = false }
+                } label: {
+                    Text("继续通话")
+                        .font(Theme.headlineFont)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Theme.primary, in: Capsule())
                 }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityIdentifier("empathy.continue")
                 .padding(.top, 4)
 
                 Text(reasonCopy)
@@ -966,6 +952,14 @@ struct VoiceCallView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding(.top, 12)
+                Text(viewModel.controller.latencyDiagnosticText)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
                 Text(viewModel.controller.diagnosticText)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -976,7 +970,10 @@ struct VoiceCallView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(copiedDiagnostics ? "已复制" : "复制诊断信息") {
-                        UIPasteboard.general.string = viewModel.controller.diagnosticText
+                        UIPasteboard.general.string = [
+                            viewModel.controller.latencyDiagnosticText,
+                            viewModel.controller.diagnosticText
+                        ].joined(separator: "\n\n")
                         copiedDiagnostics = true
                     }
                 }
@@ -984,66 +981,159 @@ struct VoiceCallView: View {
                     Button("完成") { showDiagnostics = false }
                 }
             }
+            .task {
+                await viewModel.controller.refreshLatencyProbe()
+            }
         }
     }
 }
 
-// MARK: - 语音波形 (设计 §4.2, v6.1 西柚玫瑰; P2.8A: 真实 vadNormalizedRMS 驱动)
-struct VoiceWaveform: View {
-    let active: Bool
+// MARK: - 头像后流体氛围光
+struct VoiceAvatarAura: View {
+    let muted: Bool
     let state: VoiceSessionState
-    /// P2.8A: 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS
+    /// 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS。
     let level: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let barCount = 24
-    private let minBarHeight: CGFloat = 4
-    private let maxBarHeightRatio: CGFloat = 0.92
+    @State private var drifting = false
 
     var body: some View {
-        GeometryReader { geo in
-            let barWidth = geo.size.width / CGFloat(barCount) * 0.4
-            let spacing = (geo.size.width - barWidth * CGFloat(barCount)) / CGFloat(barCount - 1)
+        ZStack {
+            // 稳定的近场柔光：只随语音强度改变亮度，不改变几何尺寸。
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Theme.primarySoft.opacity(0.22 + 0.18 * activityStrength),
+                            Theme.roleGold.opacity(0.08 + 0.10 * activityStrength),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 10,
+                        endRadius: 170
+                    )
+                )
+                .blur(radius: 18)
+                .opacity(0.72 + 0.18 * activityStrength)
 
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(0..<barCount, id: \.self) { i in
-                    Capsule()
-                        .fill(barColor(i))
-                        .frame(width: barWidth, height: barHeight(i, geo: geo))
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: level)
-                }
+            // 成熟语音产品常用“纹理/光流变化”而不是同心圆扩张。
+            // 这里用几团无轮廓、非对称的柔光缓慢漂移；真实音量只改变光强。
+            ForEach(0..<4, id: \.self) { index in
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                auraColor(index).opacity(0.12 + 0.16 * activityStrength),
+                                auraColor(index).opacity(0.045 + 0.075 * activityStrength),
+                                .clear
+                            ],
+                            center: auraCenter(index),
+                            startRadius: 8,
+                            endRadius: 135 + CGFloat(index) * 10
+                        )
+                    )
+                    .frame(width: auraWidth(index), height: auraHeight(index))
+                    .rotationEffect(.degrees(
+                        reduceMotion
+                            ? auraRotationA(index)
+                            : (drifting ? auraRotationB(index) : auraRotationA(index))
+                    ))
+                    .offset(
+                        x: reduceMotion ? 0 : (drifting ? auraOffsetB(index).width : auraOffsetA(index).width),
+                        y: reduceMotion ? 0 : (drifting ? auraOffsetB(index).height : auraOffsetA(index).height)
+                    )
+                    .blur(radius: 24 + CGFloat(index) * 3)
+                    .opacity(0.56 + 0.24 * activityStrength)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeInOut(duration: auraDuration(index))
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.33),
+                        value: drifting
+                    )
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+        .compositingGroup()
+        .onAppear { drifting = true }
+        .onDisappear { drifting = false }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: level)
         .accessibilityHidden(true)
     }
 
-    /// 柱高: 静音/不活跃 → 平直低幅; 活跃聆听 → 随 level 变化 (钳制上下限, 避免异常 RMS 越界)
-    private func barHeight(_ i: Int, geo: GeometryProxy) -> CGFloat {
-        let maxH = geo.size.height
-        guard active else { return minBarHeight }
-        // 连接中/失败/结束等非活跃状态不显示活跃波形
+    private var activityStrength: Double {
+        let clampedLevel = min(max(level, 0.0), 1.0)
         switch state {
-        case .ready, .listening, .speaking, .endpointing, .processing:
-            break
+        case .ready, .listening:
+            return muted ? 0.10 : min(1.0, 0.24 + clampedLevel * 2.8)
+        case .endpointing:
+            return muted ? 0.10 : min(0.86, 0.34 + clampedLevel * 2.2)
+        case .processing:
+            return 0.32
+        case .speaking:
+            return 0.78
+        case .interrupting:
+            return 0.62
+        case .reconnecting, .degraded:
+            return 0.18
         default:
-            return minBarHeight
+            return 0.08
         }
-        let clamped = min(max(level, 0.0), 1.0)
-        // 条形间固定相位差 (确定性, 非随机), 使波形有层次但柱高主体随真实音量
-        let variation = 0.72 + 0.28 * sin(Double(i) * 1.7)
-        let target = maxH * CGFloat(clamped) * CGFloat(variation) * maxBarHeightRatio
-        return min(max(target, minBarHeight), maxH)
     }
 
-    private func barColor(_ i: Int) -> Color {
-        guard active else { return Theme.textTertiary.opacity(0.30) }
-        let depth = Double(i % 5) / 5.0
-        return Color(
-            red: 0.85 + depth * 0.05,
-            green: 0.45 - depth * 0.08,
-            blue: 0.55 - depth * 0.10
-        )
+    private func auraDuration(_ index: Int) -> Double {
+        [5.8, 6.6, 7.2, 6.1][index]
+    }
+
+    private func auraWidth(_ index: Int) -> CGFloat {
+        [230, 205, 250, 190][index]
+    }
+
+    private func auraHeight(_ index: Int) -> CGFloat {
+        [170, 225, 155, 210][index]
+    }
+
+    private func auraRotationA(_ index: Int) -> Double {
+        [-18, 14, -8, 22][index]
+    }
+
+    private func auraRotationB(_ index: Int) -> Double {
+        [8, -12, 15, -6][index]
+    }
+
+    private func auraOffsetA(_ index: Int) -> CGSize {
+        [
+            CGSize(width: -24, height: -16),
+            CGSize(width: 30, height: -8),
+            CGSize(width: -8, height: 28),
+            CGSize(width: 20, height: 24)
+        ][index]
+    }
+
+    private func auraOffsetB(_ index: Int) -> CGSize {
+        [
+            CGSize(width: 14, height: -28),
+            CGSize(width: 18, height: 20),
+            CGSize(width: -26, height: 8),
+            CGSize(width: 34, height: -2)
+        ][index]
+    }
+
+    private func auraCenter(_ index: Int) -> UnitPoint {
+        [
+            UnitPoint(x: 0.34, y: 0.42),
+            UnitPoint(x: 0.68, y: 0.38),
+            UnitPoint(x: 0.43, y: 0.68),
+            UnitPoint(x: 0.70, y: 0.66)
+        ][index]
+    }
+
+    private func auraColor(_ index: Int) -> Color {
+        switch index {
+        case 0, 2: Theme.primary
+        case 1: Theme.roleGold
+        default: Theme.primarySoft
+        }
     }
 }
 

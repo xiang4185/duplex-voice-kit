@@ -77,6 +77,19 @@ struct SettingsView: View {
                         .offset(y: appeared ? 0 : 14)
                         .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
 
+                    Button {
+                        NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
+                    } label: {
+                        Label("重新配置连接", systemImage: "network.badge.shield.half.filled")
+                            .font(Theme.bodyFont)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.primary)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("settings.reconfigure")
+
                     // 授权说明卡
                     privacyNote
                         .padding(.horizontal, 20)

@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct SmallThingEntryCard: View {
     @ObservedObject var store: SmallThingsStore
@@ -9,6 +10,7 @@ struct SmallThingEntryCard: View {
     @State private var commentDraft = ""
     @State private var replyTarget: SmallThingReplyTarget?
     @State private var showingImagePreview = false
+    @State private var showsDeleteConfirmation = false
     @State private var hapticTrigger = 0
     @FocusState private var commentFocused: Bool
 
@@ -28,10 +30,23 @@ struct SmallThingEntryCard: View {
                     showingImagePreview = true
                 } label: {
                     SmallThingsImageContent(imageData: imageData, height: 190)
+                        .contentShape(
+                            RoundedRectangle(
+                                cornerRadius: Theme.Radius.medium,
+                                style: .continuous
+                            )
+                        )
                 }
                 .buttonStyle(.plain)
+                .contentShape(
+                    RoundedRectangle(
+                        cornerRadius: Theme.Radius.medium,
+                        style: .continuous
+                    )
+                )
                 .accessibilityLabel("查看小事大图")
                 .accessibilityHint("打开全屏图片预览")
+                .accessibilityIdentifier("smallThings.entry.image.preview")
             }
 
             if !entry.approvalMessage.isEmpty {
@@ -69,6 +84,18 @@ struct SmallThingEntryCard: View {
         .fullScreenCover(isPresented: $showingImagePreview) {
             SmallThingsImagePreview(imageData: entry.imageData)
         }
+        .confirmationDialog(
+            "删除这件小事？",
+            isPresented: $showsDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                Task { await store.deleteEntryPersisted(entryID: entry.id) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后，这件小事及其评论、回应会从双方时间流中移除，且无法撤销。")
+        }
     }
 
     private var entryHeader: some View {
@@ -84,7 +111,7 @@ struct SmallThingEntryCard: View {
                     Text("·")
                     Text(entry.type == .expense ? "记了一笔账" : "记了一件事")
                     Text("·")
-                    Text(entry.createdAt, style: .relative)
+                    Text(Self.numericDateFormatter.string(from: entry.createdAt))
                 }
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)
@@ -102,16 +129,42 @@ struct SmallThingEntryCard: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
                     if let status = entry.expenseStatus {
-                        SmallThingStatusBadge(status: status)
+                        SmallThingStatusBadge(
+                            status: status,
+                            displayName: entry.expenseStatusDisplayName
+                        )
                     }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(
-                    "金额 \(entry.amount.formatted(.number.precision(.fractionLength(2)))) 元，状态 \(entry.expenseStatus?.displayName ?? "无")"
+                    "金额 \(entry.amount.formatted(.number.precision(.fractionLength(2)))) 元，状态 \(entry.expenseStatusDisplayName)"
                 )
             }
+
+            Menu {
+                Button("删除这件小事", role: .destructive) {
+                    showsDeleteConfirmation = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: Theme.controlMinimumSize, height: Theme.controlMinimumSize)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("小事选项")
+            .accessibilityIdentifier("smallThings.entry.menu")
         }
     }
+
+    private static let numericDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter
+    }()
 
     private var entryTitle: String {
         if entry.type == .expense {
@@ -137,7 +190,7 @@ struct SmallThingEntryCard: View {
 
     private var reactionButton: some View {
         Button {
-            store.toggleReaction(entryID: entry.id)
+            Task { await store.toggleReactionPersisted(entryID: entry.id) }
             hapticTrigger += 1
         } label: {
             Label(
@@ -221,7 +274,7 @@ struct SmallThingEntryCard: View {
                 .accessibilityLabel(replyTarget == nil ? "评论内容" : "回复内容")
 
                 Button("发送") {
-                    sendComment()
+                    Task { await sendComment() }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.primary)
@@ -241,7 +294,11 @@ struct SmallThingEntryCard: View {
     private func commentThread(_ comment: SmallThingComment) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
             Button {
-                selectReplyTarget(commentID: comment.id, author: comment.author)
+                selectReplyTarget(
+                    commentID: comment.id,
+                    targetID: comment.id,
+                    author: comment.author
+                )
             } label: {
                 (Text(comment.author.displayName + "：")
                     .fontWeight(.semibold)
@@ -257,7 +314,11 @@ struct SmallThingEntryCard: View {
 
             ForEach(comment.replies) { reply in
                 Button {
-                    selectReplyTarget(commentID: comment.id, author: reply.author)
+                    selectReplyTarget(
+                        commentID: comment.id,
+                        targetID: reply.id,
+                        author: reply.author
+                    )
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(reply.author.displayName) 回复 \(reply.replyToAuthor.displayName)")
@@ -289,23 +350,35 @@ struct SmallThingEntryCard: View {
         commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func selectReplyTarget(commentID: UUID, author: SmallThingRequester) {
-        replyTarget = SmallThingReplyTarget(commentID: commentID, author: author)
+    private func selectReplyTarget(
+        commentID: UUID,
+        targetID: UUID,
+        author: SmallThingRequester
+    ) {
+        replyTarget = SmallThingReplyTarget(
+            commentID: commentID,
+            targetID: targetID,
+            author: author
+        )
         commentFocused = true
         hapticTrigger += 1
     }
 
-    private func sendComment() {
+    private func sendComment() async {
         let sent: Bool
         if let replyTarget {
-            sent = store.addReply(
+            sent = await store.addReplyPersisted(
                 entryID: entry.id,
                 commentID: replyTarget.commentID,
+                replyToID: replyTarget.targetID,
                 replyTo: replyTarget.author,
                 text: commentDraft
             )
         } else {
-            sent = store.addComment(entryID: entry.id, text: commentDraft)
+            sent = await store.addCommentPersisted(
+                entryID: entry.id,
+                text: commentDraft
+            )
         }
 
         guard sent else { return }
@@ -319,16 +392,17 @@ struct SmallThingEntryCard: View {
 
 private struct SmallThingStatusBadge: View {
     let status: SmallThingExpenseStatus
+    let displayName: String
 
     var body: some View {
-        Label(status.displayName, systemImage: status.systemImage)
+        Label(displayName, systemImage: status.systemImage)
             .font(.caption2.bold())
             .foregroundStyle(statusColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(statusColor.opacity(0.11), in: Capsule())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("审批状态：\(status.displayName)")
+            .accessibilityLabel("审批状态：\(displayName)")
     }
 
     private var statusColor: Color {

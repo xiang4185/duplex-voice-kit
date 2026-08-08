@@ -85,6 +85,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
     private var currentResponseID = ""
     private var playbackPending: [Int: Data] = [:]
     private var nextPlaybackIndex = 0
+    private var playbackMuted = false
     private var observers: [NSObjectProtocol] = []
 
     private var callbackCount = 0
@@ -195,6 +196,15 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
         }
     }
 
+    /// Mutes only local assistant playback. Capture and the realtime session continue normally.
+    public func setPlaybackMuted(_ muted: Bool) {
+        graphQueue.async { [weak self] in
+            guard let self else { return }
+            self.playbackMuted = muted
+            self.player.volume = muted ? 0 : 1
+        }
+    }
+
     public func recoverCapture() throws {
         try graphQueue.sync {
             guard captureRequested, !interrupted else { return }
@@ -229,6 +239,7 @@ public final class DVKRealtimeAudioIO: @unchecked Sendable {
         }
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+        player.volume = playbackMuted ? 0 : 1
         engine.prepare()
         graphConfigured = true
         updateEngineHealth()

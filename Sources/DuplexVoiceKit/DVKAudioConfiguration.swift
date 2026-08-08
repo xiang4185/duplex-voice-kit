@@ -102,6 +102,24 @@ public struct DVKVoiceActivityConfiguration: Sendable, Equatable {
         self.speechRMSThreshold = speechRMSThreshold
         self.bargeInRMSThreshold = bargeInRMSThreshold
     }
+
+    /// Returns the same detector configuration with only the utterance-ending
+    /// silence window changed. Hosts can tune responsiveness without copying
+    /// Core thresholds or maintaining a second VAD configuration.
+    public func replacingEndSilence(milliseconds: Int) -> DVKVoiceActivityConfiguration {
+        DVKVoiceActivityConfiguration(
+            sampleRate: sampleRate,
+            bytesPerSample: bytesPerSample,
+            preRollMilliseconds: preRollMilliseconds,
+            minimumSpeechMilliseconds: minimumSpeechMilliseconds,
+            bargeInMinimumSpeechMilliseconds: bargeInMinimumSpeechMilliseconds,
+            candidateAbortSilenceMilliseconds: candidateAbortSilenceMilliseconds,
+            endSilenceMilliseconds: max(1, milliseconds),
+            maximumUtteranceMilliseconds: maximumUtteranceMilliseconds,
+            speechRMSThreshold: speechRMSThreshold,
+            bargeInRMSThreshold: bargeInRMSThreshold
+        )
+    }
 }
 
 /// An action emitted by the voice activity detector for the host upload pipeline.

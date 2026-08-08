@@ -24,7 +24,7 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
     }
 
-    func testChatServiceUsesFrozenPathsBodiesAndServerMessageMetadata() async throws {
+    func testChatServiceUsesFormalPersistentChatContract() async throws {
         let captured = CapturedRequests()
         let client = try makeStubbedClient { request in
             captured.append(request)
@@ -35,12 +35,7 @@ final class APIClientTests: XCTestCase {
                 {
                     "trace_id":"opaque-trace-history",
                     "session_id":"server-session",
-                    "messages":[{
-                        "id":"opaque-history-id",
-                        "role":"user",
-                        "content":"合成历史",
-                        "created_at":"2026-08-04T09:00:00Z"
-                    }]
+                    "messages":[]
                 }
                 """#.utf8)
             case "/v1/chat":
@@ -48,22 +43,54 @@ final class APIClientTests: XCTestCase {
                 {
                     "trace_id":"opaque-trace-send",
                     "session_id":"server-session",
-                    "reply":"合成回复",
+                    "turn_id":"opaque-turn",
+                    "messages":[
+                        {
+                            "id":"opaque-user",
+                            "role":"user",
+                            "participant":"user",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "content":"合成发送",
+                            "created_at":"2026-08-06T00:00:00Z"
+                        },
+                        {
+                            "id":"opaque-developer",
+                            "role":"assistant",
+                            "participant":"developer",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "content":"合成回复",
+                            "created_at":"2026-08-06T00:00:01Z"
+                        }
+                    ],
+                    "participant_results":[
+                        {
+                            "participant":"developer",
+                            "turn_id":"opaque-turn",
+                            "status":"completed",
+                            "retryable":false,
+                            "message":{
+                                "id":"opaque-developer",
+                                "role":"assistant",
+                                "participant":"developer",
+                                "turn_id":"opaque-turn",
+                                "status":"completed",
+                                "content":"合成回复",
+                                "created_at":"2026-08-06T00:00:01Z"
+                            }
+                        },
+                        {
+                            "participant":"xiaomao",
+                            "turn_id":"opaque-turn",
+                            "status":"skipped",
+                            "retryable":false,
+                            "message":null
+                        }
+                    ],
                     "route":"direct",
                     "degraded":false,
-                    "persisted":true,
-                    "user_message":{
-                        "id":"opaque-user-id",
-                        "role":"user",
-                        "content":"合成发送",
-                        "created_at":"2026-08-04T09:01:00Z"
-                    },
-                    "assistant_message":{
-                        "id":"opaque-assistant-id",
-                        "role":"assistant",
-                        "content":"合成回复",
-                        "created_at":"2026-08-04T09:01:01Z"
-                    }
+                    "persisted":true
                 }
                 """#.utf8)
             case "/v1/chat/clear":
@@ -94,27 +121,28 @@ final class APIClientTests: XCTestCase {
         let sent = try await service.send(
             message: "合成发送",
             sessionID: history.sessionID,
-            requestID: "opaque-send-request"
+            requestID: "opaque-send-request",
+            xiaomaoMode: .off
         )
         let cleared = try await service.clear(
             sessionID: history.sessionID,
             requestID: "opaque-clear-request"
         )
 
-        XCTAssertEqual(history.sessionID, "server-session")
-        XCTAssertEqual(history.messages.first?.id, "opaque-history-id")
-        XCTAssertEqual(
-            history.messages.first?.createdAt,
-            ISO8601DateFormatter().date(from: "2026-08-04T09:00:00Z")
-        )
-        XCTAssertEqual(sent.userMessage.id, "opaque-user-id")
-        XCTAssertEqual(sent.assistantMessage.id, "opaque-assistant-id")
-        XCTAssertEqual(cleared.sessionID, "server-session")
+        XCTAssertTrue(history.messages.isEmpty)
+        XCTAssertFalse(history.sessionID.isEmpty)
+        XCTAssertEqual(sent.sessionID, "server-session")
+        XCTAssertEqual(sent.userMessage.content, "合成发送")
+        XCTAssertEqual(sent.developerMessage?.content, "合成回复")
+        XCTAssertEqual(sent.developerMessage?.participant, .developer)
+        XCTAssertEqual(cleared.sessionID, history.sessionID)
+        XCTAssertTrue(cleared.cleared)
 
         let requests = captured.values
-        XCTAssertEqual(requests.map { $0.url?.path }, [
-            "/v1/chat/history", "/v1/chat", "/v1/chat/clear"
-        ])
+        XCTAssertEqual(
+            requests.map { $0.url?.path },
+            ["/v1/chat/history", "/v1/chat", "/v1/chat/clear"]
+        )
         for request in requests {
             XCTAssertEqual(
                 request.value(forHTTPHeaderField: "Authorization"),
@@ -129,19 +157,18 @@ final class APIClientTests: XCTestCase {
 
         let historyBody = try jsonBody(requests[0])
         XCTAssertEqual(historyBody["device_id"] as? String, "synthetic-device")
-        XCTAssertNil(historyBody["session_id"])
 
         let sendBody = try jsonBody(requests[1])
         XCTAssertEqual(sendBody["device_id"] as? String, "synthetic-device")
-        XCTAssertEqual(sendBody["session_id"] as? String, "server-session")
+        XCTAssertEqual(sendBody["session_id"] as? String, history.sessionID)
         XCTAssertEqual(sendBody["request_id"] as? String, "opaque-send-request")
         XCTAssertEqual(sendBody["message"] as? String, "合成发送")
+        XCTAssertEqual(sendBody["xiaomao_mode"] as? String, "off")
 
         let clearBody = try jsonBody(requests[2])
         XCTAssertEqual(clearBody["device_id"] as? String, "synthetic-device")
-        XCTAssertEqual(clearBody["session_id"] as? String, "server-session")
+        XCTAssertEqual(clearBody["session_id"] as? String, history.sessionID)
         XCTAssertEqual(clearBody["request_id"] as? String, "opaque-clear-request")
-        XCTAssertNil(clearBody["message"])
     }
 
     func testNon2xxResponseIsNotDecodedAsSuccess() async throws {

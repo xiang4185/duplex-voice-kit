@@ -246,8 +246,12 @@ def main() -> None:
     for forbidden in ("DispatchSemaphore", "CheckedContinuation", "drainTask", "NSLock"):
         if forbidden in pipeline:
             failures.append("public upload facade exposes internal mechanism: " + forbidden)
-    if uploader.count("drainTask = Task") != 1:
-        failures.append("upload actor must own exactly one long-running drain task")
+    if "private actor DVKAudioOutboundWriter" not in uploader:
+        failures.append("upload pipeline must isolate transport writes from capture processing")
+    if uploader.count("drainTask = Task") != 2:
+        failures.append(
+            "upload pipeline must own exactly two long-running workers: capture processing and transport writing"
+        )
     if "DispatchSemaphore" not in uploader or ".wait(timeout: .now())" not in uploader:
         failures.append("upload ingress must use bounded nonblocking admission")
     if "ingress.remove(generation: generation)" not in uploader:

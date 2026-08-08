@@ -1,6 +1,21 @@
 import Foundation
 import Security
 
+enum RuntimeCredentialNormalizer {
+    static func token(_ value: String) -> String {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.lowercased().hasPrefix("bearer ") {
+            normalized = String(normalized.dropFirst(7))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return normalized
+    }
+
+    static func deviceID(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct AuthCredentials: Codable, Equatable, Sendable {
     let accessToken: String
     let refreshToken: String?
@@ -230,12 +245,15 @@ struct KeychainAuthTokenStore: AuthTokenStoring {
     }
 
     func save(_ token: String) throws {
+        let normalized = RuntimeCredentialNormalizer.token(token)
+        guard !normalized.isEmpty else { throw AppError.unauthorized }
         try clear()
         let status = SecItemAdd([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecValueData as String: Data(token.utf8)
+            kSecValueData as String: Data(normalized.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ] as CFDictionary, nil)
         guard status == errSecSuccess else { throw AppError.unauthorized }
     }
@@ -252,6 +270,6 @@ struct KeychainAuthTokenStore: AuthTokenStoring {
 final class MemoryAuthTokenStore: AuthTokenStoring, @unchecked Sendable {
     private var token: String?
     func load() -> String? { token }
-    func save(_ token: String) throws { self.token = token }
+    func save(_ token: String) throws { self.token = RuntimeCredentialNormalizer.token(token) }
     func clear() throws { token = nil }
 }

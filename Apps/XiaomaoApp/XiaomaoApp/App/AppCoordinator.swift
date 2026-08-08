@@ -14,6 +14,7 @@ final class AppCoordinator: ObservableObject {
     let hostAdapters: HostAdapterDependencies
     let tokenStore: any AuthTokenStoring
     let chatService: any ChatServicing
+    let smallThingsStore: SmallThingsStore
     let voiceController: VoiceSessionController
 
     init(
@@ -52,8 +53,15 @@ final class AppCoordinator: ObservableObject {
         self.hostAdapters = dependencies
         if dependencies.mode == .mock {
             self.chatService = MockChatService()
+            self.smallThingsStore = SmallThingsStore()
+        } else if dependencies.mode == .production {
+            self.chatService = ChatService(backend: dependencies.backend)
+            self.smallThingsStore = SmallThingsStore(
+                service: ProductionSmallThingsService(backend: dependencies.backend)
+            )
         } else {
             self.chatService = ChatService(backend: dependencies.backend)
+            self.smallThingsStore = SmallThingsStore(entries: [])
         }
 
         let capture: AudioCapturing
@@ -76,7 +84,8 @@ final class AppCoordinator: ObservableObject {
             capture: capture,
             playback: playback,
             audioSession: audioSession,
-            networkMonitor: networkMonitor
+            networkMonitor: networkMonitor,
+            voiceActivityConfiguration: .xiaomaoRealtime
         )
     }
 

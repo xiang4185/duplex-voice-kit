@@ -25,6 +25,28 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.clientSequenceForTesting, 1)
     }
 
+    func testInitialConnectionIndicatorStaysCompletedDuringLaterProcessing() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        XCTAssertFalse(fixture.controller.hasCompletedInitialConnection)
+
+        fixture.audio.emit(pcmFrame(amplitude: 2_000))
+        await waitUntil {
+            fixture.controller.hasCompletedInitialConnection
+        }
+        XCTAssertTrue(fixture.controller.hasCompletedInitialConnection)
+
+        await fixture.socket.emitServerEvent(
+            .thinkingStarted,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting
+        )
+        await settle()
+
+        XCTAssertEqual(fixture.controller.state, .processing)
+        XCTAssertTrue(fixture.controller.hasCompletedInitialConnection)
+    }
+
     func testEndThenReenterNeverReusesClosedSession() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
@@ -762,7 +784,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         await fixture.socket.simulateDisconnect(abnormal)
         await fixture.socket.waitForConnectCount(2)
         await fixture.socket.waitForSentEvent(.sessionResume)
-        await waitUntil {
+        await waitUntil(timeout: .seconds(1)) {
             fixture.controller.state == .ready
                 && !fixture.controller.hasReconnectTaskForTesting
                 && fixture.controller.isRecording
@@ -880,6 +902,70 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertTrue(diagnostics.contains("route=b"))
     }
 
+    func testDiagnosticsSplitCommitToFirstAudioIntoObservableStages() async {
+        let fixture = makeFixture()
+        await fixture.controller.startNewCall()
+
+        await fixture.controller.commitAudio()
+        try? await Task.sleep(for: .milliseconds(2))
+        await fixture.socket.emitServerEvent(
+            .transcriptFinal,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: [
+                "text": .string("private transcript must not appear"),
+                "server_commit_forward_ms": .int(7),
+                "server_commit_to_transcript_final_ms": .int(211)
+            ]
+        )
+        try? await Task.sleep(for: .milliseconds(2))
+        let responseID = "diagnostic-response"
+        await fixture.socket.emitServerEvent(
+            .responseStarted,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: [
+                "response_id": .string(responseID),
+                "server_commit_forward_ms": .int(7),
+                "server_transcript_final_to_response_started_ms": .int(123)
+            ]
+        )
+        try? await Task.sleep(for: .milliseconds(2))
+        await fixture.socket.emitServerEvent(
+            .responseAudioDelta,
+            sessionID: fixture.controller.sessionIDForTesting,
+            traceID: fixture.controller.traceIDForTesting,
+            payload: [
+                "response_id": .string(responseID),
+                "chunk_index": .int(0),
+                "audio": .string(Data(repeating: 1, count: 640).base64EncodedString()),
+                "server_response_started_to_first_audio_ms": .int(89)
+            ]
+        )
+        await settle()
+
+        let diagnostics = fixture.controller.diagnosticText
+        let latency = fixture.controller.latencyDiagnosticText
+        XCTAssertTrue(diagnostics.contains("commit_to_transcript_final_ms="))
+        XCTAssertTrue(diagnostics.contains("transcript_final_to_response_started_ms="))
+        XCTAssertTrue(diagnostics.contains("response_started_to_first_audio_ms="))
+        XCTAssertTrue(diagnostics.contains("network_ping_ms="))
+        XCTAssertTrue(diagnostics.contains("server_commit_forward_ms=7"))
+        XCTAssertTrue(diagnostics.contains("server_commit_to_transcript_final_ms=211"))
+        XCTAssertTrue(diagnostics.contains("server_transcript_final_to_response_started_ms=123"))
+        XCTAssertTrue(diagnostics.contains("server_response_started_to_first_audio_ms=89"))
+        XCTAssertTrue(diagnostics.contains("latency_sample_count=1"))
+        XCTAssertTrue(diagnostics.contains("latency_recent_window=1"))
+        XCTAssertTrue(latency.contains("ASR / 上行"))
+        XCTAssertTrue(latency.contains("模型 / 路由"))
+        XCTAssertTrue(latency.contains("TTS / 下行"))
+        XCTAssertTrue(latency.contains("当前最长阶段"))
+        XCTAssertTrue(latency.contains("最近 1 轮统计（median / p95）"))
+        XCTAssertTrue(latency.contains("服务端分段（最后一轮）"))
+        XCTAssertTrue(latency.contains("commit 入队→Provider: 7 ms"))
+        XCTAssertFalse(diagnostics.contains("private transcript must not appear"))
+    }
+
     func testCloseCleansCapturePlaybackAudioAndTasks() async {
         let fixture = makeFixture(reconnectDelays: [.milliseconds(1)])
         await fixture.controller.startNewCall()
@@ -904,7 +990,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.vadState, .idleListening)
     }
 
-    func testSilenceDoesNotSendAudioOrCommit() async {
+    func testSilenceStreamsToProviderWithoutCommitting() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         for _ in 0..<12 {
@@ -912,7 +998,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         }
         await settle()
         let sent = await fixture.socket.sentTypesValue()
-        XCTAssertFalse(sent.contains(.audioAppend))
+        XCTAssertTrue(sent.contains(.audioAppend))
         XCTAssertFalse(sent.contains(.audioCommit))
     }
 
@@ -924,7 +1010,18 @@ final class VoiceSessionControllerTests: XCTestCase {
         fixture.capture.emit(pcmFrame(amplitude: 0))
         fixture.capture.emit(pcmFrame(amplitude: 0))
         fixture.capture.emit(pcmFrame(amplitude: 0))
-        await settle()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while clock.now < deadline {
+            let sent = await fixture.socket.sentTypesValue()
+            if sent.contains(.audioAppend),
+               sent.filter({ $0 == .audioCommit }).count == 1,
+               fixture.controller.speechStartCount == 1,
+               fixture.controller.automaticCommitCount == 1 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         let sent = await fixture.socket.sentTypesValue()
         XCTAssertTrue(sent.contains(.audioAppend))
         XCTAssertEqual(sent.filter { $0 == .audioCommit }.count, 1)
@@ -1140,29 +1237,33 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.bargeInDetectionCount, 0)
     }
 
-    func testMuteStopsSendingAndUnmuteRestoresListening() async {
+    func testMuteSilencesPlaybackWithoutStoppingInputAndUnmuteKeepsListening() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         await fixture.controller.setMuted(true)
-        XCTAssertFalse(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.playback.isMuted)
         fixture.capture.emit(pcmFrame(amplitude: 6_000))
         fixture.capture.emit(pcmFrame(amplitude: 6_000))
         await settle()
         var sent = await fixture.socket.sentTypesValue()
-        XCTAssertFalse(sent.contains(.audioAppend))
+        XCTAssertTrue(sent.contains(.audioAppend))
+        XCTAssertFalse(sent.contains(.mute))
 
         await fixture.controller.setMuted(false)
         XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertFalse(fixture.playback.isMuted)
         fixture.capture.emit(pcmFrame(amplitude: 3_000))
         fixture.capture.emit(pcmFrame(amplitude: 3_000))
         await settle()
         sent = await fixture.socket.sentTypesValue()
         XCTAssertTrue(sent.contains(.audioAppend))
+        XCTAssertFalse(sent.contains(.unmute))
     }
 
     // MARK: P2.8A 静音恢复 (V1 稳定化)
 
-    func testUnmuteInListeningStateRestoresCapture() async {
+    func testMuteInListeningStateKeepsCaptureActive() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         // 服务器事件驱动进入 .listening
@@ -1175,12 +1276,13 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.state, .listening)
 
         await fixture.controller.setMuted(true)
-        XCTAssertFalse(fixture.controller.isRecording)
-        await fixture.controller.setMuted(false)
-        // .listening 状态允许恢复采集 (P2.8A)
         XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.playback.isMuted)
+        await fixture.controller.setMuted(false)
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertFalse(fixture.playback.isMuted)
 
-        // 取消静音后继续发送音频
+        // 扬声器静音状态切换不影响持续上传
         fixture.capture.emit(pcmFrame(amplitude: 3_000))
         fixture.capture.emit(pcmFrame(amplitude: 3_000))
         await settle()
@@ -1188,11 +1290,12 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertTrue(sent.contains(.audioAppend))
     }
 
-    func testUnmuteDoesNotRecreateSessionOrIncreaseConnectCount() async {
+    func testSpeakerUnmuteDoesNotRecreateSessionPingOrIncreaseConnectCount() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         let sessionID = fixture.controller.sessionIDForTesting
         let initialConnectCount = await fixture.socket.connectCountValue()
+        let initialPingCount = await fixture.socket.pingCountValue()
 
         await fixture.controller.setMuted(true)
         await fixture.controller.setMuted(false)
@@ -1202,65 +1305,107 @@ final class VoiceSessionControllerTests: XCTestCase {
         let connectCount = await fixture.socket.connectCountValue()
         XCTAssertEqual(connectCount, initialConnectCount,
                        "正常取消静音不得增加 WebSocket connect 次数")
+        let pingCount = await fixture.socket.pingCountValue()
+        XCTAssertEqual(pingCount, initialPingCount,
+                       "本地扬声器静音不得触发 WebSocket ping")
         XCTAssertTrue(fixture.controller.isRecording)
     }
 
-    func testRepeatedUnmuteDoesNotRestartCaptureMultipleTimes() async {
+    func testSpeakerUnmuteDoesNotConsumePingFailureOrTriggerReconnect() async {
+        let fixture = makeFixture(autoResume: false, reconnectDelays: [.milliseconds(1)])
+        await fixture.controller.startNewCall()
+        await waitUntil {
+            fixture.controller.state == .ready
+                && fixture.controller.webSocketState == .connected
+        }
+        let sessionID = fixture.controller.sessionIDForTesting
+        let connectCountBefore = await fixture.socket.connectCountValue()
+
+        await fixture.controller.setMuted(true)
+        XCTAssertTrue(fixture.controller.isMuted)
+        XCTAssertTrue(fixture.controller.isRecording)
+
+        await fixture.socket.failNextPing()
+        await fixture.controller.setMuted(false)
+        await settle()
+
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID,
+                       "扬声器静音不得改变 Session")
+        XCTAssertEqual(fixture.controller.pingFailureCount, 0)
+        let connectCountAfter = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCountAfter, connectCountBefore)
+        let sent = await fixture.socket.sentTypesValue()
+        XCTAssertFalse(sent.contains(.sessionResume))
+    }
+
+    func testUnmuteAfterNonRecoverableDisconnectDoesNotReconnect() async {
+        let fixture = makeFixture(reconnectDelays: [.milliseconds(1)])
+        await fixture.controller.startNewCall()
+        await fixture.controller.setMuted(true)
+
+        let unauthorized = VoiceWebSocketErrorClassifier.classify(
+            error: URLError(.userAuthenticationRequired),
+            closeCode: nil,
+            httpStatus: 401
+        )
+        await fixture.socket.simulateFailure(unauthorized)
+        await waitUntil { fixture.controller.state == .failed }
+        let connectCountBefore = await fixture.socket.connectCountValue()
+
+        await fixture.controller.setMuted(false)
+        await settle()
+
+        XCTAssertFalse(fixture.controller.lastDisconnectRecoverable)
+        let connectCountAfter = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCountAfter, connectCountBefore,
+                       "本地扬声器取消静音不得改变不可恢复连接状态")
+    }
+
+    func testRepeatedSpeakerUnmuteDoesNotRestartCapture() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
         await fixture.controller.setMuted(true)
         let initialCaptureStarts = fixture.capture.startCount
 
-        // 重复设置相同静音状态 → 幂等, 不重复启动采集
+        // 重复设置相同扬声器状态 → 幂等且不触碰采集
         await fixture.controller.setMuted(false)
         await fixture.controller.setMuted(false)
         await fixture.controller.setMuted(false)
 
-        XCTAssertEqual(fixture.capture.startCount, initialCaptureStarts + 1,
-                       "重复取消静音不得重复启动采集")
+        XCTAssertEqual(fixture.capture.startCount, initialCaptureStarts,
+                       "扬声器静音切换不得重启采集")
     }
 
-    func testUnmuteWithRecoverableDisconnectTriggersExistingReconnect() async {
-        // 断开后 controller 会自动重连; 用较长 reconnectDelays 保持"断开可恢复"窗口,
-        // 使下方 waitUntil(disconnected && lastDisconnectRecoverable) 在自动重连完成前成立.
-        let fixture = makeFixture(reconnectDelays: [.milliseconds(1_000)])
+    func testSpeakerMuteStateDoesNotCreateExtraReconnectDuringRecoverableDisconnect() async {
+        let fixture = makeFixture(reconnectDelays: [.milliseconds(1)])
         await fixture.controller.startNewCall()
-        // 1. 等待 ready + connected
         await waitUntil {
             fixture.controller.state == .ready
                 && fixture.controller.webSocketState == .connected
         }
         let initialSessionID = fixture.controller.sessionIDForTesting
 
-        // 2. 先在连接正常时 setMuted(true) (避免断线后发送 mute 进入失败路径, 与重连形成竞态)
         await fixture.controller.setMuted(true)
         XCTAssertTrue(fixture.controller.isMuted)
-        XCTAssertFalse(fixture.controller.isRecording, "静音后必须停止采集")
+        XCTAssertTrue(fixture.controller.isRecording, "扬声器静音不得停止采集")
         let captureStartsBefore = fixture.capture.startCount
 
-        // 3. 模拟可恢复断开
         let abnormal = VoiceWebSocketErrorClassifier.classify(
             error: URLError(.networkConnectionLost),
             closeCode: 1006
         )
         await fixture.socket.simulateDisconnect(abnormal)
-        await waitUntil {
-            fixture.controller.webSocketState == .disconnected
-                && fixture.controller.lastDisconnectRecoverable
-        }
-
-        // 4. 取消静音 → 断连但可恢复 → 走现有重连 (session.resume, 不新建 Session)
+        // 连接恢复由断线事件本身驱动；扬声器取消静音不能再创建第二条恢复路径。
         await fixture.controller.setMuted(false)
         await fixture.socket.waitForConnectCount(2)
         await fixture.socket.waitForSentEvent(.sessionResume)
-        // 5. 等 sessionResumed 后 ready + connected + 恢复采集
         await waitUntil {
             fixture.controller.state == .ready
                 && fixture.controller.webSocketState == .connected
                 && fixture.controller.isRecording
         }
 
-        // 6. 断言: Session 复用 / 无新 session.start / resume 一次 / connect 1→2 / 终态正确
         XCTAssertEqual(fixture.controller.sessionIDForTesting, initialSessionID,
                        "可恢复断连重连必须复用原 Session, 不得新建")
         let sent = await fixture.socket.sentTypesValue()
@@ -1275,7 +1420,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.webSocketState, .connected, "最终必须已连接")
         XCTAssertTrue(fixture.controller.isRecording, "最终必须恢复采集")
         XCTAssertEqual(fixture.capture.startCount, captureStartsBefore + 1,
-                       "取消静音后必须恰好重启一次采集")
+                       "采集只应因真实重连恢复一次")
     }
 
     func testUnmuteAfterIdleTimeoutDoesNotReconnect() async {
@@ -1294,7 +1439,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         await settle()
 
         let connectCountBefore = await fixture.socket.connectCountValue()
-        // 空闲结束后取消静音 → 不得静默重连
+        // 空闲结束后本地取消扬声器静音 → 不得静默重连
         await fixture.controller.setMuted(false)
         await settle()
         let connectCountAfter = await fixture.socket.connectCountValue()
@@ -1303,11 +1448,9 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.state, .closed)
     }
 
-    // MARK: P2.8A-CI-FIX-2 失败注入测试
+    // MARK: 扬声器静音与连接恢复解耦
 
-    func testUnmuteSendFailureDoesNotRestoreCaptureUntilReconnect() async {
-        // P2.8A-CI-FIX-3: autoResume = false, 手工 emitResumed 精确控制,
-        // 不使用 settle() 观察短暂失败窗口
+    func testSpeakerUnmuteDoesNotSendProviderUnmuteOrTriggerReconnect() async {
         let fixture = makeFixture(autoResume: false, reconnectDelays: [.milliseconds(1)])
         await fixture.controller.startNewCall()
         await waitUntil {
@@ -1315,47 +1458,37 @@ final class VoiceSessionControllerTests: XCTestCase {
                 && fixture.controller.webSocketState == .connected
         }
         let initialSessionID = fixture.controller.sessionIDForTesting
+        let initialConnectCount = await fixture.socket.connectCountValue()
 
         await fixture.controller.setMuted(true)
         XCTAssertTrue(fixture.controller.isMuted)
-        XCTAssertFalse(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.controller.isRecording)
 
-        // 注入: 连接内下一次 unmute 发送失败 → recordSendFailure → 现有重连流程
+        // 若客户端仍错误发送 Provider unmute，这个失败注入会暴露出来。
         await fixture.socket.failNextSend(.unmute)
         await fixture.controller.setMuted(false)
-        await fixture.socket.waitForSentEvent(.sessionResume)
+        await settle()
 
-        // 手工 emitResumed 之前 (同步尚未成功): 失败不得恢复采集 / 不得提升 .ready / Session 不变
-        XCTAssertFalse(fixture.controller.isRecording,
-                       "unmute 发送失败后不得恢复采集 (仅同步成功后恢复)")
-        XCTAssertNotEqual(fixture.controller.state, .ready,
-                          "同步成功前不得提升 .ready")
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertEqual(fixture.controller.state, .ready)
         XCTAssertEqual(fixture.controller.sessionIDForTesting, initialSessionID,
-                       "重连必须复用原 Session, 不得新建")
-
-        // 手工 emitResumed → Resume 静音同步成功 → 提升 .ready 并恢复采集
-        await fixture.socket.emitResumed()
-        await waitUntil {
-            fixture.controller.state == .ready
-                && fixture.controller.webSocketState == .connected
-                && fixture.controller.isRecording
-        }
-        XCTAssertEqual(fixture.controller.sessionIDForTesting, initialSessionID,
-                       "成功恢复后必须仍复用原 Session")
+                       "本地扬声器静音不得改变 Session")
         let sent = await fixture.socket.sentTypesValue()
-        XCTAssertEqual(sent.filter { $0 == .unmute }.count, 1,
-                       "成功 Resume 后 unmute 必须恰好发送一次 (注入失败不计入)")
+        XCTAssertEqual(sent.filter { $0 == .unmute }.count, 0,
+                       "本地扬声器取消静音不得发送 Provider unmute")
+        XCTAssertEqual(sent.filter { $0 == .sessionResume }.count, 0,
+                       "本地扬声器取消静音不得触发重连")
         XCTAssertEqual(sent.filter { $0 == .sessionStart }.count, 1,
                        "不得新增 session.start")
+        let connectCount = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCount, initialConnectCount)
     }
 
-    func testResumeMuteSyncFailureDefersCaptureAndRetries() async {
-        // P2.8A-CI-FIX-3: autoResume = false + 较短 protocolReadyTimeout,
-        // 手工 emitResumed 精确控制第一次失败与第二次成功
+    func testResumeKeepsLocalSpeakerMuteWithoutProviderMuteSync() async {
         let fixture = makeFixture(
             autoResume: false,
-            reconnectDelays: [.milliseconds(1), .milliseconds(1)],
-            protocolReadyTimeout: .milliseconds(100)
+            reconnectDelays: [.milliseconds(1)],
+            protocolReadyTimeout: .seconds(1)
         )
         await fixture.controller.startNewCall()
         await waitUntil {
@@ -1364,17 +1497,11 @@ final class VoiceSessionControllerTests: XCTestCase {
         }
         let initialSessionID = fixture.controller.sessionIDForTesting
 
-        // 静音 (断开前): isMuted == true, 停采
         await fixture.controller.setMuted(true)
-        XCTAssertFalse(fixture.controller.isRecording)
-        // 初始断言: 调用链至今 session.start 必须恰好 1 次 (本轮 startNewCall 唯一一次)
-        let baselineSent = await fixture.socket.sentTypesValue()
-        XCTAssertEqual(baselineSent.filter { $0 == .sessionStart }.count, 1,
-                       "初始 session.start 必须恰好 1 次")
-        // 基线清零: 排除初始 setMuted(true) 的 mute, 后续按增量断言
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.playback.isMuted)
         await fixture.socket.clearSentEvents()
 
-        // 可恢复断开 → 自动重连第一轮 → 第一次 session.resume 已发送 (不自动 emit)
         let abnormal = VoiceWebSocketErrorClassifier.classify(
             error: URLError(.networkConnectionLost),
             closeCode: 1006
@@ -1382,42 +1509,28 @@ final class VoiceSessionControllerTests: XCTestCase {
         await fixture.socket.simulateDisconnect(abnormal)
         await fixture.socket.waitForSentEvent(.sessionResume, count: 1)
 
-        // 第一次 sessionResumed 前注入 .mute 失败, 再手工 emitResumed
+        // 若 Resume 仍错误同步 Provider mute，这个注入会让恢复失败。
         await fixture.socket.failNextSend(.mute)
-        await fixture.socket.emitResumed()
-
-        // 等待现有重连循环发送第二次 session.resume (其发生即证明第一轮 sync 失败,
-        // 无需依赖易变的 lastReasonCategory 窗口)
-        await fixture.socket.waitForSentEvent(.sessionResume, count: 2)
-
-        // 第一次失败后 (第二轮进行中, 尚未第二次 emitResumed):
-        // 保持 .reconnecting / 不采集 / 静音保持
-        XCTAssertEqual(fixture.controller.state, .reconnecting,
-                       "Resume 同步失败必须保持 .reconnecting (不得提升 .ready)")
-        XCTAssertFalse(fixture.controller.isRecording,
-                       "Resume 同步失败不得恢复采集")
-        XCTAssertTrue(fixture.controller.isMuted, "静音状态必须保持")
-
-        // 手工 emitResumed → 第二次同步成功 → 提升 .ready
         await fixture.socket.emitResumed()
         await waitUntil {
             fixture.controller.state == .ready
                 && fixture.controller.webSocketState == .connected
+                && fixture.controller.isRecording
         }
 
-        // 精确断言 (增量基线, 不含初始 mute)
         let sent = await fixture.socket.sentTypesValue()
         XCTAssertEqual(fixture.controller.sessionIDForTesting, initialSessionID,
-                       "Resume 同步失败重试必须复用原 Session, 不得新建")
+                       "恢复必须复用原 Session")
         XCTAssertEqual(sent.filter { $0 == .sessionStart }.count, 0,
-                       "恢复过程中不得新增 session.start (清空后基线为 0)")
-        XCTAssertEqual(sent.filter { $0 == .sessionResume }.count, 2,
-                       "session.resume 必须恰好 2 次 (第一次失败 + 第二次成功)")
-        XCTAssertEqual(sent.filter { $0 == .mute }.count, 1,
-                       "失败后的成功 mute 同步必须恰好一次 (注入失败不计入)")
+                       "恢复过程中不得新增 session.start")
+        XCTAssertEqual(sent.filter { $0 == .sessionResume }.count, 1,
+                       "真实断线只应恢复一次")
+        XCTAssertEqual(sent.filter { $0 == .mute }.count, 0,
+                       "Resume 不得同步 Provider mute")
         XCTAssertEqual(fixture.controller.state, .ready, "最终必须 .ready")
-        XCTAssertTrue(fixture.controller.isMuted, "静音必须保持")
-        XCTAssertFalse(fixture.controller.isRecording, "静音状态下不得恢复采集")
+        XCTAssertTrue(fixture.controller.isMuted, "本地扬声器静音必须保持")
+        XCTAssertTrue(fixture.playback.isMuted)
+        XCTAssertTrue(fixture.controller.isRecording, "扬声器静音状态下仍应恢复采集")
     }
 
     // MARK: P2.8A ViewModel 启动幂等
@@ -1615,7 +1728,7 @@ final class VoiceSessionControllerTests: XCTestCase {
         )
     }
 
-    func testMuteStopsInputWithoutStoppingPlaybackEngine() async {
+    func testSpeakerMuteKeepsInputAndPlaybackEngineRunning() async {
         let fixture = makeSharedAudioFixture()
         await fixture.controller.startNewCall()
         await emitAssistantAudio(fixture, responseID: "mute-playback", done: false)
@@ -1623,14 +1736,15 @@ final class VoiceSessionControllerTests: XCTestCase {
 
         await fixture.controller.setMuted(true)
 
-        XCTAssertFalse(fixture.controller.isRecording)
-        XCTAssertFalse(fixture.audio.tapInstalled)
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.audio.tapInstalled)
         XCTAssertTrue(fixture.audio.engineRunning)
+        XCTAssertTrue(fixture.audio.playbackMuted)
         XCTAssertEqual(fixture.audio.cancelCount, cancelCountBefore)
         XCTAssertGreaterThan(fixture.audio.enqueueCount, 0)
     }
 
-    func testCaptureWatchdogDisabledWhileMuted() async {
+    func testCaptureWatchdogRemainsActiveWhileSpeakerMuted() async {
         let fixture = makeSharedAudioFixture(
             captureWatchdogInterval: .milliseconds(5),
             captureStallThreshold: .milliseconds(200)
@@ -1639,11 +1753,12 @@ final class VoiceSessionControllerTests: XCTestCase {
         let recoverCountBefore = fixture.audio.recoverCount
         await fixture.controller.setMuted(true)
         fixture.audio.simulateCaptureStall()
-        await drainTasks()
+        await waitUntil { fixture.audio.recoverCount > recoverCountBefore }
 
-        XCTAssertFalse(fixture.controller.hasCaptureWatchdogTaskForTesting)
-        XCTAssertEqual(fixture.audio.recoverCount, recoverCountBefore)
-        XCTAssertFalse(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.controller.hasCaptureWatchdogTaskForTesting)
+        XCTAssertGreaterThan(fixture.audio.recoverCount, recoverCountBefore)
+        XCTAssertTrue(fixture.controller.isRecording)
+        XCTAssertTrue(fixture.audio.playbackMuted)
     }
 
     func testAudioInterruptionRecoversCurrentCall() async {
@@ -1730,6 +1845,43 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.controller.route, .b)
     }
 
+    func testResponseDoneRecoversStalledCaptureWithoutChangingSession() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        let sessionID = fixture.controller.sessionIDForTesting
+
+        fixture.audio.simulateCaptureStall()
+        await emitAssistantAudio(fixture, responseID: "response-stalled", done: true)
+
+        await waitUntil(timeout: .seconds(1)) {
+            fixture.audio.recoverCount == 1
+                && fixture.controller.postResponseCaptureRecoveryCount == 1
+        }
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
+        let connectCount = await fixture.socket.connectCountValue()
+        XCTAssertEqual(connectCount, 1)
+        XCTAssertTrue(fixture.audio.engineRunning)
+        XCTAssertTrue(fixture.audio.tapInstalled)
+    }
+
+    func testResponseDoneDoesNotRecoverWhenCaptureCallbacksContinue() async {
+        let fixture = makeSharedAudioFixture()
+        await fixture.controller.startNewCall()
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        let sessionID = fixture.controller.sessionIDForTesting
+
+        await emitAssistantAudio(fixture, responseID: "response-healthy", done: true)
+        try? await Task.sleep(for: .milliseconds(100))
+        fixture.audio.emit(pcmFrame(amplitude: 0))
+        try? await Task.sleep(for: .milliseconds(500))
+
+        XCTAssertEqual(fixture.controller.sessionIDForTesting, sessionID)
+        XCTAssertEqual(fixture.audio.recoverCount, 0)
+        XCTAssertEqual(fixture.controller.postResponseCaptureRecoveryCount, 0)
+        XCTAssertGreaterThan(fixture.controller.diagnosticText.count, 0)
+    }
+
     private func makeFixture(
         token: String = "synthetic-token",
         autoReady: Bool = true,
@@ -1767,8 +1919,12 @@ final class VoiceSessionControllerTests: XCTestCase {
             networkMonitor: TestNetworkMonitor(),
             reconnectDelays: reconnectDelays,
             protocolReadyTimeout: protocolReadyTimeout,
-            voiceActivityConfiguration: testVADConfiguration
+            voiceActivityConfiguration: testVADConfiguration,
+            outboundAudioBatchBytes: 640
         )
+        addTeardownBlock { [controller] in
+            await controller.endCurrentCall()
+        }
         return Fixture(
             controller: controller,
             socket: socket,
@@ -1809,6 +1965,7 @@ final class VoiceSessionControllerTests: XCTestCase {
             reconnectDelays: [.milliseconds(1)],
             protocolReadyTimeout: .milliseconds(200),
             voiceActivityConfiguration: testVADConfiguration,
+            outboundAudioBatchBytes: 640,
             captureWatchdogInterval: captureWatchdogInterval,
             captureStallThreshold: captureStallThreshold
         )
@@ -2031,6 +2188,7 @@ private final class TestCapture: AudioCapturing {
 private final class TestPlayback: AudioPlaying {
     private(set) var enqueueCount = 0
     private(set) var cancelCount = 0
+    private(set) var isMuted = false
     func enqueue(_ data: Data, responseID: String, chunkIndex: Int) {
         _ = data
         _ = responseID
@@ -2040,6 +2198,9 @@ private final class TestPlayback: AudioPlaying {
     func cancel(responseID: String?) {
         _ = responseID
         cancelCount += 1
+    }
+    func setMuted(_ muted: Bool) {
+        isMuted = muted
     }
 }
 
@@ -2058,6 +2219,7 @@ private final class TestRealtimeAudioIO: AudioCapturing, AudioPlaying, RealtimeA
     private(set) var engineStartCount = 0
     private(set) var engineStopCount = 0
     private(set) var playbackStartCount = 0
+    private(set) var playbackMuted = false
     private(set) var interruptionCount = 0
     private(set) var configurationChangeCount = 0
     var shouldFailRecovery = false
@@ -2119,6 +2281,10 @@ private final class TestRealtimeAudioIO: AudioCapturing, AudioPlaying, RealtimeA
         _ = responseID
         cancelCount += 1
         currentResponseID = ""
+    }
+
+    func setMuted(_ muted: Bool) {
+        playbackMuted = muted
     }
 
     func recoverCapture() throws {
@@ -2214,6 +2380,8 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
     private var sentEvents: [VoiceEvent] = []
     // P2.8A-CI-FIX-2: 失败注入 — 指定类型的下一条 send 抛错 (消费后移除)
     private var failNextSendTypes: [VoiceEventType] = []
+    private var shouldFailNextPing = false
+    private var pingCount = 0
     private var lastSessionStart: VoiceEvent?
     private var lastSessionResume: VoiceEvent?
     private var connectWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
@@ -2288,6 +2456,11 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
 
     func ping() async throws {
         guard connected else { throw AppError.networkUnavailable }
+        pingCount += 1
+        if shouldFailNextPing {
+            shouldFailNextPing = false
+            throw AppError.networkUnavailable
+        }
     }
 
     func disconnect() async {
@@ -2420,11 +2593,15 @@ private actor TestVoiceWebSocketClient: VoiceAdapter {
     }
 
     func connectCountValue() -> Int { connectCount }
+    func pingCountValue() -> Int { pingCount }
     func sentTypesValue() -> [VoiceEventType] { sentTypes }
 
     // P2.8A-CI-FIX-2: 注入下一次指定类型 send 失败 (消费后自动移除)
     func failNextSend(_ type: VoiceEventType) {
         failNextSendTypes.append(type)
+    }
+    func failNextPing() {
+        shouldFailNextPing = true
     }
     func sentEventsValue() -> [VoiceEvent] { sentEvents }
 

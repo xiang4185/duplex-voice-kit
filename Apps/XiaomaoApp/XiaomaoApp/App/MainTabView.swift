@@ -7,8 +7,11 @@ import SwiftUI
 struct MainTabView: View {
     let environment: AppEnvironment
     let startCall: () -> Void
+    let onReconfigure: () -> Void
+    @ObservedObject private var voiceController: VoiceSessionController
 
     @StateObject private var chatViewModel: ChatViewModel
+    @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
 
     enum Tab: Hashable {
@@ -36,13 +39,19 @@ struct MainTabView: View {
     init(
         environment: AppEnvironment,
         startCall: @escaping () -> Void,
-        chatService: any ChatServicing
+        voiceController: VoiceSessionController,
+        chatService: any ChatServicing,
+        smallThingsStore: SmallThingsStore,
+        onReconfigure: @escaping () -> Void = {}
     ) {
         self.environment = environment
         self.startCall = startCall
+        self.onReconfigure = onReconfigure
+        _voiceController = ObservedObject(wrappedValue: voiceController)
         _chatViewModel = StateObject(
             wrappedValue: ChatViewModel(service: chatService)
         )
+        _smallThingsStore = ObservedObject(wrappedValue: smallThingsStore)
     }
 
     var body: some View {
@@ -55,14 +64,18 @@ struct MainTabView: View {
             .tabItem { Label(Tab.companion.title, systemImage: Tab.companion.icon) }
             .tag(Tab.companion)
 
-            ChatView(viewModel: chatViewModel)
+            ChatView(
+                viewModel: chatViewModel,
+                isMockMode: environment.hostAdapters.mode == .mock,
+                onReconfigure: onReconfigure
+            )
                 .tabItem {
                     Label(Tab.chat.title, systemImage: Tab.chat.icon)
                         .accessibilityIdentifier("main.tab.chat")
                 }
                 .tag(Tab.chat)
 
-            SmallThingsRootView()
+            SmallThingsRootView(store: smallThingsStore)
                 .tabItem { Label(Tab.smallThings.title, systemImage: Tab.smallThings.icon) }
                 .tag(Tab.smallThings)
                 .accessibilityIdentifier("smallThings.tab")
@@ -73,6 +86,38 @@ struct MainTabView: View {
         }
         .tint(Theme.primary)
         .accessibilityIdentifier("main.tabs")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if voiceController.callIsActive {
+                currentCallBar
+            }
+        }
+    }
+
+    private var currentCallBar: some View {
+        Button(action: startCall) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Theme.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("当前通话仍在继续")
+                        .font(Theme.subheadFont.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(voiceController.state == .speaking ? "小猫正在说话" : "点此返回通话")
+                        .font(Theme.captionFont)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.up")
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .bottom) { Divider().overlay(Theme.border) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("call.resume.bar")
     }
 }
 
@@ -81,6 +126,8 @@ struct MainTabView: View {
     MainTabView(
         environment: .fromBundle(),
         startCall: {},
-        chatService: MockChatService()
+        voiceController: AppCoordinator().voiceController,
+        chatService: MockChatService(),
+        smallThingsStore: SmallThingsStore()
     )
 }

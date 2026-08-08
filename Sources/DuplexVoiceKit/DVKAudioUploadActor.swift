@@ -45,6 +45,21 @@ public struct DVKAudioUploadDiagnosticsSnapshot: Sendable, Equatable {
     public internal(set) var lastFiveSentChunkIndices: [Int] = []
     public internal(set) var lastSendFailureCategory = ""
     public internal(set) var generationStartedAt: Date?
+    public internal(set) var captureToProcessingLagMilliseconds = 0
+    public internal(set) var maxCaptureToProcessingLagMilliseconds = 0
+    public internal(set) var lastCapturePacketMilliseconds = 0
+    public internal(set) var maxCapturePacketMilliseconds = 0
+    public internal(set) var outboundBatchBytes = 0
+    public internal(set) var outboundQueueDepth = 0
+    public internal(set) var outboundQueueHighWater = 0
+    public internal(set) var outboundBackpressureCount = 0
+    public internal(set) var outboundOldestQueuedAgeMilliseconds = 0
+    public internal(set) var lastTransportSendMilliseconds = 0
+    public internal(set) var maxTransportSendMilliseconds = 0
+    public internal(set) var captureToProcessingLagAtCommitMilliseconds = 0
+    public internal(set) var commitQueuedAt: Date?
+    public internal(set) var commitSentAt: Date?
+    public internal(set) var commitQueueToSendMilliseconds = 0
 }
 
 final class DVKAudioUploadDiagnosticsStore: @unchecked Sendable {
@@ -109,6 +124,192 @@ private final class DVKUploadCompletion: @unchecked Sendable {
         } else {
             self.result = result
             lock.unlock()
+        }
+    }
+}
+
+private struct DVKAudioOutboundWriteItem: Sendable {
+    let message: DVKOutboundMessage
+    let connectionGeneration: Int
+    let enqueuedAt: Date
+    let audioBytes: Int?
+    let chunkIndex: Int?
+    let successNotification: DVKAudioUploadNotification?
+    let completion: DVKUploadCompletion?
+}
+
+/// Serializes transport writes independently from capture/VAD processing.
+/// Actor reentrancy keeps `enqueue` responsive while an earlier WebSocket send is awaiting I/O.
+private actor DVKAudioOutboundWriter {
+    typealias NotificationHandler = @Sendable (DVKAudioUploadNotification) async -> Void
+    typealias TerminalFailureHandler = @Sendable (_ generation: Int, _ category: String) async -> Void
+
+    private let transport: any DVKOutboundTransport
+    private let diagnostics: DVKAudioUploadDiagnosticsStore
+    private let capacity: Int
+    private var queue: [DVKAudioOutboundWriteItem] = []
+    private var activeGeneration = 0
+    private var drainTask: Task<Void, Never>?
+    private var notificationHandler: NotificationHandler?
+    private var terminalFailureHandler: TerminalFailureHandler?
+
+    init(
+        transport: any DVKOutboundTransport,
+        diagnostics: DVKAudioUploadDiagnosticsStore,
+        capacity: Int
+    ) {
+        self.transport = transport
+        self.diagnostics = diagnostics
+        self.capacity = max(1, capacity)
+    }
+
+    func configure(
+        notificationHandler: @escaping NotificationHandler,
+        terminalFailureHandler: @escaping TerminalFailureHandler
+    ) {
+        self.notificationHandler = notificationHandler
+        self.terminalFailureHandler = terminalFailureHandler
+    }
+
+    func reset(generation: Int) {
+        let stale = queue
+        queue.removeAll(keepingCapacity: false)
+        for item in stale {
+            item.completion?.resolve(.failure(DVKAudioUploadError.inactiveConnection))
+        }
+        activeGeneration = generation
+        diagnostics.update {
+            $0.outboundQueueDepth = 0
+            $0.outboundQueueHighWater = 0
+            $0.outboundOldestQueuedAgeMilliseconds = 0
+            $0.lastTransportSendMilliseconds = 0
+            $0.maxTransportSendMilliseconds = 0
+            $0.commitQueuedAt = nil
+            $0.commitSentAt = nil
+            $0.commitQueueToSendMilliseconds = 0
+        }
+    }
+
+    func invalidate(generation: Int) {
+        guard generation == activeGeneration else { return }
+        activeGeneration = 0
+        let pending = queue
+        queue.removeAll(keepingCapacity: false)
+        for item in pending {
+            item.completion?.resolve(.failure(DVKAudioUploadError.inactiveConnection))
+        }
+        publishQueueHealth()
+    }
+
+    func enqueue(_ item: DVKAudioOutboundWriteItem) throws {
+        guard item.connectionGeneration == activeGeneration,
+              activeGeneration > 0 else {
+            item.completion?.resolve(.failure(DVKAudioUploadError.inactiveConnection))
+            throw DVKAudioUploadError.inactiveConnection
+        }
+        guard queue.count < capacity else {
+            diagnostics.update { $0.outboundBackpressureCount += 1 }
+            item.completion?.resolve(.failure(DVKAudioUploadError.queueBackpressure))
+            throw DVKAudioUploadError.queueBackpressure
+        }
+        queue.append(item)
+        publishQueueHealth()
+        if drainTask == nil {
+            drainTask = Task { [weak self] in
+                await self?.drainLoop()
+            }
+        }
+    }
+
+    private func drainLoop() async {
+        while !queue.isEmpty {
+            let item = queue.removeFirst()
+            publishQueueHealth()
+            let startedAt = Date()
+            do {
+                try await transport.send(item.message)
+            } catch {
+                let category = String(describing: type(of: error))
+                recordSendDuration(since: startedAt)
+                if item.connectionGeneration != activeGeneration {
+                    diagnostics.update { $0.staleGenerationSendFailureCount += 1 }
+                    item.completion?.resolve(.failure(DVKAudioUploadError.inactiveConnection))
+                    continue
+                }
+                diagnostics.update {
+                    $0.activeGenerationSendFailureCount += 1
+                    $0.lastSendFailureCategory = category
+                }
+                item.completion?.resolve(.failure(DVKAudioUploadError.sendFailed))
+                let pending = queue.filter { $0.connectionGeneration == item.connectionGeneration }
+                queue.removeAll { $0.connectionGeneration == item.connectionGeneration }
+                for pendingItem in pending {
+                    pendingItem.completion?.resolve(.failure(DVKAudioUploadError.sendFailed))
+                }
+                publishQueueHealth()
+                await terminalFailureHandler?(item.connectionGeneration, category)
+                await notificationHandler?(.sendFailed(category: category))
+                continue
+            }
+
+            let finishedAt = Date()
+            recordSendDuration(since: startedAt, finishedAt: finishedAt)
+            guard item.connectionGeneration == activeGeneration else {
+                item.completion?.resolve(.failure(DVKAudioUploadError.inactiveConnection))
+                continue
+            }
+
+            if let chunkIndex = item.chunkIndex, let audioBytes = item.audioBytes {
+                diagnostics.update {
+                    $0.nextChunkIndex = chunkIndex + 1
+                    $0.sentAudioChunks += 1
+                    $0.lastFiveSentChunkIndices.append(chunkIndex)
+                    if $0.lastFiveSentChunkIndices.count > 5 {
+                        $0.lastFiveSentChunkIndices.removeFirst()
+                    }
+                }
+                await notificationHandler?(.audioSent(bytes: audioBytes, chunkIndex: chunkIndex))
+            } else {
+                diagnostics.update { $0.sentControlCommands += 1 }
+            }
+
+            if case .some(.commitSent) = item.successNotification {
+                diagnostics.update {
+                    $0.commitSentAt = finishedAt
+                    if let queuedAt = $0.commitQueuedAt {
+                        $0.commitQueueToSendMilliseconds = max(
+                            0,
+                            Int(finishedAt.timeIntervalSince(queuedAt) * 1_000)
+                        )
+                    }
+                }
+            }
+            if let notification = item.successNotification {
+                await notificationHandler?(notification)
+            }
+            item.completion?.resolve(.success(Void()))
+            publishQueueHealth()
+        }
+        drainTask = nil
+    }
+
+    private func recordSendDuration(since startedAt: Date, finishedAt: Date = Date()) {
+        let duration = max(0, Int(finishedAt.timeIntervalSince(startedAt) * 1_000))
+        diagnostics.update {
+            $0.lastTransportSendMilliseconds = duration
+            $0.maxTransportSendMilliseconds = max($0.maxTransportSendMilliseconds, duration)
+        }
+    }
+
+    private func publishQueueHealth() {
+        let now = Date()
+        let oldestAge = queue.first.map {
+            max(0, Int(now.timeIntervalSince($0.enqueuedAt) * 1_000))
+        } ?? 0
+        diagnostics.update {
+            $0.outboundQueueDepth = queue.count
+            $0.outboundQueueHighWater = max($0.outboundQueueHighWater, queue.count)
+            $0.outboundOldestQueuedAgeMilliseconds = oldestAge
         }
     }
 }
@@ -249,7 +450,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
 
     nonisolated let diagnostics = DVKAudioUploadDiagnosticsStore()
     private nonisolated let ingress: DVKAudioUploadIngress
-    private let transport: any DVKOutboundTransport
+    private let outboundWriter: DVKAudioOutboundWriter
     private var processor: FrameProcessor?
     private var notificationHandler: NotificationHandler?
     private var drainTask: Task<Void, Never>?
@@ -259,19 +460,34 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
     private var sessionStartPayload: [String: DVKJSONValue] = [:]
     private var activeConnectionGeneration = 0
     private var captureGeneration = 0
-    private var nextChunkIndex = 0
+    private var nextChunkIndexToEnqueue = 0
     private var active = false
     private var ready = false
     private var acceptingAudio = false
     private var utteranceOpen = false
     private var pendingPCM16 = Data()
+    private var pendingOutboundPCM16 = Data()
+    private let outboundBatchBytes: Int
+    private let allowsContinuousInput: Bool
     private var activeDrainTasks = 0
     private var failureNotifiedGeneration: Int?
     private var backpressureNotifiedGeneration: Int?
 
-    init(transport: any DVKOutboundTransport, queueCapacity: Int = 100) {
-        self.transport = transport
+    init(
+        transport: any DVKOutboundTransport,
+        queueCapacity: Int = 100,
+        outboundBatchBytes: Int = 640,
+        allowsContinuousInput: Bool = false,
+        outboundQueueCapacity: Int? = nil
+    ) {
+        self.outboundBatchBytes = max(640, outboundBatchBytes - (outboundBatchBytes % 2))
+        self.allowsContinuousInput = allowsContinuousInput
         ingress = DVKAudioUploadIngress(capacity: queueCapacity)
+        outboundWriter = DVKAudioOutboundWriter(
+            transport: transport,
+            diagnostics: diagnostics,
+            capacity: outboundQueueCapacity ?? queueCapacity
+        )
     }
 
     @discardableResult
@@ -282,9 +498,18 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
     func configure(
         processor: @escaping FrameProcessor,
         notificationHandler: @escaping NotificationHandler
-    ) {
+    ) async {
         self.processor = processor
         self.notificationHandler = notificationHandler
+        await outboundWriter.configure(
+            notificationHandler: notificationHandler,
+            terminalFailureHandler: { [weak self] generation, category in
+                await self?.handleOutboundWriterFailure(
+                    generation: generation,
+                    category: category
+                )
+            }
+        )
         guard drainTask == nil else { return }
         drainTask = Task { [weak self] in
             await self?.drainLoop()
@@ -310,9 +535,10 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         self.traceID = traceID
         self.sessionStartPayload = sessionStartPayload
         codec = DVKProtocolCodec()
-        nextChunkIndex = 0
+        nextChunkIndexToEnqueue = 0
         captureGeneration = 0
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         utteranceOpen = false
         active = true
         ready = false
@@ -320,11 +546,13 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         failureNotifiedGeneration = nil
         backpressureNotifiedGeneration = nil
         ingress.resetHighWater(generation: activeConnectionGeneration)
+        await outboundWriter.reset(generation: activeConnectionGeneration)
         var freshDiagnostics = DVKAudioUploadDiagnosticsSnapshot()
         freshDiagnostics.connectionGeneration = activeConnectionGeneration
         freshDiagnostics.active = true
         freshDiagnostics.maxActiveDrainTasks = activeDrainTasks
         freshDiagnostics.generationStartedAt = Date()
+        freshDiagnostics.outboundBatchBytes = outboundBatchBytes
         diagnostics.reset(freshDiagnostics)
         publishDiagnostics()
         if let lastReceivedServerSequence {
@@ -347,6 +575,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         captureGeneration = generation
         acceptingAudio = true
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         publishDiagnostics()
     }
 
@@ -354,6 +583,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         acceptingAudio = false
         captureGeneration &+= 1
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         publishDiagnostics()
     }
 
@@ -381,7 +611,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         try await enqueueAndWait(.sessionEnd)
     }
 
-    func abortConnection() {
+    func abortConnection() async {
         let generation = activeConnectionGeneration
         ingress.deactivateCaptureOffers()
         active = false
@@ -389,10 +619,12 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         acceptingAudio = false
         utteranceOpen = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.inactiveConnection
         )
+        await outboundWriter.invalidate(generation: generation)
         publishDiagnostics()
     }
 
@@ -420,7 +652,7 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         defer { activeDrainTasks -= 1 }
         for await signal in ingress.signals {
             if signal < 0 {
-                await failBackpressure(generation: abs(signal))
+                await failBackpressure(generation: abs(signal), inputQueue: true)
             }
             while let item = ingress.pop() {
                 await process(item)
@@ -434,12 +666,11 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         case .captured(let packet, let generation):
             await processCaptured(packet, connectionGeneration: generation)
         case .control(let command, let completion, let generation):
-            do {
-                try await processControl(command, connectionGeneration: generation)
-                completion.resolve(.success(Void()))
-            } catch {
-                completion.resolve(.failure(error))
-            }
+            await processControl(
+                command,
+                completion: completion,
+                connectionGeneration: generation
+            )
         }
     }
 
@@ -459,9 +690,30 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
             diagnostics.update { $0.rejectedAfterCloseCommands += 1 }
             return
         }
+        let processingLagMilliseconds = max(
+            0,
+            Int(Date().timeIntervalSince(packet.capturedAt) * 1_000)
+        )
+        let packetMilliseconds = max(
+            0,
+            Int((Double(packet.frameCount) / Double(max(1, packet.sampleRate))) * 1_000)
+        )
+        diagnostics.update {
+            $0.captureToProcessingLagMilliseconds = processingLagMilliseconds
+            $0.maxCaptureToProcessingLagMilliseconds = max(
+                $0.maxCaptureToProcessingLagMilliseconds,
+                processingLagMilliseconds
+            )
+            $0.lastCapturePacketMilliseconds = packetMilliseconds
+            $0.maxCapturePacketMilliseconds = max(
+                $0.maxCapturePacketMilliseconds,
+                packetMilliseconds
+            )
+        }
         if packet.captureGeneration > captureGeneration {
             captureGeneration = packet.captureGeneration
             pendingPCM16.removeAll(keepingCapacity: false)
+            pendingOutboundPCM16.removeAll(keepingCapacity: false)
             publishDiagnostics()
         } else if packet.captureGeneration < captureGeneration {
             diagnostics.update { $0.droppedStaleGenerationChunks += 1 }
@@ -486,7 +738,8 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                 for intent in intents {
                     try await processIntent(
                         intent,
-                        connectionGeneration: sendingGeneration
+                        connectionGeneration: sendingGeneration,
+                        captureProcessingLagMilliseconds: processingLagMilliseconds
                     )
                 }
             } catch {
@@ -497,7 +750,8 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
 
     private func processIntent(
         _ intent: DVKAudioUploadIntent,
-        connectionGeneration sendingGeneration: Int
+        connectionGeneration sendingGeneration: Int,
+        captureProcessingLagMilliseconds: Int
     ) async throws {
         guard active,
               ready,
@@ -508,15 +762,15 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         case .beginUtterance(let responseID):
             utteranceOpen = true
             if let responseID, !responseID.isEmpty {
-                try await sendMessage(
+                try await enqueueMessage(
                     .interrupt,
                     payload: ["response_id": .string(responseID)],
-                    connectionGeneration: sendingGeneration
+                    connectionGeneration: sendingGeneration,
+                    successNotification: .interruptSent(responseID: responseID)
                 )
-                await notificationHandler?(.interruptSent(responseID: responseID))
             }
         case .audio(let data):
-            guard utteranceOpen else {
+            guard utteranceOpen || allowsContinuousInput else {
                 diagnostics.update { $0.rejectedAfterCloseCommands += 1 }
                 return
             }
@@ -524,102 +778,120 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
                   data.count.isMultiple(of: 2) else {
                 throw DVKAudioUploadError.invalidAudioChunk
             }
-            let index = nextChunkIndex
-            let message = codec.makeMessage(
-                type: .audioAppend,
-                sessionID: sessionID,
-                traceID: traceID,
-                payload: [
-                    "format": .string(DVKProtocolCodec.format),
-                    "sample_rate": .int(DVKProtocolCodec.sampleRate),
-                    "channels": .int(DVKProtocolCodec.channels),
-                    "chunk_index": .int(index),
-                    "audio": .string(data.base64EncodedString())
-                ]
-            )
-            do {
-                try await transport.send(message)
-            } catch {
-                await failSend(error, generation: sendingGeneration)
-                throw DVKAudioUploadError.sendFailed
+            pendingOutboundPCM16.append(data)
+            while pendingOutboundPCM16.count >= outboundBatchBytes {
+                let batch = Data(pendingOutboundPCM16.prefix(outboundBatchBytes))
+                pendingOutboundPCM16.removeFirst(outboundBatchBytes)
+                try await sendAudioChunk(
+                    batch,
+                    connectionGeneration: sendingGeneration
+                )
             }
-            guard active,
-                  sendingGeneration == activeConnectionGeneration else {
-                throw DVKAudioUploadError.inactiveConnection
-            }
-            nextChunkIndex += 1
-            diagnostics.update {
-                $0.nextChunkIndex = nextChunkIndex
-                $0.sentAudioChunks += 1
-                $0.lastFiveSentChunkIndices.append(index)
-                if $0.lastFiveSentChunkIndices.count > 5 {
-                    $0.lastFiveSentChunkIndices.removeFirst()
-                }
-            }
-            await notificationHandler?(.audioSent(bytes: data.count, chunkIndex: index))
         case .commit:
             guard utteranceOpen else { return }
-            try await sendMessage(
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
+            diagnostics.update {
+                $0.captureToProcessingLagAtCommitMilliseconds = captureProcessingLagMilliseconds
+                $0.commitQueuedAt = Date()
+                $0.commitSentAt = nil
+                $0.commitQueueToSendMilliseconds = 0
+            }
+            try await enqueueMessage(
                 .audioCommit,
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                successNotification: .commitSent
             )
             utteranceOpen = false
-            await notificationHandler?(.commitSent)
         }
     }
 
     private func processControl(
         _ command: DVKAudioUploadControl,
+        completion: DVKUploadCompletion,
         connectionGeneration sendingGeneration: Int
-    ) async throws {
-        switch command {
+    ) async {
+        do {
+            switch command {
         case .sessionStart:
-            try await sendMessage(
+            try await enqueueMessage(
                 .sessionStart,
                 payload: sessionStartPayload,
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                completion: completion
             )
         case .sessionResume(let sequence):
-            try await sendMessage(
+            try await enqueueMessage(
                 .sessionResume,
                 payload: ["last_received_server_sequence": .int(sequence)],
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                completion: completion
             )
         case .audioCommit:
-            try await sendMessage(
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
+            diagnostics.update {
+                $0.commitQueuedAt = Date()
+                $0.commitSentAt = nil
+                $0.commitQueueToSendMilliseconds = 0
+            }
+            try await enqueueMessage(
                 .audioCommit,
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                successNotification: .commitSent,
+                completion: completion
             )
             utteranceOpen = false
-            await notificationHandler?(.commitSent)
         case .interrupt(let responseID):
-            try await sendMessage(
+            try await enqueueMessage(
                 .interrupt,
                 payload: ["response_id": .string(responseID)],
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                successNotification: .interruptSent(responseID: responseID),
+                completion: completion
             )
-            await notificationHandler?(.interruptSent(responseID: responseID))
         case .mute:
-            try await sendMessage(.mute, connectionGeneration: sendingGeneration)
+            try await enqueueMessage(
+                .mute,
+                connectionGeneration: sendingGeneration,
+                completion: completion
+            )
         case .unmute:
-            try await sendMessage(.unmute, connectionGeneration: sendingGeneration)
+            try await enqueueMessage(
+                .unmute,
+                connectionGeneration: sendingGeneration,
+                completion: completion
+            )
         case .clientState(let payload):
-            try await sendMessage(
+            try await enqueueMessage(
                 .clientState,
                 payload: payload,
-                connectionGeneration: sendingGeneration
+                connectionGeneration: sendingGeneration,
+                completion: completion
             )
         case .sessionEnd:
-            try await sendMessage(.sessionEnd, connectionGeneration: sendingGeneration)
+            try await flushPendingAudio(connectionGeneration: sendingGeneration)
+            try await enqueueMessage(
+                .sessionEnd,
+                connectionGeneration: sendingGeneration,
+                completion: completion
+            )
         case .ping:
-            try await sendMessage(.ping, connectionGeneration: sendingGeneration)
+            try await enqueueMessage(
+                .ping,
+                connectionGeneration: sendingGeneration,
+                completion: completion
+            )
+            }
+        } catch {
+            completion.resolve(.failure(error))
         }
     }
 
-    private func sendMessage(
+    private func enqueueMessage(
         _ type: DVKProtocolEventType,
         payload: [String: DVKJSONValue] = [:],
-        connectionGeneration sendingGeneration: Int
+        connectionGeneration sendingGeneration: Int,
+        successNotification: DVKAudioUploadNotification? = nil,
+        completion: DVKUploadCompletion? = nil
     ) async throws {
         guard active,
               sendingGeneration == activeConnectionGeneration else {
@@ -631,30 +903,91 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
             traceID: traceID,
             payload: payload
         )
+        diagnostics.update { $0.nextClientSequence = codec.clientSequence }
         do {
-            try await transport.send(message)
-        } catch {
-            await failSend(error, generation: sendingGeneration)
-            throw DVKAudioUploadError.sendFailed
+            try await outboundWriter.enqueue(DVKAudioOutboundWriteItem(
+                message: message,
+                connectionGeneration: sendingGeneration,
+                enqueuedAt: Date(),
+                audioBytes: nil,
+                chunkIndex: nil,
+                successNotification: successNotification,
+                completion: completion
+            ))
+        } catch DVKAudioUploadError.queueBackpressure {
+            await failBackpressure(generation: sendingGeneration, inputQueue: false)
+            throw DVKAudioUploadError.queueBackpressure
         }
+    }
+
+    private func flushPendingAudio(connectionGeneration sendingGeneration: Int) async throws {
+        guard !pendingOutboundPCM16.isEmpty else { return }
+        let data = pendingOutboundPCM16
+        pendingOutboundPCM16.removeAll(keepingCapacity: true)
+        try await sendAudioChunk(data, connectionGeneration: sendingGeneration)
+    }
+
+    private func sendAudioChunk(
+        _ data: Data,
+        connectionGeneration sendingGeneration: Int
+    ) async throws {
         guard active,
+              ready,
               sendingGeneration == activeConnectionGeneration else {
             throw DVKAudioUploadError.inactiveConnection
         }
-        diagnostics.update { $0.sentControlCommands += 1 }
+        guard !data.isEmpty,
+              data.count <= DVKProtocolCodec.maximumChunkBytes,
+              data.count.isMultiple(of: 2) else {
+            throw DVKAudioUploadError.invalidAudioChunk
+        }
+        let index = nextChunkIndexToEnqueue
+        let message = codec.makeMessage(
+            type: .audioAppend,
+            sessionID: sessionID,
+            traceID: traceID,
+            payload: [
+                "format": .string(DVKProtocolCodec.format),
+                "sample_rate": .int(DVKProtocolCodec.sampleRate),
+                "channels": .int(DVKProtocolCodec.channels),
+                "chunk_index": .int(index),
+                "audio": .string(data.base64EncodedString())
+            ]
+        )
+        nextChunkIndexToEnqueue += 1
+        diagnostics.update { $0.nextClientSequence = codec.clientSequence }
+        do {
+            try await outboundWriter.enqueue(DVKAudioOutboundWriteItem(
+                message: message,
+                connectionGeneration: sendingGeneration,
+                enqueuedAt: Date(),
+                audioBytes: data.count,
+                chunkIndex: index,
+                successNotification: nil,
+                completion: nil
+            ))
+        } catch {
+            nextChunkIndexToEnqueue = max(0, nextChunkIndexToEnqueue - 1)
+            await failBackpressure(generation: sendingGeneration, inputQueue: false)
+            throw error
+        }
     }
 
-    private func failBackpressure(generation: Int) async {
+    private func failBackpressure(generation: Int, inputQueue: Bool) async {
         guard generation == activeConnectionGeneration else { return }
         guard active else { return }
         guard backpressureNotifiedGeneration != generation else { return }
         backpressureNotifiedGeneration = generation
-        diagnostics.update { $0.inputBackpressureCount += 1 }
+        if inputQueue {
+            diagnostics.update { $0.inputBackpressureCount += 1 }
+        }
+        await outboundWriter.invalidate(generation: generation)
         ingress.deactivateCaptureOffers()
         active = false
         ready = false
         acceptingAudio = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.queueBackpressure
@@ -663,29 +996,22 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         publishDiagnostics()
     }
 
-    private func failSend(_ error: Error, generation: Int) async {
-        guard generation == activeConnectionGeneration else {
-            diagnostics.update { $0.staleGenerationSendFailureCount += 1 }
-            return
-        }
-        guard active else { return }
+    private func handleOutboundWriterFailure(generation: Int, category: String) async {
+        guard generation == activeConnectionGeneration, active else { return }
         guard failureNotifiedGeneration != generation else { return }
         failureNotifiedGeneration = generation
-        let category = String(describing: type(of: error))
-        diagnostics.update {
-            $0.activeGenerationSendFailureCount += 1
-            $0.lastSendFailureCategory = category
-        }
+        await outboundWriter.invalidate(generation: generation)
         ingress.deactivateCaptureOffers()
         active = false
         ready = false
         acceptingAudio = false
         pendingPCM16.removeAll(keepingCapacity: false)
+        pendingOutboundPCM16.removeAll(keepingCapacity: false)
         rejectPending(
             generation: generation,
             error: DVKAudioUploadError.sendFailed
         )
-        await notificationHandler?(.sendFailed(category: category))
+        diagnostics.update { $0.lastSendFailureCategory = category }
         publishDiagnostics()
     }
 
@@ -701,7 +1027,6 @@ actor DVKAudioUploadActor: DVKAudioCaptureSink {
         diagnostics.update {
             $0.connectionGeneration = activeConnectionGeneration
             $0.captureGeneration = captureGeneration
-            $0.nextChunkIndex = nextChunkIndex
             $0.nextClientSequence = codec.clientSequence
             $0.active = active
             $0.acceptingAudio = acceptingAudio

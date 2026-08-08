@@ -6,8 +6,8 @@ final class ChatUIContractTests: XCTestCase {
     func testChatTabOrderAndInjectedServiceBoundaryRemainStable() throws {
         let main = try source("XiaomaoApp/App/MainTabView.swift")
         let companion = try XCTUnwrap(main.range(of: "CompanionHomeView("))
-        let chat = try XCTUnwrap(main.range(of: "ChatView(viewModel:"))
-        let smallThings = try XCTUnwrap(main.range(of: "SmallThingsRootView()"))
+        let chat = try XCTUnwrap(main.range(of: "ChatView("))
+        let smallThings = try XCTUnwrap(main.range(of: "SmallThingsRootView(store:"))
         let settings = try XCTUnwrap(main.range(of: "SettingsView("))
 
         XCTAssertLessThan(companion.lowerBound, chat.lowerBound)
@@ -32,7 +32,10 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains("清空聊天记录"))
         XCTAssertTrue(chat.contains("刚才的回复由服务端安全降级生成"))
         XCTAssertTrue(chat.contains("ChatTypingIndicator()"))
-        XCTAssertTrue(typing.contains("小猫正在回复"))
+        XCTAssertTrue(typing.contains("正在发送消息"))
+        XCTAssertFalse(typing.contains("小猫正在回复"))
+        XCTAssertTrue(chat.contains("refreshHistorySilently"))
+        XCTAssertTrue(chat.contains("Task.sleep(for: .seconds(4))"))
     }
 
     func testCoreAccessibilityIdentifiersRemainStable() throws {
@@ -57,6 +60,8 @@ final class ChatUIContractTests: XCTestCase {
             "chat.input",
             "chat.send",
             "chat.clear",
+            "chat.xiaomao.mode",
+            "chat.xiaomao.retry.",
             "chat.message."
         ] {
             XCTAssertTrue(files.contains(identifier), "Missing identifier: \(identifier)")
@@ -68,19 +73,91 @@ final class ChatUIContractTests: XCTestCase {
         let theme = try source("XiaomaoApp/Design/Theme.swift")
 
         XCTAssertTrue(composer.contains(".lineLimit(1...5)"))
+        XCTAssertTrue(composer.contains(".frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)"))
+        XCTAssertTrue(composer.contains(".contentShape("))
+        XCTAssertTrue(composer.contains("inputFocused = true"))
         XCTAssertTrue(composer.contains("minWidth: Theme.controlMinimumSize"))
         XCTAssertTrue(composer.contains("minHeight: Theme.controlMinimumSize"))
         XCTAssertTrue(theme.contains("static let controlMinimumSize: CGFloat = 44"))
+    }
+
+    func testTappingOrScrollingConversationDismissesKeyboard() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+
+        XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
+        XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
+        XCTAssertTrue(chat.contains("header"))
+        XCTAssertTrue(chat.contains("modeFooter"))
+        XCTAssertGreaterThanOrEqual(
+            chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
+            2,
+            "顶部与底部非输入区域都必须可主动收起键盘"
+        )
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
+                      "聊天记录默认必须锚定最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
+                      "键盘最终布局完成后只能做一次锚底")
+        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
+                      "键盘完全收回、Tab Bar 恢复后必须再次锚定最新消息")
+        XCTAssertTrue(chat.contains("scrollToBottomWithoutAnimation(proxy)"),
+                      "键盘稳定后的锚底不得再叠加第二套滚动动画")
+        XCTAssertTrue(chat.contains("transaction.disablesAnimations = true"),
+                      "键盘锚底必须禁用额外 SwiftUI 动画")
+        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
+                       "不得监听输入法 frame 连续变化，否则候选栏会反复推动页面")
+        XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
+                       "不得复制系统键盘动画驱动 ScrollView")
+        XCTAssertTrue(chat.contains("DispatchQueue.main.async"),
+                      "收键盘后的滚动必须等最终 safe-area 布局落定")
+        XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
+                       "聊天页必须交回系统键盘 safe-area，不能让 Tab Bar 留在键盘下方形成空白")
+        XCTAssertFalse(chat.contains("keyboardOverlap"),
+                       "不得再手工维护第二套键盘高度")
+        XCTAssertFalse(chat.contains("GeometryReader"),
+                       "键盘布局不得依赖手工屏幕/容器高度推算")
+        XCTAssertFalse(chat.contains("UIScreen.main.bounds.height"),
+                       "不得按整屏高度计算键盘覆盖")
+        XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
+                       "不得再延迟等待键盘后补滚动")
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {
         let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
 
         XCTAssertTrue(bubble.contains("chat.message.\\(message.id)"))
-        XCTAssertTrue(bubble.contains("你：\\(message.content)"))
-        XCTAssertTrue(bubble.contains("小猫：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("message.participant.displayName"))
+        XCTAssertTrue(bubble.contains("\\(message.participant.displayName)：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("switch message.participant"))
+        XCTAssertTrue(bubble.contains("case .xiaomao:"))
+        XCTAssertTrue(bubble.contains("message.participant == .user"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
+    }
+
+    func testSendDismissesKeyboardBeforeAsyncRequestAndNeverRestoresFocus() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let sendRange = try XCTUnwrap(chat.range(of: "send:"))
+        let focusBindingRange = try XCTUnwrap(
+            chat.range(of: "inputFocused:", range: sendRange.upperBound..<chat.endIndex)
+        )
+        let sendBlock = String(chat[sendRange.lowerBound..<focusBindingRange.lowerBound])
+
+        let dismiss = try XCTUnwrap(sendBlock.range(of: "inputFocused = false"))
+        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send()"))
+        XCTAssertLessThan(dismiss.lowerBound, request.lowerBound)
+        XCTAssertTrue(sendBlock.contains("await Task.yield()"))
+        XCTAssertFalse(chat.contains("inputFocused = true"))
+    }
+
+    func testThreePartyHeaderUsesHumanDeveloperAndSoleAIIdentity() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let model = try source("XiaomaoApp/Models/ChatMessage.swift")
+
+        XCTAssertTrue(chat.contains("开发者和小猫都在"))
+        XCTAssertTrue(model.contains("case developer"))
+        XCTAssertTrue(model.contains("case xiaomao"))
+        XCTAssertFalse(model.contains("case companion"))
+        XCTAssertTrue(model.contains("case .developer: \"开发者\""))
     }
 
     private func source(_ relativePath: String) throws -> String {

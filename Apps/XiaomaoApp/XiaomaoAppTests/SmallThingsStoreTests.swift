@@ -57,6 +57,7 @@ final class SmallThingsStoreTests: XCTestCase {
 
         XCTAssertTrue(store.addExpense(purpose: " 纸笔 ", amountText: "2.50", note: "  写字  "))
         XCTAssertEqual(store.entries.first?.expenseStatus, .pending)
+        XCTAssertEqual(store.entries.first?.reviewer, .partner)
         XCTAssertEqual(store.entries.first?.title, "纸笔")
         XCTAssertEqual(store.entries.first?.body, "写字")
         XCTAssertEqual(store.pendingAmount, 2.5, accuracy: 0.001)
@@ -212,9 +213,10 @@ final class SmallThingsStoreTests: XCTestCase {
 
     func testApprovalQueueOnlyContainsPartnerPendingExpenses() {
         let entries = [
-            SmallThingEntry(type: .expense, requester: .partner, amount: 1, expenseStatus: .pending),
-            SmallThingEntry(type: .expense, requester: .me, amount: 1, expenseStatus: .pending),
-            SmallThingEntry(type: .expense, requester: .partner, amount: 1, expenseStatus: .approved),
+            SmallThingEntry(type: .expense, requester: .partner, reviewer: .me, amount: 1, expenseStatus: .pending),
+            SmallThingEntry(type: .expense, requester: .me, reviewer: .partner, amount: 1, expenseStatus: .pending),
+            SmallThingEntry(type: .expense, requester: .partner, reviewer: .partner, amount: 1, expenseStatus: .pending),
+            SmallThingEntry(type: .expense, requester: .partner, reviewer: .me, amount: 1, expenseStatus: .approved),
             SmallThingEntry(type: .note, requester: .partner, body: "x")
         ]
 
@@ -225,6 +227,7 @@ final class SmallThingsStoreTests: XCTestCase {
         let entry = SmallThingEntry(
             type: .expense,
             requester: .partner,
+            reviewer: .me,
             title: "A",
             amount: 12,
             expenseStatus: .pending
@@ -244,6 +247,7 @@ final class SmallThingsStoreTests: XCTestCase {
         let entry = SmallThingEntry(
             type: .expense,
             requester: .partner,
+            reviewer: .me,
             title: "A",
             amount: 12,
             expenseStatus: .pending
@@ -258,8 +262,8 @@ final class SmallThingsStoreTests: XCTestCase {
     }
 
     func testReviewRejectsSelfRequestedOrNonPendingEntries() {
-        let mine = SmallThingEntry(type: .expense, requester: .me, amount: 1, expenseStatus: .pending)
-        let approved = SmallThingEntry(type: .expense, requester: .partner, amount: 1, expenseStatus: .approved)
+        let mine = SmallThingEntry(type: .expense, requester: .me, reviewer: .partner, amount: 1, expenseStatus: .pending)
+        let approved = SmallThingEntry(type: .expense, requester: .partner, reviewer: .me, amount: 1, expenseStatus: .approved)
         let store = SmallThingsStore(entries: [mine, approved])
 
         XCTAssertFalse(store.review(entryID: mine.id, status: .approved, message: ""))
@@ -271,6 +275,7 @@ final class SmallThingsStoreTests: XCTestCase {
         let entry = SmallThingEntry(
             type: .expense,
             requester: .partner,
+            reviewer: .me,
             title: "A",
             amount: 12,
             expenseStatus: .pending,
@@ -295,6 +300,7 @@ final class SmallThingsStoreTests: XCTestCase {
         let entry = SmallThingEntry(
             type: .expense,
             requester: .partner,
+            reviewer: .me,
             title: "A",
             amount: 1,
             expenseStatus: .pending

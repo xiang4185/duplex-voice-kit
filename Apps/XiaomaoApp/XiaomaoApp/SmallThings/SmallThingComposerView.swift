@@ -47,7 +47,7 @@ struct SmallThingComposerView: View {
                     }
 
                     Button {
-                        save()
+                        Task { await save() }
                     } label: {
                         Text("保存")
                             .font(Theme.headlineFont)
@@ -68,7 +68,7 @@ struct SmallThingComposerView: View {
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
-                    .disabled(!canSave)
+                    .disabled(!canSave || store.isLoading)
                     .accessibilityIdentifier("smallThings.form.save")
                     .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
                     .id(Field.save)
@@ -118,24 +118,73 @@ struct SmallThingComposerView: View {
                 .font(Theme.captionFont)
                 .foregroundStyle(Theme.textSecondary)
 
-            Picker("记录类型", selection: $type) {
-                Text("记个小记")
-                    .tag(SmallThingEntryType.note)
-                    .accessibilityIdentifier("smallThings.form.type.note")
-                Text("记一笔账")
-                    .tag(SmallThingEntryType.expense)
-                    .accessibilityIdentifier("smallThings.form.type.expense")
-            }
-            .pickerStyle(.segmented)
-            .tint(Theme.primary)
-            .padding(Theme.Spacing.xxSmall)
-            .background(Theme.surfaceWarm)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .stroke(Theme.border.opacity(0.85), lineWidth: 1)
+            HStack(spacing: Theme.Spacing.small) {
+                typeSelectorButton(
+                    type: .note,
+                    title: "记个小记",
+                    subtitle: "文字 / 图片",
+                    systemImage: "note.text"
+                )
+                typeSelectorButton(
+                    type: .expense,
+                    title: "记一笔账",
+                    subtitle: "金额 / 审批",
+                    systemImage: "creditcard"
+                )
             }
         }
+    }
+
+    @ViewBuilder
+    private func typeSelectorButton(
+        type candidate: SmallThingEntryType,
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        if type == candidate {
+            typeSelectionButton(
+                candidate: candidate,
+                title: title,
+                subtitle: subtitle,
+                systemImage: systemImage
+            )
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.primary)
+        } else {
+            typeSelectionButton(
+                candidate: candidate,
+                title: title,
+                subtitle: subtitle,
+                systemImage: systemImage
+            )
+            .buttonStyle(.bordered)
+            .tint(Theme.primary)
+        }
+    }
+
+    private func typeSelectionButton(
+        candidate: SmallThingEntryType,
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        Button {
+            type = candidate
+        } label: {
+            VStack(spacing: 2) {
+                Label(title, systemImage: systemImage)
+                    .font(Theme.headlineFont)
+                Text(subtitle)
+                    .font(.caption2)
+                    .opacity(0.78)
+            }
+            .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight + 8)
+        }
+        .accessibilityValue(type == candidate ? "已选择" : "未选择")
+        .accessibilityIdentifier(
+            candidate == .note ? "smallThings.form.type.note" : "smallThings.form.type.expense"
+        )
     }
 
     private var noteFields: some View {
@@ -243,8 +292,10 @@ struct SmallThingComposerView: View {
         Label {
             Text(
                 type == .note
-                    ? "图片只保存在本次离线演示的内存中，退出 App 后不会持久化。"
-                    : "保存后会先标记为“等我看”，等待对方在审批页点头或打回。"
+                    ? (store.isProduction
+                        ? "图片会先在本机压缩并移除定位等元数据，再通过鉴权上传保存。"
+                        : "图片只保存在本次离线 Mock 的内存中，退出 App 后不会持久化。")
+                    : "保存后会标记为“等对方看”，等待对方在审批页点头或打回。"
             )
             .fixedSize(horizontal: false, vertical: true)
         } icon: {
@@ -296,13 +347,21 @@ struct SmallThingComposerView: View {
         }
     }
 
-    private func save() {
+    private func save() async {
         let saved: Bool
         switch type {
         case .note:
-            saved = store.addNote(title: title, body: details, imageData: imageData)
+            saved = await store.addNotePersisted(
+                title: title,
+                body: details,
+                imageData: imageData
+            )
         case .expense:
-            saved = store.addExpense(purpose: title, amountText: amount, note: details)
+            saved = await store.addExpensePersisted(
+                purpose: title,
+                amountText: amount,
+                note: details
+            )
         }
 
         guard saved else {

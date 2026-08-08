@@ -126,6 +126,10 @@ final class RealtimeAudioIOEngine: AudioCapturing, AudioPlaying, RealtimeAudioIO
         core?.cancelPlayback(responseID: responseID)
     }
 
+    func setMuted(_ muted: Bool) {
+        core?.setPlaybackMuted(muted)
+    }
+
     func recoverCapture() throws {
         guard let core else {
             throw AppError.audio("dvk_audio_initialization_failed")

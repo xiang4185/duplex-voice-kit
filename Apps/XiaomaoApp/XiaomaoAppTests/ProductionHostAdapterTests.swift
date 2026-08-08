@@ -639,21 +639,47 @@ private actor RecordingBackendAdapter: BackendAdapter {
         let data = Data(#"""
         {
             "session_id":"session",
+            "turn_id":"synthetic-turn",
+            "messages":[
+                {
+                    "id":"synthetic-user",
+                    "role":"user",
+                    "participant":"user",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "content":"synthetic",
+                    "created_at":"2026-08-06T00:00:00Z"
+                },
+                {
+                    "id":"synthetic-developer",
+                    "role":"assistant",
+                    "participant":"developer",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "content":"synthetic",
+                    "created_at":"2026-08-06T00:00:01Z"
+                }
+            ],
+            "participant_results":[
+                {
+                    "participant":"developer",
+                    "turn_id":"synthetic-turn",
+                    "status":"completed",
+                    "retryable":false,
+                    "message":{
+                        "id":"synthetic-developer",
+                        "role":"assistant",
+                        "participant":"developer",
+                        "turn_id":"synthetic-turn",
+                        "status":"completed",
+                        "content":"synthetic",
+                        "created_at":"2026-08-06T00:00:01Z"
+                    }
+                }
+            ],
             "route":"direct",
             "degraded":false,
-            "persisted":true,
-            "user_message":{
-                "id":"user",
-                "role":"user",
-                "content":"synthetic",
-                "created_at":"2026-08-05T00:00:00Z"
-            },
-            "assistant_message":{
-                "id":"assistant",
-                "role":"assistant",
-                "content":"synthetic",
-                "created_at":"2026-08-05T00:00:01Z"
-            }
+            "persisted":true
         }
         """#.utf8)
         return BackendAdapterResponse(statusCode: 200, payload: data)

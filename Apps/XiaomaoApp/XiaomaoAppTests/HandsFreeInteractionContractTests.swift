@@ -42,6 +42,51 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
+    func testLatestUXRegressionContract() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let entry = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+        let composer = try source("XiaomaoApp/SmallThings/SmallThingComposerView.swift")
+        let coordinator = try source("XiaomaoApp/App/AppCoordinator.swift")
+
+        XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
+                       "聊天页必须使用系统键盘 safe-area，避免 Tab Bar 留在键盘下方")
+        XCTAssertFalse(chat.contains("keyboardOverlap"),
+                       "聊天页不得再维护手工键盘高度")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
+                      "聊天记录默认必须停在最新消息")
+        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
+                      "键盘稳定后必须只做一次最终锚底")
+        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
+                      "键盘收回完成后必须锚定最新消息")
+        XCTAssertTrue(chat.contains("transaction.disablesAnimations = true"),
+                      "键盘锚底不得叠加额外页面动画")
+        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
+                       "不得跟随输入法 frame 连续变化反复滚动")
+        XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
+                       "不得复制键盘动画驱动消息区")
+        XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
+
+        XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
+        XCTAssertTrue(entry.contains("dateFormat = \"yyyy/MM/dd HH:mm\""),
+                      "小事应显示纯数字固定记录时间并精确到分钟")
+
+        XCTAssertFalse(composer.contains("pickerStyle(.segmented)"),
+                       "记一笔顶部类型选择不得退回过小的系统 segmented control")
+        XCTAssertTrue(composer.contains("Theme.buttonMinimumHeight + 8"),
+                      "两个记录类型入口必须保持足够点击高度并复用统一按钮体系")
+        XCTAssertTrue(composer.contains(".buttonStyle(.borderedProminent)"))
+        XCTAssertTrue(composer.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(coordinator.contains("voiceActivityConfiguration: .xiaomaoRealtime"),
+                      "Xiaomao 宿主必须使用低延迟结束静音配置")
+
+        let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
+        XCTAssertTrue(call.contains(".frame(height: 46)"),
+                      "语音转写必须占用固定高度，出现/消失不得推动人物形象")
+        XCTAssertFalse(call.contains("empathy.hug"), "不得保留无真实作用的抱抱我按钮")
+        XCTAssertFalse(call.contains("empathy.topic"), "不得保留只改本地文案的换个话题按钮")
+        XCTAssertTrue(call.contains("empathy.continue"), "关心卡应只保留诚实的继续通话入口")
+    }
+
     // P2.6C-REPAIR C: 通话结束统一走 finishCall 单路径关闭 Live Activity
     func testVoiceCallTeardownEndsLiveActivityThroughSinglePath() throws {
         let source = try voiceCallViewSource()
@@ -49,20 +94,21 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 唯一 teardown 辅助方法存在
         XCTAssertTrue(source.contains("private func finishCall"))
 
-        // 无参 finishCall() 四个合法入口 (P2.8A: 左上改为确认弹窗, 不再直接结束):
-        // ① Live Activity 挂断 ② idle 预警「结束通话」 ③ idle 结束「回到首页」 ④ 挂断确认「结束通话」
+        // 无参 finishCall() 三个页面内合法入口:
+        // ① idle 预警「结束通话」 ② idle 结束「回到首页」 ③ 挂断确认「结束通话」
+        // Live Activity 挂断由常驻 RootView 处理，确保通话页收起后仍然有效。
         // 按可执行调用行统计 (正则整行匹配, 排除注释), 不依赖字面总数
         let finishCallLines = source.split(whereSeparator: \.isNewline)
             .filter { $0.range(of: #"^\s+finishCall\(\)$"#, options: .regularExpression) != nil }
         XCTAssertEqual(
-            finishCallLines.count, 4,
-            "Live Activity / idle 预警 / idle 结束 / 挂断确认四条路径必须统一调用 finishCall()"
+            finishCallLines.count, 3,
+            "VoiceCallView 内只保留 idle 预警 / idle 结束 / 挂断确认三条结束路径"
         )
 
         // onDisappear 走 closePage: false (视图已消失, 不手动关闭)
         XCTAssertEqual(
-            source.components(separatedBy: "finishCall(closePage: false)").count - 1, 1,
-            "onDisappear 必须调用 finishCall(closePage: false)"
+            source.components(separatedBy: "finishCall(closePage: false)").count - 1, 0,
+            "页面消失不得结束仍在进行的通话"
         )
 
         // Live Activity 结束恰好 2 处合法位置 (P2.7B-FINAL-IDLE):
@@ -77,6 +123,71 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             .filter { $0.range(of: #"^\s+viewModel\.disappear\(\)$"#, options: .regularExpression) != nil }
             .count
         XCTAssertEqual(disappearLines, 1, "viewModel.disappear() 必须只在 finishCall 内调用一次")
+    }
+
+    func testCallPageCanMinimizeWithoutEndingAndResumeFromMiniBar() throws {
+        let call = try voiceCallViewSource()
+        let tabs = try source("XiaomaoApp/App/MainTabView.swift")
+        let root = try source("XiaomaoApp/App/XiaomaoApp.swift")
+        let widget = try source("XiaomaoAppWidgets/CallLiveActivityWidget.swift")
+        let manager = try source("XiaomaoApp/Voice/CallLiveActivityManager.swift")
+
+        guard let disappearStart = call.range(of: ".onDisappear")?.lowerBound,
+              let sceneStart = call.range(of: ".onChange(of: scenePhase", range: disappearStart..<call.endIndex)?.lowerBound else {
+            XCTFail("缺少 VoiceCallView 生命周期范围")
+            return
+        }
+        let disappearBlock = String(call[disappearStart..<sceneStart])
+        XCTAssertFalse(disappearBlock.contains("finishCall"))
+        XCTAssertFalse(disappearBlock.contains("endCurrentCall"))
+        XCTAssertFalse(disappearBlock.contains("viewModel.disappear"))
+        XCTAssertTrue(call.contains(".accessibilityLabel(\"收起通话\")"))
+        XCTAssertTrue(tabs.contains("call.resume.bar"))
+        XCTAssertTrue(tabs.contains("voiceController.callIsActive"))
+        XCTAssertTrue(tabs.contains("Button(action: startCall)"))
+        XCTAssertTrue(root.contains("/call/open"), "灵动岛必须能重新打开当前通话")
+        XCTAssertTrue(root.contains("openCallFromActivity"))
+        XCTAssertTrue(root.contains("toggleMuteFromActivity"), "收起页面后静音仍由常驻 Root 接收")
+        XCTAssertTrue(root.contains("hangupFromActivity"), "收起页面后挂断仍由常驻 Root 接收")
+        XCTAssertTrue(widget.contains("xiaomao://call/open"), "灵动岛本体必须链接回当前通话")
+        XCTAssertTrue(manager.contains("controller.$callIsActive"), "Live Activity 生命周期必须跟随真实 Session")
+        XCTAssertFalse(call.contains("publisher(for: .toggleMuteFromActivity)"),
+                       "VoiceCallView 消失后不能再承担灵动岛控制事件")
+    }
+
+    func testConnectionReadinessUsesRealAudioAndParallelPreparation() throws {
+        let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
+        let diagnostics = try source("XiaomaoApp/Voice/VoiceDiagnostics.swift")
+        let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
+
+        XCTAssertTrue(controller.contains("guard await authorizeMicrophone() else"))
+        XCTAssertTrue(controller.contains("async let audioPrepared = activateAudioSession()"))
+        XCTAssertTrue(controller.contains("async let socketConnected = connectSocketForNewSession()"))
+        XCTAssertTrue(controller.contains("captureCallbackCount > 0"))
+        XCTAssertTrue(controller.contains("isConversationReady"))
+        XCTAssertTrue(controller.contains("schedulePostResponseCaptureCheck"))
+        XCTAssertTrue(controller.contains("try await self.probeWebSocket()"),
+                      "心跳必须能主动探测半断开的 WebSocket")
+        XCTAssertTrue(controller.contains("playback.setMuted(muted)"),
+                      "静音必须只走本地播放输出路径")
+        XCTAssertTrue(diagnostics.contains("presentation_to_audio_session_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_websocket_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_session_ready_ms"))
+        XCTAssertTrue(diagnostics.contains("presentation_to_microphone_ready_ms"))
+        XCTAssertTrue(diagnostics.contains("network_ping_ms"))
+        XCTAssertTrue(diagnostics.contains("commit_to_transcript_final_ms"))
+        XCTAssertTrue(diagnostics.contains("transcript_final_to_response_started_ms"))
+        XCTAssertTrue(diagnostics.contains("response_started_to_first_audio_ms"))
+        XCTAssertTrue(diagnostics.contains("latency_sample_count"))
+        XCTAssertTrue(diagnostics.contains("latency_recent_end_to_first_audio_median_ms"))
+        XCTAssertTrue(diagnostics.contains("服务端分段（最后一轮）"))
+        XCTAssertTrue(diagnostics.contains("最近 "))
+        XCTAssertTrue(diagnostics.contains("median / p95"))
+        XCTAssertTrue(diagnostics.contains("当前最长阶段"))
+        XCTAssertTrue(call.contains("viewModel.controller.latencyDiagnosticText"),
+                      "受控诊断页必须直接展示延迟分段结果")
+        XCTAssertTrue(call.contains("await viewModel.controller.refreshLatencyProbe()"),
+                      "打开诊断页时必须主动刷新一次网络 RTT")
     }
 
     // MARK: P2.6D 多角色预览彩蛋契约
@@ -110,7 +221,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("CompanionRoleStore.shared.productionRole.displayName"))
         // 保留 P2.6B finishCall 单路径
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
     }
 
     // P2.8A: 角色页 1.0 收口 — 单生产角色"小猫", 无占位/彩蛋/死按钮
@@ -213,7 +324,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("silenceSeconds"))
         // 保留 finishCall 单路径 + productionRole
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         // 不新增 Timer
         XCTAssertFalse(call.contains("Timer.scheduledTimer"))
@@ -242,7 +353,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 3. 保留 finishCall 单路径 + 生产角色
         XCTAssertTrue(call.contains("private func finishCall"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
 
         // 4. 通话主头像不再使用 170
@@ -312,7 +423,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("size: availableSize"), "P2.7B: portrait 自适应尺寸必须保留")
         XCTAssertTrue(call.contains("variant: .xiaomao"), "P2.7B: 通话主视觉必须使用生产角色")
         XCTAssertTrue(call.contains("await Task.yield()"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         guard let appearedIdx = call.range(of: "appeared = true")?.lowerBound,
               let appearIdx = call.range(of: "await viewModel.appear()")?.lowerBound else {
@@ -370,7 +481,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("size: availableSize"))
         XCTAssertTrue(call.contains("variant: .xiaomao"))
         XCTAssertTrue(call.contains("await Task.yield()"))
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         guard let aIdx = call.range(of: "appeared = true")?.lowerBound,
               let bIdx = call.range(of: "await viewModel.appear()")?.lowerBound else {
@@ -463,6 +574,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
     func testFinalLiveActivityStatusContract() throws {
         let widget = try source("XiaomaoAppWidgets/CallLiveActivityView.swift")
+        let island = try source("XiaomaoAppWidgets/CallLiveActivityWidget.swift")
+        let attributes = try source("XiaomaoShared/CallLiveActivityAttributes.swift")
+        let manager = try source("XiaomaoApp/Voice/CallLiveActivityManager.swift")
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
 
         // 1. Widget 删除虚假目标与进度
@@ -473,9 +587,24 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 2. Widget 保留真实数据
         XCTAssertTrue(widget.contains("timeString"), "Widget 必须保留真实计时")
-        XCTAssertTrue(widget.contains("characterName"), "Widget 必须保留真实角色名")
+        XCTAssertTrue(attributes.contains("characterName"),
+                      "Live Activity Attributes 必须保留真实角色名")
+        XCTAssertTrue(manager.contains("characterName: characterName"),
+                      "Live Activity 创建时必须把真实角色名写入 Attributes")
         XCTAssertTrue(widget.contains("isMuted"), "Widget 必须保留静音状态")
         XCTAssertTrue(widget.contains("isSpeaking"), "Widget 必须保留真实说话状态")
+        XCTAssertTrue(attributes.contains("CallLiveActivityPhase"), "Live Activity 必须保存真实阶段")
+        for token in ["calling", "listening", "thinking", "speaking", "reconnecting"] {
+            XCTAssertTrue(attributes.contains("case \(token)"), "缺少 Live Activity 阶段: \(token)")
+        }
+        XCTAssertTrue(manager.contains("phase(from: controller)"), "阶段必须由真实 controller 状态映射")
+        for copy in ["通话中", "正在听", "正在想", "正在说", "正在重连"] {
+            XCTAssertTrue(island.contains(copy), "灵动岛缺少真实状态文案: \(copy)")
+        }
+        XCTAssertTrue(island.contains("xiaomao://call/open"), "灵动岛必须可回到当前通话")
+        for privateToken in ["transcript", "responseText", "deviceID", "authorization", "token"] {
+            XCTAssertFalse(island.contains(privateToken), "灵动岛不得包含隐私字段: \(privateToken)")
+        }
 
         // 3. MiniIslandWave Timer 生命周期
         XCTAssertTrue(widget.contains("waveTimer"), "MiniIslandWave 必须持有 waveTimer")
@@ -494,7 +623,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("callStatusText"))
         XCTAssertTrue(call.contains("private let heroSize: CGFloat = 220"), "P2.7B: heroSize 220 必须保留")
         XCTAssertTrue(call.contains("variant: .xiaomao"), "P2.7B: 通话主视觉必须使用生产角色")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"))
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"))
         XCTAssertTrue(call.contains("productionRole.displayName"))
         XCTAssertTrue(call.contains("SC2.0 · 路线 B"))
         XCTAssertTrue(call.contains("await Task.yield()"))
@@ -612,9 +741,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(avatar.contains("lock.open.fill"), "解锁必须展示 lock.open.fill")
         XCTAssertTrue(avatar.contains(".symbolEffect(.replace)"), "解锁必须使用 symbolEffect")
 
-        // 13. Reduce Motion 对 Symbol 动效生效 (P2.8A: 静音状态改为 controller 单一来源)
-        XCTAssertTrue(call.contains("guard !viewModel.controller.isMuted, !reduceMotion"),
-                      "麦克风 pulse 必须受 Reduce Motion 与 controller 静音状态控制")
+        // 13. Reduce Motion 对 Symbol 动效生效；扬声器静音不影响麦克风 pulse
+        XCTAssertTrue(call.contains("guard !reduceMotion else { return false }"),
+                      "麦克风 pulse 只受 Reduce Motion 控制，不得被扬声器静音停掉")
         XCTAssertTrue(avatar.contains("reduceMotion"), "头像解锁动效必须遵循 Reduce Motion")
 
         // 14. 本轮禁止新增的模式
@@ -764,7 +893,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("callStatusColor"), "状态颜色必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
         XCTAssertTrue(call.contains(".symbolEffect(.pulse"), "麦克风 pulse 必须保留")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"), "统一结束路径必须保留")
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
         XCTAssertTrue(call.contains("productionRole.displayName"), "生产角色 Live Activity 必须保留")
@@ -827,7 +956,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // ===== 既有通话核心契约保留 =====
         XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "Mesh 背景必须保留")
         XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
-        XCTAssertTrue(call.contains("finishCall(closePage: false)"), "统一结束路径必须保留")
+        XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
@@ -1070,26 +1199,43 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("ProgressView"), "连接卡必须包含 ProgressView")
         XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接文案 正在连接小猫")
         XCTAssertTrue(call.contains("通常只需要几秒"), "必须存在首次连接说明文案")
+        XCTAssertTrue(controller.contains("hasCompletedInitialConnection = false"),
+                      "每通新通话必须重置首次连接完成状态")
+        XCTAssertTrue(controller.contains("hasCompletedInitialConnection = true"),
+                      "麦克风真实可用后必须标记首次连接完成")
+        XCTAssertTrue(call.contains("if !viewModel.controller.hasCompletedInitialConnection"),
+                      "连接卡只能由首次连接完成状态控制")
+        XCTAssertFalse(call.contains("if !viewModel.controller.isConversationReady"),
+                       "每轮 processing 不得重新显示首次连接卡")
         XCTAssertFalse(call.contains("DispatchSourceTimer"), "连接反馈不得使用定时器")
 
         // ===== 3. 静音: 单一来源 =====
         XCTAssertFalse(call.contains("@State private var muted"), "VoiceCallView 不得再声明本地 muted")
         XCTAssertTrue(call.contains("viewModel.controller.isMuted"), "UI 必须统一读取 controller.isMuted")
 
-        // ===== 4. 波形: 真实 level 驱动 (限定 VoiceWaveform 范围, 避免命中共情卡 randomManual) =====
+        // ===== 4. 头像氛围光: 删除底部声纹条与同心圆扩张，真实 level 只驱动光强 =====
+        XCTAssertFalse(call.contains("struct VoiceWaveform: View"), "通话页不得保留旧声纹条")
+        XCTAssertTrue(call.contains("VoiceAvatarAura("), "头像后必须存在流体氛围光反馈")
         XCTAssertTrue(call.contains("level: viewModel.controller.vadNormalizedRMS"),
-                      "波形必须接收真实 vadNormalizedRMS")
-        XCTAssertTrue(call.contains("let level: Double"), "VoiceWaveform 必须声明真实 level")
-        XCTAssertTrue(call.contains("min(max(level"), "波形柱高必须钳制上下限")
-        guard let waveStart = call.range(of: "struct VoiceWaveform: View")?.lowerBound else {
-            XCTFail("缺少 VoiceWaveform 范围")
+                      "头像氛围光必须接收真实 vadNormalizedRMS")
+        XCTAssertTrue(call.contains("let level: Double"), "VoiceAvatarAura 必须声明真实 level")
+        XCTAssertTrue(call.contains("min(max(level"), "氛围光强度必须钳制真实输入音量")
+        guard let auraStart = call.range(of: "struct VoiceAvatarAura: View")?.lowerBound,
+              let auraEnd = call.range(of: "// MARK: - 预览", range: auraStart..<call.endIndex)?.lowerBound else {
+            XCTFail("缺少 VoiceAvatarAura 范围")
             return
         }
-        let waveformBlock = String(call[waveStart..<call.endIndex])
-        XCTAssertFalse(waveformBlock.contains("TimelineView"), "波形不得使用 TimelineView")
-        XCTAssertFalse(waveformBlock.contains("CADisplayLink"), "波形不得使用 CADisplayLink")
-        XCTAssertFalse(waveformBlock.contains("random"), "波形不得使用随机数")
-        XCTAssertFalse(waveformBlock.contains("Timer"), "波形不得使用 Timer")
+        let auraBlock = String(call[auraStart..<auraEnd])
+        XCTAssertFalse(auraBlock.contains("CADisplayLink"), "氛围光不得自建 CADisplayLink")
+        XCTAssertFalse(auraBlock.contains("random"), "氛围光不得使用随机数制造抖动")
+        XCTAssertFalse(auraBlock.contains("Timer"), "氛围光不得使用 Timer 驱动")
+        XCTAssertFalse(auraBlock.contains(".stroke("), "氛围光不得出现圆环描边")
+        XCTAssertFalse(auraBlock.contains("scaleEffect("), "氛围光不得靠几何缩放制造向外扩张")
+        XCTAssertFalse(auraBlock.contains("autoreverses: false"), "不得再使用单向外扩循环")
+        XCTAssertTrue(auraBlock.contains("repeatForever(autoreverses: true)"),
+                      "氛围光应做缓慢往返漂移而不是向外扩张")
+        XCTAssertTrue(auraBlock.contains(".offset("), "流体感应由非对称光团漂移产生")
+        XCTAssertTrue(auraBlock.contains("RadialGradient"), "氛围光应由无轮廓渐变光团构成")
 
         // ===== 5. 退出: 左上结束确认 (P2.8A-CI-FIX: 从 topStart 之后找明确边界, 避免命中文件头 MARK) =====
         guard let topStart = call.range(of: "private var topBar")?.lowerBound,
@@ -1100,10 +1246,11 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         }
         let topBar = String(call[topStart..<topEnd])
         XCTAssertTrue(topBar.contains("xmark"), "左上按钮必须使用 xmark 图标")
-        XCTAssertTrue(topBar.contains("showHangupConfirm = true"), "左上点击必须显示挂断确认")
+        XCTAssertFalse(topBar.contains("showHangupConfirm = true"), "左上点击不得显示挂断确认")
+        XCTAssertTrue(topBar.contains("close()"), "左上点击必须只收起通话页面")
         XCTAssertFalse(topBar.contains("finishCall()"), "左上按钮不得直接调用 finishCall()")
         XCTAssertTrue(topBar.contains("call.close"), "call.close identifier 必须保留")
-        XCTAssertTrue(topBar.contains("结束通话"), "左上 accessibility label 必须为 结束通话")
+        XCTAssertTrue(topBar.contains("收起通话"), "左上 accessibility label 必须为 收起通话")
 
         // ===== 6. 聊天提示 (换话题降级, 限定控制区范围避免命中历史注释) =====
         guard let ctlStart = call.range(of: "private var controlArea")?.lowerBound else {

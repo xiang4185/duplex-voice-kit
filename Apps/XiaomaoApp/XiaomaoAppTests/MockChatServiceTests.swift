@@ -37,12 +37,14 @@ final class MockChatServiceTests: XCTestCase {
         XCTAssertEqual(sent.userMessage.role, .user)
         XCTAssertEqual(sent.userMessage.content, "合成发送")
         XCTAssertEqual(sent.userMessage.createdAt, timestamp)
-        XCTAssertEqual(sent.assistantMessage.role, .assistant)
-        XCTAssertFalse(sent.assistantMessage.content.isEmpty)
-        XCTAssertEqual(sent.route, "direct")
+        let developer = try XCTUnwrap(sent.developerMessage)
+        XCTAssertEqual(developer.role, .assistant)
+        XCTAssertEqual(developer.participant, .developer)
+        XCTAssertFalse(developer.content.isEmpty)
+        XCTAssertEqual(sent.route, "mock")
         XCTAssertFalse(sent.degraded)
         XCTAssertTrue(sent.persisted)
-        XCTAssertEqual(reloaded.messages, [sent.userMessage, sent.assistantMessage])
+        XCTAssertEqual(reloaded.messages, sent.messages)
     }
 
     func testClearEmptiesMessagesAndKeepsSession() async throws {
@@ -78,7 +80,7 @@ final class MockChatServiceTests: XCTestCase {
         let reloaded = try await service.loadHistory()
 
         XCTAssertEqual(first, second)
-        XCTAssertEqual(reloaded.messages, [first.userMessage, first.assistantMessage])
+        XCTAssertEqual(reloaded.messages, first.messages)
     }
 
     func testSameSendRequestWithDifferentContentConflicts() async throws {
