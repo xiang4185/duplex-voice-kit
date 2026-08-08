@@ -18,13 +18,15 @@ public final class DVKAudioUploadPipeline: @unchecked Sendable, DVKAudioCaptureS
         outboundTransport: any DVKOutboundTransport,
         queueCapacity: Int = DVKAudioConfiguration.realtimeVoice.uploadQueueCapacity,
         outboundAudioBatchBytes: Int = 640,
-        allowsContinuousInput: Bool = false
+        allowsContinuousInput: Bool = false,
+        outboundQueueCapacity: Int? = nil
     ) {
         actor = DVKAudioUploadActor(
             transport: outboundTransport,
             queueCapacity: queueCapacity,
             outboundBatchBytes: outboundAudioBatchBytes,
-            allowsContinuousInput: allowsContinuousInput
+            allowsContinuousInput: allowsContinuousInput,
+            outboundQueueCapacity: outboundQueueCapacity
         )
     }
 

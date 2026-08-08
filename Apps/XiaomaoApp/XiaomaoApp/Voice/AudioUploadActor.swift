@@ -43,13 +43,15 @@ final class AudioUploadActor: @unchecked Sendable {
         socket: any VoiceWebSocketClient,
         queueCapacity: Int = 100,
         outboundAudioBatchBytes: Int = 640,
-        allowsContinuousInput: Bool = false
+        allowsContinuousInput: Bool = false,
+        outboundQueueCapacity: Int? = nil
     ) {
         let pipeline = DVKAudioUploadPipeline(
             outboundTransport: XiaomaoDVKOutboundTransport(socket: socket),
             queueCapacity: queueCapacity,
             outboundAudioBatchBytes: outboundAudioBatchBytes,
-            allowsContinuousInput: allowsContinuousInput
+            allowsContinuousInput: allowsContinuousInput,
+            outboundQueueCapacity: outboundQueueCapacity
         )
         self.pipeline = pipeline
         diagnostics = AudioUploadDiagnosticsStore {

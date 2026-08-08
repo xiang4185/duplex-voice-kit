@@ -14,6 +14,11 @@ struct VoiceLatencySample: Equatable, Sendable {
     let serverResponseStartedToFirstAudioMilliseconds: Int?
 }
 
+struct VoiceRecoveryEvent: Equatable, Sendable {
+    let name: String
+    let at: Date
+}
+
 struct VoiceDiagnosticSnapshot: Sendable {
     let appBuildSHA: String
     let appBuildTime: String
@@ -24,6 +29,8 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let lastCloseCode: Int?
     let lastErrorCategory: String
     let lastReasonCategory: String
+    let lastTransportErrorDomain: String
+    let lastTransportErrorCode: Int?
     let lastDisconnectRecoverable: Bool
     let reconnectAttempt: Int
     let reconnectCount: Int
@@ -101,6 +108,23 @@ struct VoiceDiagnosticSnapshot: Sendable {
     let uploadLastCapturePacketMilliseconds: Int
     let uploadMaxCapturePacketMilliseconds: Int
     let uploadOutboundBatchBytes: Int
+    let uploadOutboundQueueDepth: Int
+    let uploadOutboundQueueHighWater: Int
+    let uploadOutboundBackpressureCount: Int
+    let uploadOutboundOldestQueuedAgeMilliseconds: Int
+    let uploadLastTransportSendMilliseconds: Int
+    let uploadMaxTransportSendMilliseconds: Int
+    let uploadCaptureToProcessingLagAtCommitMilliseconds: Int
+    let uploadCommitQueuedAt: Date?
+    let uploadCommitSentAt: Date?
+    let uploadCommitQueueToSendMilliseconds: Int
+    let recoveryLastDisconnectAt: Date?
+    let recoveryLastReconnectStartedAt: Date?
+    let recoveryLastTransportConnectedAt: Date?
+    let recoveryLastSessionReadyAt: Date?
+    let recoveryLastCaptureResumedAt: Date?
+    let recoveryLastGapMilliseconds: Int?
+    let recoveryTimeline: [VoiceRecoveryEvent]
     let playbackActive: Bool
     let lastSpeechDurationMilliseconds: Int
     let lastEndingSilenceMilliseconds: Int
@@ -132,6 +156,9 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "网络 RTT: \(optional(networkPingMilliseconds)) ms",
             "端点静音等待: \(lastEndingSilenceMilliseconds) ms",
             "采集→处理排队: \(uploadCaptureToProcessingLagMilliseconds) ms（峰值 \(uploadMaxCaptureToProcessingLagMilliseconds) ms）",
+            "提交时采集→处理排队: \(uploadCaptureToProcessingLagAtCommitMilliseconds) ms",
+            "commit 排队→发送完成: \(uploadCommitQueueToSendMilliseconds) ms",
+            "网络发送耗时: \(uploadLastTransportSendMilliseconds) ms（峰值 \(uploadMaxTransportSendMilliseconds) ms）",
             "ASR / 上行: \(optional(commitToTranscriptFinalMilliseconds)) ms",
             "模型 / 路由: \(optional(transcriptFinalToResponseStartedMilliseconds)) ms",
             "TTS / 下行: \(optional(responseStartedToFirstAudioMilliseconds)) ms",
@@ -183,6 +210,8 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "last_close_code=\(lastCloseCode.map(String.init) ?? "none")",
             "last_error_category=\(safe(lastErrorCategory, fallback: "none"))",
             "last_reason_category=\(safe(lastReasonCategory, fallback: "none"))",
+            "last_transport_error_domain=\(safe(lastTransportErrorDomain, fallback: "none"))",
+            "last_transport_error_code=\(lastTransportErrorCode.map(String.init) ?? "none")",
             "recoverable=\(lastDisconnectRecoverable)",
             "reconnect_attempt=\(reconnectAttempt)",
             "reconnect_count=\(reconnectCount)",
@@ -270,7 +299,24 @@ struct VoiceDiagnosticSnapshot: Sendable {
             "upload_last_capture_packet_ms=\(uploadLastCapturePacketMilliseconds)",
             "upload_max_capture_packet_ms=\(uploadMaxCapturePacketMilliseconds)",
             "upload_outbound_batch_bytes=\(uploadOutboundBatchBytes)",
+            "upload_outbound_queue_depth=\(uploadOutboundQueueDepth)",
+            "upload_outbound_queue_high_water=\(uploadOutboundQueueHighWater)",
+            "upload_outbound_backpressure_count=\(uploadOutboundBackpressureCount)",
+            "upload_outbound_oldest_queued_age_ms=\(uploadOutboundOldestQueuedAgeMilliseconds)",
+            "upload_last_transport_send_ms=\(uploadLastTransportSendMilliseconds)",
+            "upload_max_transport_send_ms=\(uploadMaxTransportSendMilliseconds)",
+            "upload_capture_to_processing_lag_at_commit_ms=\(uploadCaptureToProcessingLagAtCommitMilliseconds)",
+            "upload_commit_queued_at=\(date(uploadCommitQueuedAt, formatter: formatter))",
+            "upload_commit_sent_at=\(date(uploadCommitSentAt, formatter: formatter))",
+            "upload_commit_queue_to_send_ms=\(uploadCommitQueueToSendMilliseconds)",
             "upload_generation_started_at=\(date(uploadGenerationStartedAt, formatter: formatter))",
+            "recovery_last_disconnect_at=\(date(recoveryLastDisconnectAt, formatter: formatter))",
+            "recovery_last_reconnect_started_at=\(date(recoveryLastReconnectStartedAt, formatter: formatter))",
+            "recovery_last_transport_connected_at=\(date(recoveryLastTransportConnectedAt, formatter: formatter))",
+            "recovery_last_session_ready_at=\(date(recoveryLastSessionReadyAt, formatter: formatter))",
+            "recovery_last_capture_resumed_at=\(date(recoveryLastCaptureResumedAt, formatter: formatter))",
+            "recovery_last_gap_ms=\(optional(recoveryLastGapMilliseconds))",
+            "recovery_timeline=\(recoveryTimelineText(formatter: formatter))",
             "playback_active=\(playbackActive)",
             "last_speech_duration_ms=\(lastSpeechDurationMilliseconds)",
             "last_ending_silence_ms=\(lastEndingSilenceMilliseconds)",
@@ -345,5 +391,12 @@ struct VoiceDiagnosticSnapshot: Sendable {
             .replacingOccurrences(of: "\r", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? fallback : String(cleaned.prefix(160))
+    }
+
+    private func recoveryTimelineText(formatter: ISO8601DateFormatter) -> String {
+        guard !recoveryTimeline.isEmpty else { return "none" }
+        return recoveryTimeline.map {
+            "\(safe($0.name, fallback: "event"))@\(formatter.string(from: $0.at))"
+        }.joined(separator: ",")
     }
 }

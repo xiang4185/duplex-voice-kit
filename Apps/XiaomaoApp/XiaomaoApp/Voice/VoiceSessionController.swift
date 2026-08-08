@@ -28,6 +28,8 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var lastCloseCode: Int?
     @Published private(set) var lastErrorCategory = ""
     @Published private(set) var lastReasonCategory = ""
+    @Published private(set) var lastTransportErrorDomain = ""
+    @Published private(set) var lastTransportErrorCode: Int?
     @Published private(set) var lastDisconnectRecoverable = false
     @Published private(set) var lastServerEventType = ""
     @Published private(set) var lastServerEventAt: Date?
@@ -120,6 +122,13 @@ final class VoiceSessionController: ObservableObject {
     private var postResponseCaptureCallbackDelta = 0
     private var postResponseCaptureCheckTask: Task<Void, Never>?
     private var microphoneReadinessTask: Task<Void, Never>?
+    private var recoveryLastDisconnectAt: Date?
+    private var recoveryLastReconnectStartedAt: Date?
+    private var recoveryLastTransportConnectedAt: Date?
+    private var recoveryLastSessionReadyAt: Date?
+    private var recoveryLastCaptureResumedAt: Date?
+    private var recoveryLastGapMilliseconds: Int?
+    private var recoveryTimeline: [VoiceRecoveryEvent] = []
 
     init(
         environment: AppEnvironment,
@@ -158,7 +167,8 @@ final class VoiceSessionController: ObservableObject {
         let audioUploader = AudioUploadActor(
             socket: socket,
             outboundAudioBatchBytes: outboundAudioBatchBytes,
-            allowsContinuousInput: true
+            allowsContinuousInput: true,
+            outboundQueueCapacity: 20
         )
         self.audioUploader = audioUploader
         self.voiceActivityDetector = VoiceActivityDetector(
@@ -240,6 +250,8 @@ final class VoiceSessionController: ObservableObject {
             lastCloseCode: lastCloseCode,
             lastErrorCategory: lastErrorCategory,
             lastReasonCategory: lastReasonCategory,
+            lastTransportErrorDomain: lastTransportErrorDomain,
+            lastTransportErrorCode: lastTransportErrorCode,
             lastDisconnectRecoverable: lastDisconnectRecoverable,
             reconnectAttempt: reconnectAttempt,
             reconnectCount: metrics.reconnectCount,
@@ -329,6 +341,23 @@ final class VoiceSessionController: ObservableObject {
             uploadLastCapturePacketMilliseconds: uploadHealth.lastCapturePacketMilliseconds,
             uploadMaxCapturePacketMilliseconds: uploadHealth.maxCapturePacketMilliseconds,
             uploadOutboundBatchBytes: uploadHealth.outboundBatchBytes,
+            uploadOutboundQueueDepth: uploadHealth.outboundQueueDepth,
+            uploadOutboundQueueHighWater: uploadHealth.outboundQueueHighWater,
+            uploadOutboundBackpressureCount: uploadHealth.outboundBackpressureCount,
+            uploadOutboundOldestQueuedAgeMilliseconds: uploadHealth.outboundOldestQueuedAgeMilliseconds,
+            uploadLastTransportSendMilliseconds: uploadHealth.lastTransportSendMilliseconds,
+            uploadMaxTransportSendMilliseconds: uploadHealth.maxTransportSendMilliseconds,
+            uploadCaptureToProcessingLagAtCommitMilliseconds: uploadHealth.captureToProcessingLagAtCommitMilliseconds,
+            uploadCommitQueuedAt: uploadHealth.commitQueuedAt,
+            uploadCommitSentAt: uploadHealth.commitSentAt,
+            uploadCommitQueueToSendMilliseconds: uploadHealth.commitQueueToSendMilliseconds,
+            recoveryLastDisconnectAt: recoveryLastDisconnectAt,
+            recoveryLastReconnectStartedAt: recoveryLastReconnectStartedAt,
+            recoveryLastTransportConnectedAt: recoveryLastTransportConnectedAt,
+            recoveryLastSessionReadyAt: recoveryLastSessionReadyAt,
+            recoveryLastCaptureResumedAt: recoveryLastCaptureResumedAt,
+            recoveryLastGapMilliseconds: recoveryLastGapMilliseconds,
+            recoveryTimeline: recoveryTimeline,
             playbackActive: isPlaybackActive,
             lastSpeechDurationMilliseconds: lastSpeechDurationMilliseconds,
             lastEndingSilenceMilliseconds: lastEndingSilenceMilliseconds,
@@ -562,6 +591,8 @@ final class VoiceSessionController: ObservableObject {
         lastCloseCode = nil
         lastErrorCategory = ""
         lastReasonCategory = ""
+        lastTransportErrorDomain = ""
+        lastTransportErrorCode = nil
         lastDisconnectRecoverable = false
         lastServerEventType = ""
         lastServerEventAt = nil
@@ -608,6 +639,13 @@ final class VoiceSessionController: ObservableObject {
         postResponseCaptureCheckTask = nil
         microphoneReadinessTask?.cancel()
         microphoneReadinessTask = nil
+        recoveryLastDisconnectAt = nil
+        recoveryLastReconnectStartedAt = nil
+        recoveryLastTransportConnectedAt = nil
+        recoveryLastSessionReadyAt = nil
+        recoveryLastCaptureResumedAt = nil
+        recoveryLastGapMilliseconds = nil
+        recoveryTimeline.removeAll(keepingCapacity: true)
         metrics = VoiceMetrics(
             traceID: traceID,
             sessionID: sessionID,
@@ -699,6 +737,8 @@ final class VoiceSessionController: ObservableObject {
             reconnectAttempt = index + 1
             metrics.reconnectCount += 1
             state = .reconnecting
+            recoveryLastReconnectStartedAt = Date()
+            recordRecoveryEvent("reconnect_\(reconnectAttempt)_start")
             if !(immediate && index == 0) {
                 do { try await Task.sleep(for: delay) } catch { return }
             }
@@ -708,6 +748,8 @@ final class VoiceSessionController: ObservableObject {
             do {
                 try await socket.connect()
                 markWebSocketConnected()
+                recoveryLastTransportConnectedAt = Date()
+                recordRecoveryEvent("transport_connected")
                 try await audioUploader.openConnection(
                     sessionID: sessionID,
                     traceID: traceID,
@@ -801,6 +843,25 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
+    private func recordRecoveryEvent(_ name: String, at: Date = Date()) {
+        recoveryTimeline.append(VoiceRecoveryEvent(name: name, at: at))
+        if recoveryTimeline.count > 16 {
+            recoveryTimeline.removeFirst(recoveryTimeline.count - 16)
+        }
+    }
+
+    private func markRecoveryCaptureResumed() {
+        let now = Date()
+        recoveryLastCaptureResumedAt = now
+        if let disconnectedAt = recoveryLastDisconnectAt {
+            recoveryLastGapMilliseconds = max(
+                0,
+                Int(now.timeIntervalSince(disconnectedAt) * 1_000)
+            )
+        }
+        recordRecoveryEvent("capture_resumed", at: now)
+    }
+
     private func handleLifecycleEvent(_ event: VoiceWebSocketLifecycleEvent) async {
         switch event {
         case .connecting:
@@ -817,6 +878,8 @@ final class VoiceSessionController: ObservableObject {
                 return
             }
             webSocketState = .disconnected
+            recoveryLastDisconnectAt = Date()
+            recordRecoveryEvent("transport_disconnected", at: recoveryLastDisconnectAt ?? Date())
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
             stopContinuousCapture(resetVAD: true)
@@ -834,6 +897,8 @@ final class VoiceSessionController: ObservableObject {
                 return
             }
             webSocketState = .failed
+            recoveryLastDisconnectAt = Date()
+            recordRecoveryEvent("transport_failed", at: recoveryLastDisconnectAt ?? Date())
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
             stopContinuousCapture(resetVAD: true)
@@ -859,6 +924,8 @@ final class VoiceSessionController: ObservableObject {
         }
         lastErrorCategory = info.errorCategory
         lastReasonCategory = info.reasonCategory
+        lastTransportErrorDomain = info.transportErrorDomain ?? ""
+        lastTransportErrorCode = info.transportErrorCode
         lastDisconnectRecoverable = info.recoverable
         if info.errorCategory != "cancelled" {
             errorMessage = userMessage(for: info)
@@ -892,6 +959,9 @@ final class VoiceSessionController: ObservableObject {
         }
         lastErrorCategory = "unknown"
         lastReasonCategory = "connection_failed"
+        let nsError = error as NSError
+        lastTransportErrorDomain = nsError.domain
+        lastTransportErrorCode = nsError.code
         lastDisconnectRecoverable = true
         errorMessage = "语音连接失败。"
         if allowReconnect { beginReconnect(immediate: false) } else { state = .failed }
@@ -937,11 +1007,14 @@ final class VoiceSessionController: ObservableObject {
             state = .ready
             reconnectAttempt = 0
             errorMessage = ""
+            recoveryLastSessionReadyAt = Date()
+            recordRecoveryEvent("session_resumed", at: recoveryLastSessionReadyAt ?? Date())
             if isRecording {
                 await audioUploader.activateCaptureGeneration(capture.captureGeneration)
             } else {
                 await startContinuousCaptureIfPossible()
             }
+            markRecoveryCaptureResumed()
             sessionReadyAt = Date()
             markMicrophoneReadyIfPossible()
             lastReadyEvent = .sessionResumed
@@ -1493,6 +1566,7 @@ final class VoiceSessionController: ObservableObject {
             }
 
             do {
+                self.recordRecoveryEvent("post_response_capture_recovery_start")
                 try reporter.recoverCapture()
                 self.isRecording = true
                 await self.audioUploader.activateCaptureGeneration(
@@ -1504,8 +1578,10 @@ final class VoiceSessionController: ObservableObject {
                 self.vadNormalizedRMS = 0
                 self.postResponseCaptureRecoveryCount += 1
                 self.markMicrophoneReadyIfPossible()
+                self.recordRecoveryEvent("post_response_capture_recovered")
                 VoiceLog.audio.info("post_response_capture_recovered")
             } catch {
+                self.recordRecoveryEvent("post_response_capture_recovery_failed")
                 VoiceLog.audio.error("post_response_capture_recovery_failed")
             }
         }
@@ -1549,13 +1625,16 @@ final class VoiceSessionController: ObservableObject {
         }
         captureRecoveryAttemptCount += 1
         do {
+            recordRecoveryEvent("capture_watchdog_recovery_\(captureRecoveryAttemptCount)_start")
             try audioIOHealthReporter.recoverCapture()
             await audioUploader.activateCaptureGeneration(capture.captureGeneration)
             captureWatchdogStartedAt = Date()
+            recordRecoveryEvent("capture_watchdog_recovered")
             VoiceLog.audio.info(
                 "capture_watchdog_recovered attempt=\(self.captureRecoveryAttemptCount)"
             )
         } catch {
+            recordRecoveryEvent("capture_watchdog_recovery_failed")
             VoiceLog.audio.error(
                 "capture_watchdog_recovery_failed attempt=\(self.captureRecoveryAttemptCount)"
             )
@@ -1592,6 +1671,9 @@ final class VoiceSessionController: ObservableObject {
         let info = error as? VoiceWebSocketDisconnectInfo
         lastErrorCategory = info?.errorCategory ?? "connection_lost"
         lastReasonCategory = info?.reasonCategory ?? "send_failed"
+        let nsError = error as NSError
+        lastTransportErrorDomain = info?.transportErrorDomain ?? nsError.domain
+        lastTransportErrorCode = info?.transportErrorCode ?? nsError.code
         lastDisconnectRecoverable = info?.recoverable ?? true
         errorMessage = "语音数据发送失败，正在尝试恢复连接。"
         beginReconnect(immediate: false)

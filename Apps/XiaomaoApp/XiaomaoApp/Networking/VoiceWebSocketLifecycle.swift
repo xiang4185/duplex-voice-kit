@@ -12,6 +12,24 @@ struct VoiceWebSocketDisconnectInfo: Error, Equatable, Sendable {
     let recoverable: Bool
     let errorCategory: String
     let reasonCategory: String
+    let transportErrorDomain: String?
+    let transportErrorCode: Int?
+
+    init(
+        closeCode: Int?,
+        recoverable: Bool,
+        errorCategory: String,
+        reasonCategory: String,
+        transportErrorDomain: String? = nil,
+        transportErrorCode: Int? = nil
+    ) {
+        self.closeCode = closeCode
+        self.recoverable = recoverable
+        self.errorCategory = errorCategory
+        self.reasonCategory = reasonCategory
+        self.transportErrorDomain = transportErrorDomain
+        self.transportErrorCode = transportErrorCode
+    }
 }
 
 enum VoiceWebSocketLifecycleEvent: Equatable, Sendable {
@@ -80,44 +98,54 @@ enum VoiceWebSocketErrorClassifier {
         if nsError.domain == NSURLErrorDomain {
             switch nsError.code {
             case NSURLErrorUserAuthenticationRequired:
-                return info(closeCode, false, "unauthorized", "authentication_required")
+                return info(closeCode, false, "unauthorized", "authentication_required", error: error)
             case NSURLErrorServerCertificateUntrusted,
                  NSURLErrorServerCertificateHasBadDate,
                  NSURLErrorServerCertificateNotYetValid,
                  NSURLErrorServerCertificateHasUnknownRoot,
                  NSURLErrorSecureConnectionFailed,
                  NSURLErrorClientCertificateRejected:
-                return info(closeCode, false, "tls_failed", "certificate_or_tls")
+                return info(closeCode, false, "tls_failed", "certificate_or_tls", error: error)
             case NSURLErrorNotConnectedToInternet,
                  NSURLErrorNetworkConnectionLost,
                  NSURLErrorCannotFindHost,
                  NSURLErrorCannotConnectToHost,
                  NSURLErrorDNSLookupFailed:
-                return info(closeCode, true, "network_unavailable", "network_transport")
+                return info(closeCode, true, "network_unavailable", "network_transport", error: error)
             case NSURLErrorTimedOut:
-                return info(closeCode, true, "timed_out", "transport_timeout")
+                return info(closeCode, true, "timed_out", "transport_timeout", error: error)
             case NSURLErrorCancelled:
-                return info(closeCode, false, "cancelled", "request_cancelled")
+                return info(closeCode, false, "cancelled", "request_cancelled", error: error)
             case NSURLErrorBadServerResponse:
-                return info(closeCode, httpStatus == nil, httpStatus == nil ? "protocol_error" : "server_closed", "bad_server_response")
+                return info(
+                    closeCode,
+                    httpStatus == nil,
+                    httpStatus == nil ? "protocol_error" : "server_closed",
+                    "bad_server_response",
+                    error: error
+                )
             default:
                 break
             }
         }
-        return info(closeCode, true, "unknown", "unclassified_transport_error")
+        return info(closeCode, true, "unknown", "unclassified_transport_error", error: error)
     }
 
     private static func info(
         _ closeCode: Int?,
         _ recoverable: Bool,
         _ errorCategory: String,
-        _ reasonCategory: String
+        _ reasonCategory: String,
+        error: Error? = nil
     ) -> VoiceWebSocketDisconnectInfo {
+        let nsError = error.map { $0 as NSError }
         VoiceWebSocketDisconnectInfo(
             closeCode: closeCode,
             recoverable: recoverable,
             errorCategory: errorCategory,
-            reasonCategory: reasonCategory
+            reasonCategory: reasonCategory,
+            transportErrorDomain: nsError?.domain,
+            transportErrorCode: nsError?.code
         )
     }
 }
