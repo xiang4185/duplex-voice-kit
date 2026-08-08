@@ -193,9 +193,13 @@ final class AudioUploadActorTests: XCTestCase {
         XCTAssertEqual(uploader.diagnostics.snapshot.nextChunkIndex, 1)
     }
 
-    func testCaptureIngressBackpressureIsBounded() async throws {
+    func testOutboundBackpressureIsBoundedWithoutFillingCaptureIngress() async throws {
         let socket = SerialUploadSocket(sendDelay: .milliseconds(50))
-        let uploader = AudioUploadActor(socket: socket, queueCapacity: 2)
+        let uploader = AudioUploadActor(
+            socket: socket,
+            queueCapacity: 64,
+            outboundQueueCapacity: 2
+        )
         let notifications = NotificationRecorder()
         await configure(uploader, notifications: notifications)
         try await open(uploader)
@@ -204,14 +208,20 @@ final class AudioUploadActorTests: XCTestCase {
 
         let snapshot = uploader.diagnostics.snapshot
         let events = await socket.eventsValue()
-        XCTAssertLessThanOrEqual(snapshot.queueHighWater, 2)
-        XCTAssertEqual(snapshot.inputBackpressureCount, 1)
+        XCTAssertLessThanOrEqual(snapshot.queueHighWater, 64)
+        XCTAssertEqual(snapshot.inputBackpressureCount, 0)
+        XCTAssertEqual(snapshot.outboundBackpressureCount, 1)
+        XCTAssertLessThanOrEqual(snapshot.outboundQueueHighWater, 2)
         XCTAssertEqual(audioIndices(events), Array(0..<snapshot.nextChunkIndex))
     }
 
     func testBackpressureFailsBeforeChunkIndexAllocation() async throws {
         let socket = SerialUploadSocket(sendDelay: .milliseconds(50))
-        let uploader = AudioUploadActor(socket: socket, queueCapacity: 2)
+        let uploader = AudioUploadActor(
+            socket: socket,
+            queueCapacity: 64,
+            outboundQueueCapacity: 2
+        )
         let notifications = NotificationRecorder()
         await configure(uploader, notifications: notifications)
         try await open(uploader)
@@ -220,6 +230,8 @@ final class AudioUploadActorTests: XCTestCase {
 
         let indices = audioIndices(await socket.eventsValue())
         XCTAssertEqual(indices, Array(0..<indices.count))
+        XCTAssertEqual(uploader.diagnostics.snapshot.inputBackpressureCount, 0)
+        XCTAssertEqual(uploader.diagnostics.snapshot.outboundBackpressureCount, 1)
         XCTAssertFalse(uploader.diagnostics.snapshot.active)
     }
 

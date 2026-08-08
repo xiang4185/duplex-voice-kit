@@ -247,8 +247,8 @@ private actor DVKAudioOutboundWriter {
                     pendingItem.completion?.resolve(.failure(DVKAudioUploadError.sendFailed))
                 }
                 publishQueueHealth()
-                await notificationHandler?(.sendFailed(category: category))
                 await terminalFailureHandler?(item.connectionGeneration, category)
+                await notificationHandler?(.sendFailed(category: category))
                 continue
             }
 
