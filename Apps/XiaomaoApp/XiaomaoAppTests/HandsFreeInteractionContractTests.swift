@@ -1186,6 +1186,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
         let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
         let character = try source("XiaomaoApp/App/CharacterSelectView.swift")
+        let companion = try source("XiaomaoApp/Design/CompanionModeStore.swift")
 
         // ===== 1. 通话启动: 单次门禁 + 无人工延迟 =====
         XCTAssertTrue(app.contains("private func requestCall"), "必须存在单次启动门禁 requestCall()")
@@ -1269,8 +1270,11 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(controlBlock.contains("call.topic"), "旧 call.topic identifier 必须移除")
         XCTAssertTrue(controlBlock.contains("选择陪伴方式并重新建立通话"), "必须明确说明会重建会话")
         XCTAssertTrue(controlBlock.contains("call.companion"), "必须提供 call.companion identifier")
+        XCTAssertTrue(call.contains("CompanionType.allCases"), "陪伴 Sheet 必须由统一 CompanionType 枚举驱动")
+        XCTAssertTrue(call.contains("Text(type.displayName)"), "陪伴 Sheet 必须展示统一类型名称")
+        XCTAssertTrue(call.contains("Text(type.summary)"), "陪伴 Sheet 必须展示统一公开说明")
         for label in ["温柔陪伴", "强势偏爱", "黏人浪漫", "未知", "尚未被定义"] {
-            XCTAssertTrue(call.contains(label), "陪伴 Sheet 缺少：\(label)")
+            XCTAssertTrue(companion.contains(label), "陪伴类型定义缺少：\(label)")
         }
         XCTAssertTrue(call.contains("正在切换陪伴方式…"), "切换期间必须提供短暂状态反馈")
 
