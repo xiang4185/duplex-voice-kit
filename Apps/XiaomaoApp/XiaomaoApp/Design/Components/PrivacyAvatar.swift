@@ -205,7 +205,7 @@ struct PrivacyAvatar: View {
     // 适用于情绪气泡 / 陪伴记录入口 / 隐私确认浮层等小尺寸场景.
     private func thumbnailCharacter(revealed: Bool) -> some View {
         let mystery = visualMode == .mystery
-        Image("CharacterAvatar")
+        return Image("CharacterAvatar")
             .resizable()
             .aspectRatio(contentMode: .fill)
             .frame(width: size, height: size)

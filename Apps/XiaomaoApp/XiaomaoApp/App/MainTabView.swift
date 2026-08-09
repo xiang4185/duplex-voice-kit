@@ -100,7 +100,7 @@ struct MainTabView: View {
 
     private var currentCallBar: some View {
         let tokens = Theme.visual(visualMode)
-        Button(action: startCall) {
+        return Button(action: startCall) {
             HStack(spacing: 10) {
                 Image(systemName: "waveform.circle.fill")
                     .font(.system(size: 22))
