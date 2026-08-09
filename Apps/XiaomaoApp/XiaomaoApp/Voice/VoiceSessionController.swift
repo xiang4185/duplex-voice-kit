@@ -35,9 +35,7 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var lastServerEventAt: Date?
     @Published private(set) var networkType: NetworkConnectionType = .other
     @Published private(set) var isRecording = false
-    @Published private(set) var vadState: VoiceActivityState = .idleListening
-    @Published private(set) var vadEnergyBand = "silent"
-    @Published private(set) var vadNormalizedRMS = 0.0
+    @Published private var vadPresentation = VoiceVADPresentation.idle
     @Published private(set) var speechStartCount = 0
     @Published private(set) var automaticCommitCount = 0
     @Published private(set) var rejectedNoiseCount = 0
@@ -71,7 +69,8 @@ final class VoiceSessionController: ObservableObject {
     private let usesSharedAudioIO: Bool
     private let audioUploader: AudioUploadActor
 
-    private var voiceActivityDetector: VoiceActivityDetector
+    private let voiceActivityConfiguration: VoiceActivityConfiguration
+    private let voiceFrameProcessor: VoiceFrameProcessor
     private var receiveTask: Task<Void, Never>?
     private var receiveGeneration = 0
     private var receiveLoopStartCount = 0
@@ -171,7 +170,8 @@ final class VoiceSessionController: ObservableObject {
             outboundQueueCapacity: 20
         )
         self.audioUploader = audioUploader
-        self.voiceActivityDetector = VoiceActivityDetector(
+        self.voiceActivityConfiguration = voiceActivityConfiguration
+        self.voiceFrameProcessor = VoiceFrameProcessor(
             configuration: voiceActivityConfiguration
         )
         self.capture.onPacket = { packet in
@@ -194,6 +194,10 @@ final class VoiceSessionController: ObservableObject {
             && webSocketState == .connected
             && !isRecording
     }
+
+    var vadState: VoiceActivityState { vadPresentation.state }
+    var vadEnergyBand: String { vadPresentation.energyBand }
+    var vadNormalizedRMS: Double { vadPresentation.normalizedRMS }
 
     var canMute: Bool {
         callIsActive && webSocketState == .connected && state != .connecting && state != .closing
@@ -266,7 +270,7 @@ final class VoiceSessionController: ObservableObject {
             vadState: vadState,
             vadEnergyBand: vadEnergyBand,
             vadNormalizedRMS: vadNormalizedRMS,
-            vadConfiguration: voiceActivityDetector.configuration,
+            vadConfiguration: voiceActivityConfiguration,
             speechStartCount: speechStartCount,
             automaticCommitCount: automaticCommitCount,
             rejectedNoiseCount: rejectedNoiseCount,
@@ -398,10 +402,15 @@ final class VoiceSessionController: ObservableObject {
 
     func startNewCall() async {
         await tearDownCurrentCall(sendSessionEnd: callIsActive, finalState: nil)
-        resetForNewCall()
+        await resetForNewCall()
+        let frameProcessor = voiceFrameProcessor
         await audioUploader.configure(
-            processor: { [weak self] frame in
-                await self?.uploadIntents(for: frame) ?? []
+            processor: { [weak self, frameProcessor] frame in
+                let result = await frameProcessor.process(frame)
+                guard result.presentation != nil || !result.controls.isEmpty else {
+                    return result.intents
+                }
+                return await self?.applyFrameProcessingResult(result) ?? []
             },
             notificationHandler: { [weak self] notification in
                 await self?.handleUploadNotification(notification)
@@ -464,8 +473,8 @@ final class VoiceSessionController: ObservableObject {
     func commitAudio() async {
         guard callIsActive, isRecording, !commitSentForCurrentPress else { return }
         commitSentForCurrentPress = true
-        voiceActivityDetector.suspend()
-        vadState = .endpointing
+        await voiceFrameProcessor.suspend()
+        updateVADPresentation(state: .endpointing)
         state = .processing
         do {
             try await audioUploader.commit()
@@ -517,7 +526,7 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
-    private func resetForNewCall() {
+    private func resetForNewCall() async {
         sessionID = UUID().uuidString
         traceID = UUID().uuidString
         lastServerSequence = 0
@@ -548,10 +557,8 @@ final class VoiceSessionController: ObservableObject {
         webSocketState = .disconnected
         route = .b
         state = .idle
-        voiceActivityDetector.resetForListening()
-        vadState = .idleListening
-        vadEnergyBand = "silent"
-        vadNormalizedRMS = 0
+        await voiceFrameProcessor.suspend()
+        updateVADPresentation(.idle)
         speechStartCount = 0
         automaticCommitCount = 0
         rejectedNoiseCount = 0
@@ -831,7 +838,7 @@ final class VoiceSessionController: ObservableObject {
             recordRecoveryEvent("transport_disconnected", at: recoveryLastDisconnectAt ?? Date())
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
-            stopContinuousCapture(resetVAD: true)
+            await stopContinuousCapture(resetVAD: true)
             applyDisconnectInfo(info)
             guard callIsActive, !suspendedForBackground else { return }
             if info.errorCategory == "cancelled" { return }
@@ -850,7 +857,7 @@ final class VoiceSessionController: ObservableObject {
             recordRecoveryEvent("transport_failed", at: recoveryLastDisconnectAt ?? Date())
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
-            stopContinuousCapture(resetVAD: true)
+            await stopContinuousCapture(resetVAD: true)
             applyDisconnectInfo(info)
             guard callIsActive, !suspendedForBackground else { return }
             if info.recoverable {
@@ -942,7 +949,7 @@ final class VoiceSessionController: ObservableObject {
             lastReadyEvent = .sessionReady
         case .sessionResumed where expectedReadyEvent == .sessionResumed:
             protocolReadyEventCount += 1
-            resetProviderGenerationAfterResume()
+            await resetProviderGenerationAfterResume()
             // P2.8A-CI-FIX-3: 保持 .reconnecting 状态进入 markReady (不提前提升为 .ready)
             await audioUploader.markReady()
             // Resume 成功后只恢复本地扬声器静音状态；采集始终按正常通话恢复。
@@ -962,14 +969,17 @@ final class VoiceSessionController: ObservableObject {
             } else {
                 await startContinuousCaptureIfPossible()
             }
+            await synchronizeVoiceFrameProcessingMode()
             markRecoveryCaptureResumed()
             sessionReadyAt = Date()
             markMicrophoneReadyIfPossible()
             lastReadyEvent = .sessionResumed
         case .listeningStarted:
             state = .listening
+            await synchronizeVoiceFrameProcessingMode()
         case .listeningStopped, .thinkingStarted:
             state = .processing
+            await synchronizeVoiceFrameProcessingMode()
         case .transcriptPartial:
             transcript = event.payload.string("text") ?? transcript
         case .transcriptFinal:
@@ -991,10 +1001,11 @@ final class VoiceSessionController: ObservableObject {
             ) ?? serverTranscriptFinalToResponseStartedMilliseconds
             automaticBargeInActive = false
             isPlaybackActive = false
-            voiceActivityDetector.resetForListening()
-            vadState = .idleListening
+            await voiceFrameProcessor.resetForListening()
+            updateVADPresentation(.idle)
             state = .speaking
             await startContinuousCaptureIfPossible()
+            await synchronizeVoiceFrameProcessingMode()
         case .responseAudioDelta:
             guard let eventResponseID = event.payload.string("response_id") else { return }
             if shouldIgnoreInterruptedResponse(eventResponseID) {
@@ -1042,10 +1053,11 @@ final class VoiceSessionController: ObservableObject {
             metrics.finishedAt = Date()
             responseID = ""
             automaticBargeInActive = false
-            voiceActivityDetector.resetForListening()
-            vadState = .idleListening
+            await voiceFrameProcessor.resetForListening()
+            updateVADPresentation(.idle)
             state = .ready
             await startContinuousCaptureIfPossible()
+            await synchronizeVoiceFrameProcessingMode()
             responseCompletionCount += 1
             schedulePostResponseCaptureCheck()
         case .responseTextDelta, .responseTextDone:
@@ -1066,6 +1078,7 @@ final class VoiceSessionController: ObservableObject {
                 } else if vadState == .sendingSpeech || vadState == .speechDetected {
                     state = .listening
                 }
+                await synchronizeVoiceFrameProcessingMode()
                 break
             }
             playback.cancel(responseID: responseID)
@@ -1073,15 +1086,17 @@ final class VoiceSessionController: ObservableObject {
             if event.payload.bool("success") == true { metrics.interruptSuccessCount += 1 }
             responseID = ""
             automaticBargeInActive = false
-            voiceActivityDetector.resetForListening()
-            vadState = .idleListening
+            await voiceFrameProcessor.resetForListening()
+            updateVADPresentation(.idle)
             state = .ready
+            await synchronizeVoiceFrameProcessingMode()
         case .routeChanged:
             route = .b
         case .degraded:
             metrics.degradedCount += 1
             lastErrorCategory = "provider_degraded"
             state = .degraded
+            await synchronizeVoiceFrameProcessingMode()
         case .serverIdleWarning:
             let remainingSeconds = event.payload.int("remaining_seconds") ?? 30
             idleWarningRemainingSeconds = max(1, remainingSeconds)
@@ -1105,7 +1120,7 @@ final class VoiceSessionController: ObservableObject {
             heartbeatTask = nil
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
-            stopContinuousCapture(resetVAD: true)
+            await stopContinuousCapture(resetVAD: true)
             playback.cancel(responseID: nil)
             isPlaybackActive = false
             responseID = ""
@@ -1126,7 +1141,7 @@ final class VoiceSessionController: ObservableObject {
             isPlaybackActive = false
             await audioUploader.pauseCapture()
             await audioUploader.abortConnection()
-            stopContinuousCapture(resetVAD: true)
+            await stopContinuousCapture(resetVAD: true)
             heartbeatTask?.cancel()
             heartbeatTask = nil
             await socket.disconnect()
@@ -1150,7 +1165,7 @@ final class VoiceSessionController: ObservableObject {
                 heartbeatTask = nil
                 await audioUploader.pauseCapture()
                 await audioUploader.abortConnection()
-                stopContinuousCapture(resetVAD: true)
+                await stopContinuousCapture(resetVAD: true)
                 playback.cancel(responseID: nil)
                 isPlaybackActive = false
                 responseID = ""
@@ -1206,34 +1221,16 @@ final class VoiceSessionController: ObservableObject {
         }
     }
 
-    private func uploadIntents(for data: Data) -> [AudioUploadIntent] {
-        guard callIsActive,
-              isRecording,
-              webSocketState == .connected else { return [] }
-
-        let mode: VoiceActivityMode
-        if state == .speaking, !responseID.isEmpty {
-            mode = .bargeIn
-        } else if state == .ready || state == .listening {
-            mode = .listening
-        } else {
-            return []
+    private func applyFrameProcessingResult(
+        _ result: VoiceFrameProcessingResult
+    ) async -> [AudioUploadIntent] {
+        var intents = result.intents
+        if let presentation = result.presentation {
+            updateVADPresentation(presentation)
         }
 
-        let analysis = voiceActivityDetector.process(data, mode: mode)
-        vadState = analysis.state
-        vadNormalizedRMS = analysis.normalizedRMS
-        vadEnergyBand = analysis.energyBand
-        // In normal listening mode the Provider must see the microphone clock in
-        // realtime, including leading/trailing silence. Local VAD is control-plane
-        // only: it reports speech state and decides when to commit, but it must not
-        // hold the first ~200 ms of speech behind candidate confirmation/pre-roll.
-        // During assistant playback we retain the existing barge-in pre-roll behavior
-        // so unconfirmed echo/noise is not streamed upstream.
-        var intents: [AudioUploadIntent] = mode == .listening ? [.audio(data)] : []
-
-        for action in analysis.actions {
-            switch action {
+        for control in result.controls {
+            switch control {
             case .rejectedNoise:
                 rejectedNoiseCount += 1
                 VoiceLog.audio.info("vad_noise_rejected count=\(self.rejectedNoiseCount)")
@@ -1255,27 +1252,53 @@ final class VoiceSessionController: ObservableObject {
                     }
                 }
                 let interruptResponseID = bargeIn ? prepareAutomaticBargeIn() : nil
-                if !bargeIn { state = .listening }
-                intents.append(.beginUtterance(interruptResponseID: interruptResponseID))
                 if bargeIn {
+                    intents.append(.beginUtterance(interruptResponseID: interruptResponseID))
                     intents.append(contentsOf: frames.map(AudioUploadIntent.audio))
+                } else {
+                    state = .listening
                 }
+                await synchronizeVoiceFrameProcessingMode()
 
-            case .audio(let frame):
-                if mode == .bargeIn {
-                    intents.append(.audio(frame))
-                }
-
-            case .commit(_, let speechDuration, let endingSilence):
+            case .commit(let speechDuration, let endingSilence):
                 automaticCommitCount += 1
                 lastSpeechDurationMilliseconds = speechDuration
                 lastEndingSilenceMilliseconds = endingSilence
-                vadState = .endpointing
+                updateVADPresentation(state: .endpointing)
                 state = .processing
-                intents.append(.commit)
+                await synchronizeVoiceFrameProcessingMode()
             }
         }
         return intents
+    }
+
+    private func updateVADPresentation(_ presentation: VoiceVADPresentation) {
+        guard vadPresentation != presentation else { return }
+        vadPresentation = presentation
+    }
+
+    private func updateVADPresentation(state: VoiceActivityState) {
+        updateVADPresentation(VoiceVADPresentation(
+            state: state,
+            normalizedRMS: vadPresentation.normalizedRMS,
+            energyBand: vadPresentation.energyBand
+        ))
+    }
+
+    private func synchronizeVoiceFrameProcessingMode() async {
+        let mode: VoiceFrameProcessingMode
+        if callIsActive, isRecording, webSocketState == .connected {
+            if state == .speaking, !responseID.isEmpty {
+                mode = .bargeIn
+            } else if state == .ready || state == .listening {
+                mode = .listening
+            } else {
+                mode = .inactive
+            }
+        } else {
+            mode = .inactive
+        }
+        await voiceFrameProcessor.setMode(mode)
     }
 
     private func prepareAutomaticBargeIn() -> String? {
@@ -1298,7 +1321,7 @@ final class VoiceSessionController: ObservableObject {
         return oldResponseID
     }
 
-    private func handleUploadNotification(_ notification: AudioUploadNotification) {
+    private func handleUploadNotification(_ notification: AudioUploadNotification) async {
         switch notification {
         case .audioSent(let bytes, _):
             metrics.inputFrames += 1
@@ -1321,6 +1344,7 @@ final class VoiceSessionController: ObservableObject {
         case .interruptSent:
             interruptSentCount += 1
             state = .listening
+            await synchronizeVoiceFrameProcessingMode()
             VoiceLog.audio.info(
                 "automatic_barge_in interrupt_count=\(self.interruptSentCount)"
             )
@@ -1329,7 +1353,7 @@ final class VoiceSessionController: ObservableObject {
             recordSendFailure(AudioUploadActorError.sendFailed)
         case .backpressure:
             terminalLocalAudioFailure = true
-            stopContinuousCapture(resetVAD: true)
+            await stopContinuousCapture(resetVAD: true)
             lastErrorCategory = "local_audio_upload_backpressure"
             lastReasonCategory = "audio_upload_queue_full"
             lastDisconnectRecoverable = false
@@ -1344,7 +1368,7 @@ final class VoiceSessionController: ObservableObject {
             || (automaticBargeInActive && eventResponseID == interruptedResponseID)
     }
 
-    private func resetProviderGenerationAfterResume() {
+    private func resetProviderGenerationAfterResume() async {
         responseID = ""
         interruptedResponseID = ""
         interruptedResponseIDs.removeAll(keepingCapacity: false)
@@ -1352,10 +1376,9 @@ final class VoiceSessionController: ObservableObject {
         commitSentForCurrentPress = false
         playback.cancel(responseID: nil)
         isPlaybackActive = false
-        voiceActivityDetector.resetForListening()
-        vadState = .idleListening
-        vadEnergyBand = "silent"
-        vadNormalizedRMS = 0
+        await voiceFrameProcessor.resetForListening()
+        await voiceFrameProcessor.setMode(.inactive)
+        updateVADPresentation(.idle)
         terminalProtocolErrorCode = nil
     }
 
@@ -1375,33 +1398,34 @@ final class VoiceSessionController: ObservableObject {
               webSocketState == .connected,
               // 允许 .listening 状态恢复持续采集
               state == .ready || state == .listening || state == .speaking else { return }
+        await voiceFrameProcessor.resetForListening()
+        updateVADPresentation(.idle)
+        await voiceFrameProcessor.setMode(
+            state == .speaking && !responseID.isEmpty ? .bargeIn : .listening
+        )
         do {
             try capture.start()
             isRecording = true
             await audioUploader.activateCaptureGeneration(capture.captureGeneration)
             startCaptureWatchdogIfNeeded()
-            voiceActivityDetector.resetForListening()
-            vadState = .idleListening
-            vadEnergyBand = "silent"
-            vadNormalizedRMS = 0
+            await synchronizeVoiceFrameProcessingMode()
             scheduleMicrophoneReadinessCheck()
             VoiceLog.audio.info("continuous_capture_started")
         } catch {
+            await voiceFrameProcessor.suspend()
             state = .failed
             errorMessage = "无法启动持续麦克风采集。"
             VoiceLog.audio.error("continuous_capture_start_failed")
         }
     }
 
-    private func stopContinuousCapture(resetVAD: Bool) {
+    private func stopContinuousCapture(resetVAD: Bool) async {
         stopCaptureWatchdog()
         capture.stop()
         isRecording = false
         if resetVAD {
-            voiceActivityDetector.suspend()
-            vadState = .idleListening
-            vadEnergyBand = "silent"
-            vadNormalizedRMS = 0
+            await voiceFrameProcessor.suspend()
+            updateVADPresentation(.idle)
         }
         VoiceLog.audio.info("continuous_capture_stopped")
     }
@@ -1509,10 +1533,9 @@ final class VoiceSessionController: ObservableObject {
                 await self.audioUploader.activateCaptureGeneration(
                     self.capture.captureGeneration
                 )
-                self.voiceActivityDetector.resetForListening()
-                self.vadState = .idleListening
-                self.vadEnergyBand = "silent"
-                self.vadNormalizedRMS = 0
+                await self.voiceFrameProcessor.resetForListening()
+                self.updateVADPresentation(.idle)
+                await self.synchronizeVoiceFrameProcessingMode()
                 self.postResponseCaptureRecoveryCount += 1
                 self.markMicrophoneReadyIfPossible()
                 self.recordRecoveryEvent("post_response_capture_recovered")
@@ -1592,7 +1615,7 @@ final class VoiceSessionController: ObservableObject {
         microphoneReadinessTask = nil
         reconnectTask = nil
         reconnectGeneration = nil
-        stopContinuousCapture(resetVAD: true)
+        await stopContinuousCapture(resetVAD: true)
         playback.cancel(responseID: nil)
         isPlaybackActive = false
         lastErrorCategory = "local_audio_capture_stalled"
@@ -1629,7 +1652,7 @@ final class VoiceSessionController: ObservableObject {
         heartbeatTask?.cancel()
         heartbeatTask = nil
         await audioUploader.pauseCapture()
-        stopContinuousCapture(resetVAD: true)
+        await stopContinuousCapture(resetVAD: true)
         playback.cancel(responseID: nil)
         isPlaybackActive = false
         audioIOHealthReporter?.shutdownAudioIO()
