@@ -197,6 +197,7 @@ private struct RootView: View {
         }
         .environmentObject(companionStore)
         .environment(\.appVisualMode, companionStore.visualMode)
+        .environment(\.companionType, companionStore.current)
         .preferredColorScheme(companionStore.visualMode == .mystery ? .dark : .light)
 #if DEBUG
         .sheet(isPresented: $showingDiagnostics) {

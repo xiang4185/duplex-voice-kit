@@ -35,6 +35,19 @@ enum CompanionType: String, Codable, CaseIterable, Identifiable, Sendable {
     var visualMode: AppVisualMode {
         self == .mystery ? .mystery : .warm
     }
+
+    var portraitAssetName: String {
+        switch self {
+        case .warm: return "Character"
+        case .assertive: return "CompanionAssertive"
+        case .romantic: return "CompanionRomantic"
+        case .mystery: return "CompanionMystery"
+        }
+    }
+
+    var thumbnailAssetName: String {
+        self == .warm ? "CharacterAvatar" : portraitAssetName
+    }
 }
 
 @MainActor

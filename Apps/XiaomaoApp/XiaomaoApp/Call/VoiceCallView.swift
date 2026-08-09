@@ -1111,11 +1111,14 @@ private struct CompanionSelectionSheet: View {
                             }
                         } label: {
                             HStack(spacing: 14) {
-                                Image(systemName: symbol(for: type))
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(type == .mystery ? Color(hex: 0xC9C5DE) : visual.primary)
-                                    .frame(width: 38, height: 38)
-                                    .background(rowAccent(for: type), in: Circle())
+                                Image(type.thumbnailAssetName)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 44, height: 52)
+                                    .background(rowAccent(for: type), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(type.displayName)
@@ -1156,15 +1159,6 @@ private struct CompanionSelectionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .accessibilityIdentifier("call.companion.sheet")
-    }
-
-    private func symbol(for type: CompanionType) -> String {
-        switch type {
-        case .warm: return "heart.fill"
-        case .assertive: return "sparkles"
-        case .romantic: return "heart.circle.fill"
-        case .mystery: return "moon.stars.fill"
-        }
     }
 
     private func rowBackground(for type: CompanionType) -> Color {

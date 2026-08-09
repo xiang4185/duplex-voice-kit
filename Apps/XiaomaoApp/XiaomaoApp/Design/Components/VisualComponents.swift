@@ -4,10 +4,19 @@ private struct AppVisualModeEnvironmentKey: EnvironmentKey {
     static let defaultValue: AppVisualMode = .warm
 }
 
+private struct CompanionTypeEnvironmentKey: EnvironmentKey {
+    static let defaultValue: CompanionType = .warm
+}
+
 extension EnvironmentValues {
     var appVisualMode: AppVisualMode {
         get { self[AppVisualModeEnvironmentKey.self] }
         set { self[AppVisualModeEnvironmentKey.self] = newValue }
+    }
+
+    var companionType: CompanionType {
+        get { self[CompanionTypeEnvironmentKey.self] }
+        set { self[CompanionTypeEnvironmentKey.self] = newValue }
     }
 }
 

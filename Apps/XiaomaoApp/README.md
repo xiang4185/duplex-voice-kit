@@ -65,7 +65,8 @@ ignored `.trusted-alpha-build` directory.
 
 ## Asset provenance
 
-The app icon and cat portrait/avatar PNG files were generated for this project
-with an AI image-generation tool and are contributed by the repository owner
-for use under this repository's license. They contain no third-party font,
-model, SDK, user photo, or embedded metadata required by the application.
+The app icon, cat portrait/avatar PNG files, and public sample companion
+portraits were generated for this project with an AI image-generation tool and
+are contributed by the repository owner for use under this repository's
+license. They contain no third-party font, model, SDK, user photo, or embedded
+metadata required by the application.

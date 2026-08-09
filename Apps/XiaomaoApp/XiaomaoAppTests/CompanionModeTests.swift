@@ -13,6 +13,29 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertEqual(CompanionType.assertive.visualMode, .warm)
         XCTAssertEqual(CompanionType.romantic.visualMode, .warm)
         XCTAssertEqual(CompanionType.mystery.visualMode, .mystery)
+        XCTAssertEqual(CompanionType.warm.portraitAssetName, "Character")
+        XCTAssertEqual(CompanionType.warm.thumbnailAssetName, "CharacterAvatar")
+        XCTAssertEqual(CompanionType.assertive.portraitAssetName, "CompanionAssertive")
+        XCTAssertEqual(CompanionType.romantic.portraitAssetName, "CompanionRomantic")
+        XCTAssertEqual(CompanionType.mystery.portraitAssetName, "CompanionMystery")
+    }
+
+    func testPublicSampleCompanionPortraitAssetsExist() throws {
+        let appRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let assetsRoot = appRoot.appendingPathComponent("XiaomaoApp/Resources/Assets.xcassets")
+
+        for path in [
+            "CompanionAssertive.imageset/companion-assertive.png",
+            "CompanionRomantic.imageset/companion-romantic.png",
+            "CompanionMystery.imageset/companion-mystery.png"
+        ] {
+            let url = assetsRoot.appendingPathComponent(path)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "Missing public sample asset: \(path)")
+            let values = try url.resourceValues(forKeys: [.fileSizeKey])
+            XCTAssertGreaterThan(values.fileSize ?? 0, 1_024, "Sample asset must contain a real portrait image")
+        }
     }
 
     func testCompanionSelectionPersistsAndRestoresMysteryMode() {
@@ -104,6 +127,7 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertTrue(theme.contains("static func visual(_ mode: AppVisualMode) -> VisualTokens"))
         XCTAssertTrue(theme.contains("case .mystery:"))
         XCTAssertTrue(root.contains(".environment(\\.appVisualMode, companionStore.visualMode)"))
+        XCTAssertTrue(root.contains(".environment(\\.companionType, companionStore.current)"))
         XCTAssertTrue(root.contains(".preferredColorScheme(companionStore.visualMode == .mystery ? .dark : .light)"))
         XCTAssertTrue(tabs.contains("toolbarColorScheme(visualMode == .mystery ? .dark : .light"))
         XCTAssertTrue(theme.contains("let dangerSoft: Color"))
@@ -111,6 +135,7 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertTrue(call.contains("visual.glassTint"))
         XCTAssertTrue(home.contains("visualMode == .mystery ? visual.primarySoft : visual.primary"))
         XCTAssertTrue(components.contains("visualMode == .mystery ? tokens.primarySoft : tokens.primary"))
+        XCTAssertTrue(call.contains("Image(type.thumbnailAssetName)"))
 
         for label in ["温柔陪伴", "强势偏爱", "黏人浪漫", "未知", "尚未被定义"] {
             XCTAssertTrue(store.contains(label))
