@@ -38,8 +38,16 @@ struct CompanionHomeView: View {
         ("一直在", "star.fill")
     ]
 
-    // P2.7B: hero 区中央人物高度 (portrait 模式以 width=size 渲染, height=size*3/2 自动)
-    private let heroSize: CGFloat = 200
+    // P2.7B: sample companion portraits carry more transparent breathing room
+    // than the original warm portrait, so give them a larger hero box while
+    // keeping the warm layout unchanged.
+    private var heroSize: CGFloat {
+        switch companionStore.current {
+        case .warm: return 200
+        case .assertive, .romantic: return 226
+        case .mystery: return 242
+        }
+    }
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
     private var accent: Color {
@@ -69,7 +77,11 @@ struct CompanionHomeView: View {
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [accent.opacity(0.20), visual.primarySoft.opacity(0.10), .clear],
+                                colors: [
+                                    visualMode == .mystery ? visual.primary.opacity(0.16) : accent.opacity(0.20),
+                                    visualMode == .mystery ? visual.halo.opacity(0.22) : visual.primarySoft.opacity(0.10),
+                                    .clear
+                                ],
                                 center: .center,
                                 startRadius: 50,
                                 endRadius: 200

@@ -1054,10 +1054,12 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(portrait.contains("LinearGradient"), "portraitCharacter 必须保留底部渐隐 LinearGradient mask")
         XCTAssertTrue(portrait.contains("revealed ? 0 : 6"), "portraitCharacter 必须保留 reveal blur 语义")
         XCTAssertTrue(portrait.contains("revealed ? 1 : 0.92"), "portraitCharacter 必须保留 reveal opacity 语义")
-        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 1.5 : 6)"),
-                      "Mystery Mode 必须保留独立的 reveal/locked 模糊层级")
-        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.88 : 0.70)"),
-                      "Mystery Mode 必须让人物保持低于 Warm 的显现强度")
+        XCTAssertTrue(portrait.contains(".scaleEffect(companionType.portraitDisplayScale)"),
+                      "公开陪伴角色必须支持独立 portrait 构图缩放")
+        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.35 : 6)"),
+                      "Mystery Mode 解锁后必须清晰可辨，同时保留 locked 模糊")
+        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.97 : 0.68)"),
+                      "Mystery Mode 解锁后人物必须保持接近完整显现")
         XCTAssertTrue(portrait.contains(".mask"), "portraitCharacter 必须保留 mask")
         XCTAssertTrue(portrait.contains(".animation(.easeInOut(duration: 0.35), value: revealed)"),
                       "portraitCharacter 必须保留 reveal 动画")

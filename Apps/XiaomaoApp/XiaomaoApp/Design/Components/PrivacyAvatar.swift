@@ -177,10 +177,11 @@ struct PrivacyAvatar: View {
             .interpolation(.high)
             .aspectRatio(contentMode: .fit)
             .frame(width: width, height: height)
-            .blur(radius: mystery ? (revealed ? 1.5 : 6) : (revealed ? 0 : 6))
-            .saturation(mystery ? 0.62 : 1)
-            .brightness(mystery ? -0.05 : 0)
-            .opacity(mystery ? (revealed ? 0.88 : 0.70) : (revealed ? 1 : 0.92))
+            .scaleEffect(companionType.portraitDisplayScale)
+            .blur(radius: mystery ? (revealed ? 0.35 : 6) : (revealed ? 0 : 6))
+            .saturation(mystery ? (revealed ? 0.90 : 0.48) : 1)
+            .brightness(mystery ? (revealed ? 0.01 : -0.08) : 0)
+            .opacity(mystery ? (revealed ? 0.97 : 0.68) : (revealed ? 1 : 0.92))
             // P2.7B-FINAL-VISUAL-FIX: 删除全尺寸人物叠光 (overlay + plus-lighter blend).
             // 该叠光覆盖完整人物容器, 是浅粉矩形边界的来源之一;
             // 父页面已有静态 halo 与 heroGlow 光效, 人物图内部无需整块叠光.
@@ -210,10 +211,11 @@ struct PrivacyAvatar: View {
             .resizable()
             .aspectRatio(contentMode: .fill)
             .frame(width: size, height: size)
-            .blur(radius: mystery ? (revealed ? 1 : 5) : (revealed ? 0 : 6))
-            .saturation(mystery ? 0.62 : 1)
-            .brightness(mystery ? -0.05 : 0)
-            .opacity(mystery ? (revealed ? 0.90 : 0.72) : (revealed ? 1 : 0.92))
+            .scaleEffect(companionType.thumbnailDisplayScale)
+            .blur(radius: mystery ? (revealed ? 0.2 : 5) : (revealed ? 0 : 6))
+            .saturation(mystery ? (revealed ? 0.92 : 0.50) : 1)
+            .brightness(mystery ? (revealed ? 0.02 : -0.07) : 0)
+            .opacity(mystery ? (revealed ? 0.98 : 0.70) : (revealed ? 1 : 0.92))
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
             // P2.6J+: 径向柔边遮罩 — 只羽化外缘 (中心 82% 保持清晰, 外缘渐隐)
             .mask {
