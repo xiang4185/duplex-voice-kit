@@ -1049,11 +1049,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             return
         }
         let portrait = String(avatar[pStart..<pEnd])
-        XCTAssertTrue(portrait.contains("Image(\"Character\")"), "portraitCharacter 必须保留 Image(\"Character\")")
+        XCTAssertTrue(portrait.contains("Image(companionType.portraitAssetName)"),
+                      "portraitCharacter 必须按当前陪伴类型加载公开角色图")
         XCTAssertTrue(portrait.contains("LinearGradient"), "portraitCharacter 必须保留底部渐隐 LinearGradient mask")
         XCTAssertTrue(portrait.contains("revealed ? 0 : 6"), "portraitCharacter 必须保留 reveal blur 语义")
         XCTAssertTrue(portrait.contains("revealed ? 1 : 0.92"), "portraitCharacter 必须保留 reveal opacity 语义")
-        XCTAssertTrue(portrait.contains("mystery ? 8"), "Mystery Mode 必须让人物保持未完全显现状态")
+        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 1.5 : 6)"),
+                      "Mystery Mode 必须保留独立的 reveal/locked 模糊层级")
+        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.88 : 0.70)"),
+                      "Mystery Mode 必须让人物保持低于 Warm 的显现强度")
         XCTAssertTrue(portrait.contains(".mask"), "portraitCharacter 必须保留 mask")
         XCTAssertTrue(portrait.contains(".animation(.easeInOut(duration: 0.35), value: revealed)"),
                       "portraitCharacter 必须保留 reveal 动画")
