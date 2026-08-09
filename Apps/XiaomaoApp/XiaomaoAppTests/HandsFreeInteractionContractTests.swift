@@ -710,7 +710,11 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 5. 首页主 CTA 玻璃
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须使用 glassEffect")
         XCTAssertTrue(home.contains(".interactive()"), "首页 CTA 必须交互玻璃")
-        XCTAssertTrue(home.contains(".tint(visual.primary)"), "首页 CTA 必须由全局视觉 Token 驱动 tint")
+        XCTAssertTrue(
+            home.contains(".tint(visualMode == .mystery ? visual.primarySoft : visual.primary)"),
+            "首页 CTA 必须由 Warm / Mystery 全局视觉 Token 驱动 tint"
+        )
+        XCTAssertTrue(home.contains("if visualMode == .mystery"), "Mystery 首页 CTA 必须有独立暗色玻璃边界")
         XCTAssertFalse(home.contains(".background(Theme.primary, in: Capsule())"), "首页 CTA 不得叠加实体胶囊背景")
         XCTAssertFalse(home.contains("1.015"), "不得保留 1.015 强缩放")
 
