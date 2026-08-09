@@ -16,13 +16,17 @@ final class AppCoordinator: ObservableObject {
     let chatService: any ChatServicing
     let smallThingsStore: SmallThingsStore
     let voiceController: VoiceSessionController
+    let companionStore: CompanionModeStore
 
     init(
         environment suppliedEnvironment: AppEnvironment? = nil,
         tokenStore suppliedTokenStore: (any AuthTokenStoring)? = nil,
+        companionStore suppliedCompanionStore: CompanionModeStore? = nil,
         backendSession: URLSession = .shared,
         voiceClient: (any VoiceWebSocketClient)? = nil
     ) {
+        let companionStore = suppliedCompanionStore ?? CompanionModeStore()
+        self.companionStore = companionStore
         let baseEnvironment = suppliedEnvironment ?? .fromBundle()
         let tokenStore = suppliedTokenStore ?? Self.makeTokenStore(
             for: baseEnvironment.requestedHostAdapterMode
@@ -87,6 +91,7 @@ final class AppCoordinator: ObservableObject {
             networkMonitor: networkMonitor,
             voiceActivityConfiguration: .xiaomaoRealtime
         )
+        self.voiceController.setCompanionTypeID(companionStore.current.rawValue)
     }
 
     private static func makeTokenStore(for mode: HostAdapterMode) -> any AuthTokenStoring {

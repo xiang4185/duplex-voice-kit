@@ -7,6 +7,87 @@ import UIKit
 // 使已有页面引用自动跟随换色, 无需逐个改动.
 
 enum Theme {
+    private static func adaptive(light: UInt32, dark: UInt32, opacity: Double = 1) -> Color {
+        Color(UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            let r = CGFloat((hex >> 16) & 0xFF) / 255
+            let g = CGFloat((hex >> 8) & 0xFF) / 255
+            let b = CGFloat(hex & 0xFF) / 255
+            return UIColor(red: r, green: g, blue: b, alpha: opacity)
+        })
+    }
+
+    struct VisualTokens {
+        let background: Color
+        let backgroundElevated: Color
+        let surface: Color
+        let surfaceSoft: Color
+        let glassTint: Color
+        let primary: Color
+        let primarySoft: Color
+        let onPrimary: Color
+        let textPrimary: Color
+        let textSecondary: Color
+        let textTertiary: Color
+        let border: Color
+        let shadow: Color
+        let halo: Color
+        let heroGlow: Color
+        let meshWarmWhite: Color
+        let meshPeach: Color
+        let meshRose: Color
+        let meshCoolAccent: Color
+    }
+
+    static func visual(_ mode: AppVisualMode) -> VisualTokens {
+        switch mode {
+        case .warm:
+            return VisualTokens(
+                background: bg,
+                backgroundElevated: bgElevated,
+                surface: surface,
+                surfaceSoft: surfaceWarm,
+                glassTint: Color.white.opacity(0.34),
+                primary: primary,
+                primarySoft: primarySoft,
+                onPrimary: onPrimary,
+                textPrimary: textPrimary,
+                textSecondary: textSecondary,
+                textTertiary: textTertiary,
+                border: border,
+                shadow: shadowRaised,
+                halo: halo,
+                heroGlow: heroGlow,
+                meshWarmWhite: meshWarmWhite,
+                meshPeach: meshPeach,
+                meshRose: meshRose,
+                meshCoolAccent: meshCoolAccent
+            )
+        case .mystery:
+            return VisualTokens(
+                background: Color(hex: 0x111118),
+                backgroundElevated: Color(hex: 0x171720),
+                surface: Color(hex: 0x1D1D28).opacity(0.94),
+                surfaceSoft: Color(hex: 0x232331).opacity(0.94),
+                glassTint: Color(hex: 0x292837).opacity(0.44),
+                primary: Color(hex: 0xD8D4E7),
+                primarySoft: Color(hex: 0x302E40),
+                onPrimary: Color(hex: 0x1A1920),
+                textPrimary: Color(hex: 0xF3F2F7),
+                textSecondary: Color(hex: 0xBBB7C6),
+                textTertiary: Color(hex: 0x858190),
+                border: Color(hex: 0x3A3748),
+                shadow: Color.black.opacity(0.24),
+                halo: Color(hex: 0x6E6789),
+                heroGlow: Color(hex: 0x8C84A8).opacity(0.24),
+                meshWarmWhite: Color(hex: 0x171720),
+                meshPeach: Color(hex: 0x222130),
+                meshRose: Color(hex: 0x302C42),
+                meshCoolAccent: Color(hex: 0x191D2B)
+            )
+        }
+    }
+
     // MARK: 布局
     static let spacing: CGFloat = Spacing.medium
     static let cornerRadius: CGFloat = Radius.medium
@@ -32,12 +113,20 @@ enum Theme {
         static let pill: CGFloat = 999
     }
 
+    enum Motion {
+        static let quick: Double = 0.20
+        static let standard: Double = 0.35
+        static let slow: Double = 0.60
+        static let ambientWarm: Double = 20
+        static let ambientMystery: Double = 28
+    }
+
     // MARK: 主色 — 西柚玫瑰 (v6.1)
-    static let primary = Color(hex: 0xD9486B)          // --color-primary 西柚玫瑰
-    static let primaryHover = Color(hex: 0xC2405F)     // --color-primary-hover
-    static let primaryPressed = Color(hex: 0xA83852)   // --color-primary-pressed
-    static let primarySoft = Color(hex: 0xFBE0E6)      // --color-primary-soft 软衬底/chip
-    static let onPrimary = Color(hex: 0xFFFFFF)        // --color-on-primary
+    static let primary = adaptive(light: 0xD9486B, dark: 0xD8D4E7)          // --color-primary
+    static let primaryHover = adaptive(light: 0xC2405F, dark: 0xC4BFD8)     // --color-primary-hover
+    static let primaryPressed = adaptive(light: 0xA83852, dark: 0xE6E3EE)   // --color-primary-pressed
+    static let primarySoft = adaptive(light: 0xFBE0E6, dark: 0x302E40)      // --color-primary-soft
+    static let onPrimary = adaptive(light: 0xFFFFFF, dark: 0x1A1920)        // --color-on-primary
 
     // MARK: 主色层次 (兼容 v3 命名)
     static let primary100 = primarySoft
@@ -51,20 +140,20 @@ enum Theme {
     static let primaryDeep2 = primary700
 
     // MARK: 底色 — 桃粉白 (v6.1)
-    static let bg = Color(hex: 0xFDF5F1)               // --color-bg 桃粉白底
-    static let bgElevated = Color(hex: 0xFFF9F6)       // --color-bg-elevated
-    static let halo = Color(hex: 0xF7DDD6)             // --color-halo
-    static let haloGlow = Color(hex: 0xF0BCB0)         // --color-halo-glow
-    static let surface = Color(hex: 0xFFFFFF)          // 卡片表面
-    static let surfaceWarm = Color(hex: 0xFBEBE2)      // 暖色卡片底 (--color-role-soft)
-    static let border = Color(hex: 0xF7DDD6)           // 分隔线 (halo)
+    static let bg = adaptive(light: 0xFDF5F1, dark: 0x111118)
+    static let bgElevated = adaptive(light: 0xFFF9F6, dark: 0x171720)
+    static let halo = adaptive(light: 0xF7DDD6, dark: 0x6E6789)
+    static let haloGlow = adaptive(light: 0xF0BCB0, dark: 0x77708F)
+    static let surface = adaptive(light: 0xFFFFFF, dark: 0x1D1D28)
+    static let surfaceWarm = adaptive(light: 0xFBEBE2, dark: 0x232331)
+    static let border = adaptive(light: 0xF7DDD6, dark: 0x3A3748)
 
     // MARK: 文字 — 深莓果 (v6.1)
-    static let textPrimary = Color(hex: 0x432B33)      // --color-text-primary 深莓果
-    static let textSecondary = Color(hex: 0x8A6B72)    // --color-text-secondary
-    static let textTertiary = Color(hex: 0xB99CA2)     // --color-text-tertiary
-    static let textLink = Color(hex: 0xC24467)         // --color-text-link
-    static let textOnHalo = Color(hex: 0xFFF9F6)       // --color-text-on-halo
+    static let textPrimary = adaptive(light: 0x432B33, dark: 0xF3F2F7)
+    static let textSecondary = adaptive(light: 0x8A6B72, dark: 0xBBB7C6)
+    static let textTertiary = adaptive(light: 0xB99CA2, dark: 0x858190)
+    static let textLink = adaptive(light: 0xC24467, dark: 0xD8D4E7)
+    static let textOnHalo = adaptive(light: 0xFFF9F6, dark: 0xF3F2F7)
 
     // MARK: 角色三色 (v6.1)
     static let roleGold = Color(hex: 0xD9486B)         // 西柚玫瑰 (v6.1 定稿 --color-role-gold: #D9486B, warm 角色主色)
@@ -147,10 +236,10 @@ enum Theme {
     )
 
     // MARK: 阴影体系 (v6.1 玫瑰色)
-    static let shadowRaised = Color(hex: 0xD9486B).opacity(0.08)
-    static let shadowFloating = Color(hex: 0xD9486B).opacity(0.12)
-    static let shadowOverlay = Color(hex: 0x432B33).opacity(0.16)
-    static let shadowGlow = Color(hex: 0xFAC8D2).opacity(0.50)
+    static let shadowRaised = adaptive(light: 0xD9486B, dark: 0x000000, opacity: 0.08)
+    static let shadowFloating = adaptive(light: 0xD9486B, dark: 0x000000, opacity: 0.12)
+    static let shadowOverlay = adaptive(light: 0x432B33, dark: 0x000000, opacity: 0.18)
+    static let shadowGlow = adaptive(light: 0xFAC8D2, dark: 0x8C84A8, opacity: 0.32)
 
     // MARK: 主视觉光晕 (P2.7B)
     // 首页/通话页中央完整形象底部光斑, 与 portrait 渐隐融合 (“人像融入光里”)

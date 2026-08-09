@@ -9,6 +9,7 @@ struct SettingsView: View {
     let close: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @State private var appeared = false
     // P2.6E: 彩蛋入口 (本地 SwiftUI Sheet)
@@ -17,10 +18,12 @@ struct SettingsView: View {
     @State private var showPrivacySheet = false
     @State private var showAboutSheet = false
 
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
+
 
     var body: some View {
         ZStack {
-            Theme.bg
+            visual.background
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
@@ -184,9 +187,9 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 16, x: 0, y: 4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.55), radius: 10, x: 0, y: 3)
     }
 
     // MARK: 订阅卡
@@ -229,9 +232,9 @@ struct SettingsView: View {
             .accessibilityIdentifier("settings.pro")
         }
         .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     // MARK: 隐私组 (P2.6J: 仅保留真实生效的开关与静态说明, 删除本地无效开关)
@@ -263,9 +266,9 @@ struct SettingsView: View {
             .padding(.horizontal, 18)
             .frame(minHeight: 60)
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     private func privacyRow(icon: String, title: String, detail: String, isOn: Binding<Bool>) -> some View {
@@ -306,7 +309,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.surfaceSoft.opacity(0.78), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     // MARK: 关于组
@@ -318,9 +321,9 @@ struct SettingsView: View {
             Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "隐私政策", detail: nil)
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     private func aboutRow(title: String, detail: String?) -> some View {

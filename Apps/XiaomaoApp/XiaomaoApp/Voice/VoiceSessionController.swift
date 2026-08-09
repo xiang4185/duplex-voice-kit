@@ -53,6 +53,8 @@ final class VoiceSessionController: ObservableObject {
     @Published private(set) var responseCompletionCount = 0
     @Published private(set) var postResponseCaptureRecoveryCount = 0
     @Published private(set) var hasCompletedInitialConnection = false
+
+    private var companionTypeID = CompanionType.warm.rawValue
     @Published private(set) var lastPingRoundTripMilliseconds: Int?
     @Published private(set) var pingFailureCount = 0
 
@@ -391,6 +393,11 @@ final class VoiceSessionController: ObservableObject {
         microphoneReadyAt = nil
     }
 
+    func setCompanionTypeID(_ rawValue: String) {
+        let allowed = Set(CompanionType.allCases.map(\.rawValue))
+        companionTypeID = allowed.contains(rawValue) ? rawValue : CompanionType.warm.rawValue
+    }
+
     func refreshLatencyProbe() async {
         guard callIsActive, webSocketState == .connected else { return }
         try? await probeWebSocket()
@@ -654,7 +661,8 @@ final class VoiceSessionController: ObservableObject {
         do {
             try await audioUploader.openConnection(
                 sessionID: sessionID,
-                traceID: traceID
+                traceID: traceID,
+                companionTypeID: companionTypeID
             )
             startHeartbeat()
             try await waitForReady(expected: .sessionReady)
@@ -702,6 +710,7 @@ final class VoiceSessionController: ObservableObject {
                 try await audioUploader.openConnection(
                     sessionID: sessionID,
                     traceID: traceID,
+                    companionTypeID: companionTypeID,
                     resumeFrom: lastServerSequence
                 )
                 startHeartbeat()

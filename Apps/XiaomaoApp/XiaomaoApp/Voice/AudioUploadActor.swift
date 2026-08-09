@@ -77,12 +77,16 @@ final class AudioUploadActor: @unchecked Sendable {
     func openConnection(
         sessionID: String,
         traceID: String,
+        companionTypeID: String = CompanionType.warm.rawValue,
         resumeFrom lastReceivedServerSequence: Int? = nil
     ) async throws {
         try await pipeline.openConnection(
             sessionID: sessionID,
             traceID: traceID,
-            sessionStartPayload: ["route": .string(VoiceRoute.b.rawValue)],
+            sessionStartPayload: [
+                "route": .string(VoiceRoute.b.rawValue),
+                "companion_type": .string(companionTypeID)
+            ],
             resumeFrom: lastReceivedServerSequence
         )
     }

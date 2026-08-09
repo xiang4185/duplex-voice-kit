@@ -25,6 +25,7 @@ struct VoiceCallView: View {
     @State private var showHangupConfirm = false
     @State private var showEmpathy = false
     @State private var showDiagnostics = false
+    @State private var showCompanionPicker = false
     // P2.7B-FINAL-IDLE: "继续聊"本地抑制预警弹窗 (不伪造语音活动; 真实 speech_start 由 controller 清空)
     @State private var idleWarningDismissed = false
     @State private var copiedDiagnostics = false
@@ -38,6 +39,7 @@ struct VoiceCallView: View {
     @State private var currentEmpathyCard: EmpathyCard = .welcome
     @State private var empathyReason: EmpathyCard.Kind? = nil
     @State private var reconnectCardShown = false   // reconnect 卡只自动出现一次
+    @Environment(\.appVisualMode) private var visualMode
 
     private let topics = [
         "今天过得怎么样？",
@@ -93,7 +95,10 @@ struct VoiceCallView: View {
                     .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
                     // P2.8A: 首次连接加载反馈 (idle/connecting 时浮在人物上方, .ready 自动淡出)
                     .overlay {
-                        if !viewModel.controller.hasCompletedInitialConnection,
+                        if viewModel.isSwitchingCompanion {
+                            switchingCompanionCard
+                                .transition(.opacity)
+                        } else if !viewModel.controller.hasCompletedInitialConnection,
                            viewModel.controller.state != .failed,
                            viewModel.controller.state != .closed,
                            viewModel.controller.state != .closing {
@@ -109,6 +114,12 @@ struct VoiceCallView: View {
                     .padding(.top, 4)
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
+
+                StatusPill(
+                    text: viewModel.companionStore.current.displayName,
+                    systemImage: visualMode == .mystery ? "moon.stars.fill" : "heart.fill"
+                )
+                .padding(.top, 7)
 
                 // 转写 / 回复文字使用固定高度槽位。
                 // 真机用户说话时 partial transcript 出现/消失不能改变 hero 布局，
@@ -137,6 +148,13 @@ struct VoiceCallView: View {
                 }
                 if !viewModel.controller.errorMessage.isEmpty {
                     Text(viewModel.controller.errorMessage)
+                        .font(Theme.footnoteFont)
+                        .foregroundStyle(Theme.danger)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 6)
+                }
+                if !viewModel.companionSwitchError.isEmpty {
+                    Text(viewModel.companionSwitchError)
                         .font(Theme.footnoteFont)
                         .foregroundStyle(Theme.danger)
                         .multilineTextAlignment(.center)
@@ -241,6 +259,18 @@ struct VoiceCallView: View {
         }
         .sheet(isPresented: $showDiagnostics) {
             diagnosticsSheet
+        }
+        .sheet(isPresented: $showCompanionPicker) {
+            CompanionSelectionSheet(
+                store: viewModel.companionStore,
+                isSwitching: viewModel.isSwitchingCompanion,
+                select: { type in
+                    showCompanionPicker = false
+                    Task { await viewModel.switchCompanion(to: type) }
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -382,6 +412,29 @@ struct VoiceCallView: View {
         .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("call.connecting")
+    }
+
+    private var switchingCompanionCard: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+                .tint(Theme.primary)
+            Text("正在切换陪伴方式…")
+                .font(Theme.subheadFont)
+                .foregroundStyle(Theme.textPrimary)
+            Text("会为你重新建立一段通话")
+                .font(Theme.captionFont)
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 18)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .stroke(Theme.border.opacity(0.5), lineWidth: 0.7)
+        }
+        .shadow(color: Theme.shadowRaised, radius: 14, x: 0, y: 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("call.companion.switching")
     }
 
     // MARK: 中央人物区 (P2.7B-FIX: GeometryReader 等比适配可用高度)
@@ -570,17 +623,14 @@ struct VoiceCallView: View {
                     }
 
                     controlButton(
-                        icon: "lightbulb",
-                        title: "换个提示",
+                        icon: "heart.text.square",
+                        title: "陪伴",
                         style: .normal,
-                        identifier: "call.topic",
-                        accessibilityHint: "更换一个聊天提示"
+                        identifier: "call.companion",
+                        accessibilityHint: "选择陪伴方式并重新建立通话"
                     ) {
                         WarmHaptics.action()
-                        // P2.8A: 仅切换本地建议文案, 不发送协议事件, 不修改模型对话主题
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            topicIndex = (topicIndex + 1) % topics.count
-                        }
+                        showCompanionPicker = true
                     }
                 }
                 .padding(.top, 2)
@@ -988,6 +1038,100 @@ struct VoiceCallView: View {
     }
 }
 
+private struct CompanionSelectionSheet: View {
+    @ObservedObject var store: CompanionModeStore
+    let isSwitching: Bool
+    let select: (CompanionType) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appVisualMode) private var visualMode
+
+    var body: some View {
+        let visual = Theme.visual(visualMode)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 10) {
+                    ForEach(CompanionType.allCases) { type in
+                        Button {
+                            if type == store.current {
+                                dismiss()
+                            } else {
+                                select(type)
+                            }
+                        } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: symbol(for: type))
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(type == .mystery ? Color(hex: 0xD8D4E7) : visual.primary)
+                                    .frame(width: 38, height: 38)
+                                    .background(rowAccent(for: type), in: Circle())
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(type.displayName)
+                                        .font(Theme.headlineFont)
+                                        .foregroundStyle(type == .mystery ? Color(hex: 0xF3F2F7) : visual.textPrimary)
+                                    Text(type.summary)
+                                        .font(Theme.captionFont)
+                                        .foregroundStyle(type == .mystery ? Color(hex: 0xAAA6B6) : visual.textSecondary)
+                                }
+                                Spacer(minLength: 0)
+                                if store.current == type {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(type == .mystery ? Color(hex: 0xD8D4E7) : visual.primary)
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(type == .mystery ? Color(hex: 0x777384) : visual.textTertiary)
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 68)
+                            .background(rowBackground(for: type), in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                                    .stroke(rowBorder(for: type), lineWidth: 0.7)
+                            }
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .disabled(isSwitching)
+                        .accessibilityIdentifier("call.companion.\(type.rawValue)")
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+            }
+            .background(visual.background.ignoresSafeArea())
+            .navigationTitle("陪伴")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .accessibilityIdentifier("call.companion.sheet")
+    }
+
+    private func symbol(for type: CompanionType) -> String {
+        switch type {
+        case .warm: return "heart.fill"
+        case .assertive: return "sparkles"
+        case .romantic: return "heart.circle.fill"
+        case .mystery: return "moon.stars.fill"
+        }
+    }
+
+    private func rowBackground(for type: CompanionType) -> Color {
+        if type == .mystery { return Color(hex: 0x191924) }
+        return Theme.visual(visualMode).surface.opacity(0.84)
+    }
+
+    private func rowAccent(for type: CompanionType) -> Color {
+        if type == .mystery { return Color(hex: 0x302E40) }
+        return Theme.visual(visualMode).primarySoft
+    }
+
+    private func rowBorder(for type: CompanionType) -> Color {
+        if type == .mystery { return Color(hex: 0x454154) }
+        return Theme.visual(visualMode).border.opacity(0.52)
+    }
+}
+
 // MARK: - 头像后流体氛围光
 struct VoiceAvatarAura: View {
     let muted: Bool
@@ -995,6 +1139,7 @@ struct VoiceAvatarAura: View {
     /// 真实输入音量 (0...1), 来自 controller.vadNormalizedRMS。
     let level: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
     @State private var drifting = false
 
     var body: some View {
@@ -1005,7 +1150,7 @@ struct VoiceAvatarAura: View {
                     RadialGradient(
                         colors: [
                             Theme.primarySoft.opacity(0.22 + 0.18 * activityStrength),
-                            Theme.roleGold.opacity(0.08 + 0.10 * activityStrength),
+                            (visualMode == .mystery ? Theme.primary : Theme.roleGold).opacity(0.08 + 0.10 * activityStrength),
                             .clear
                         ],
                         center: .center,
@@ -1082,7 +1227,7 @@ struct VoiceAvatarAura: View {
     }
 
     private func auraDuration(_ index: Int) -> Double {
-        [5.8, 6.6, 7.2, 6.1][index]
+        [5.8, 6.6, 7.2, 6.1][index] * (visualMode == .mystery ? 1.45 : 1.0)
     }
 
     private func auraWidth(_ index: Int) -> CGFloat {
@@ -1129,6 +1274,9 @@ struct VoiceAvatarAura: View {
     }
 
     private func auraColor(_ index: Int) -> Color {
+        if visualMode == .mystery {
+            return index.isMultiple(of: 2) ? Theme.primary : Theme.halo
+        }
         switch index {
         case 0, 2: Theme.primary
         case 1: Theme.roleGold

@@ -2,6 +2,11 @@ import SwiftUI
 
 struct ChatMessageBubble: View {
     let message: ChatMessage
+    var groupedWithPrevious: Bool = false
+    var groupedWithNext: Bool = false
+    @Environment(\.appVisualMode) private var visualMode
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
@@ -9,7 +14,11 @@ struct ChatMessageBubble: View {
                 Spacer(minLength: 56)
                 bubble
             } else {
-                avatar
+                if groupedWithPrevious {
+                    Color.clear.frame(width: 34, height: 1)
+                } else {
+                    avatar
+                }
                 bubble
                 Spacer(minLength: 44)
             }
@@ -25,33 +34,31 @@ struct ChatMessageBubble: View {
             alignment: message.participant == .user ? .trailing : .leading,
             spacing: 5
         ) {
-            if message.participant != .user {
+            if message.participant != .user && !groupedWithPrevious {
                 Text(message.participant.displayName)
                     .font(Theme.captionFont)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(visual.textSecondary)
                     .padding(.horizontal, 3)
             }
 
             Text(message.content)
                 .font(Theme.bodyFont)
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(visual.textPrimary)
                 .textSelection(.enabled)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(bubbleSurface)
                 .clipShape(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: groupedWithPrevious || groupedWithNext ? 14 : 20, style: .continuous)
                 )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(bubbleBorder, lineWidth: 1)
-                }
-                .shadow(color: Theme.shadowRaised, radius: 5, x: 0, y: 2)
+                .shadow(color: visual.shadow.opacity(0.55), radius: 7, x: 0, y: 3)
 
-            Text(message.createdAt, style: .time)
-                .font(.system(size: 10, weight: .regular, design: .rounded))
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.horizontal, 4)
+            if !groupedWithNext {
+                Text(message.createdAt, style: .time)
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(visual.textTertiary)
+                    .padding(.horizontal, 4)
+            }
         }
     }
 
@@ -63,16 +70,16 @@ struct ChatMessageBubble: View {
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
-                .background(Theme.primary)
+                .background(visual.primary)
                 .clipShape(Circle())
                 .accessibilityHidden(true)
         case .xiaomao:
             Text("🐱")
                 .font(.system(size: 20))
                 .frame(width: 34, height: 34)
-                .background(Color(hex: 0xFFF0E7))
+                .background(visual.surfaceSoft)
                 .clipShape(Circle())
-                .overlay { Circle().stroke(Theme.border, lineWidth: 1) }
+                .overlay { Circle().stroke(visual.border.opacity(0.5), lineWidth: 0.7) }
                 .accessibilityHidden(true)
         case .user:
             EmptyView()
@@ -81,17 +88,12 @@ struct ChatMessageBubble: View {
 
     private var bubbleSurface: Color {
         switch message.participant {
-        case .user: Color(hex: 0xF9DCE3)
-        case .developer: Theme.surface
-        case .xiaomao: Color(hex: 0xFBEADF)
-        }
-    }
-
-    private var bubbleBorder: Color {
-        switch message.participant {
-        case .user: Theme.primary.opacity(0.14)
-        case .developer: Theme.border.opacity(0.85)
-        case .xiaomao: Color(hex: 0xF3D8C8)
+        case .user:
+            visualMode == .mystery ? visual.primarySoft.opacity(0.92) : Color(hex: 0xF4D9DF).opacity(0.82)
+        case .developer:
+            visual.surface.opacity(0.78)
+        case .xiaomao:
+            visual.surfaceSoft.opacity(0.82)
         }
     }
 }

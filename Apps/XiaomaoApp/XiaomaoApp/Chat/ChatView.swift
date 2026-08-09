@@ -6,9 +6,13 @@ struct ChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
     @State private var keyboardVisible = false
+    @Environment(\.appVisualMode) private var visualMode
+    @EnvironmentObject private var companionStore: CompanionModeStore
 
     private let isMockMode: Bool
     private let onReconfigure: () -> Void
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     init(
         viewModel: @autoclosure @escaping () -> ChatViewModel,
@@ -27,10 +31,14 @@ struct ChatView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 14) {
+                    LazyVStack(spacing: 7) {
                         stateContent
                         ForEach(viewModel.messages) { message in
-                            ChatMessageBubble(message: message)
+                            ChatMessageBubble(
+                                message: message,
+                                groupedWithPrevious: isGrouped(message: message, direction: -1),
+                                groupedWithNext: isGrouped(message: message, direction: 1)
+                            )
                                 .id(message.id)
 
                             if isLastMessageInTurn(message),
@@ -116,7 +124,7 @@ struct ChatView: View {
                 inputFocused: $inputFocused
             )
         }
-        .background(Theme.bg.ignoresSafeArea())
+        .background(visual.background.ignoresSafeArea())
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()
@@ -148,28 +156,20 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        ZStack {
-            VStack(spacing: 2) {
-                Text("聊天")
-                    .font(.system(size: 19, weight: .semibold, design: .serif))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("开发者和小猫都在")
-                    .font(.system(size: 11, weight: .regular, design: .rounded))
-                    .foregroundStyle(Theme.textSecondary)
+        HStack(spacing: 10) {
+            PageHeader(
+                "小猫",
+                subtitle: "\(companionStore.current.displayName) · 开发者和小猫都在",
+                avatarSize: 40
+            )
+
+            if isMockMode {
+                StatusPill(text: "离线", systemImage: "wifi.slash")
+                    .accessibilityIdentifier("chat.mode.mock")
             }
 
-            HStack {
-                if isMockMode {
-                    Text("离线")
-                        .font(Theme.captionFont)
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Theme.surfaceWarm)
-                        .clipShape(Capsule())
-                        .accessibilityIdentifier("chat.mode.mock")
-                }
-                Spacer()
+            Spacer(minLength: 0)
+
                 Menu {
                     Section("小猫参与方式") {
                         ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
@@ -193,17 +193,18 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(visual.textPrimary)
                         .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("聊天选项")
                 .accessibilityIdentifier("chat.clear")
-            }
         }
         .frame(minHeight: 58)
         .padding(.horizontal, Theme.Spacing.medium)
-        .background(Theme.bgElevated.opacity(0.96))
-        .overlay(alignment: .bottom) { Divider().overlay(Theme.border) }
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .background(visual.glassTint)
+        .overlay(alignment: .bottom) { Divider().overlay(visual.border.opacity(0.45)) }
         .accessibilityIdentifier("chat.header")
     }
 
@@ -214,7 +215,7 @@ struct ChatView: View {
                 ProgressView()
                 Text("正在加载聊天记录…")
                     .font(Theme.subheadFont)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(visual.textSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 28)
@@ -222,19 +223,11 @@ struct ChatView: View {
         } else if !viewModel.errorMessage.isEmpty {
             errorCard
         } else if viewModel.hasLoadedHistory && viewModel.messages.isEmpty {
-            VStack(spacing: Theme.Spacing.small) {
-                Text("🐱")
-                    .font(.system(size: 38))
-                Text("还没有聊天记录")
-                    .font(Theme.headlineFont)
-                    .foregroundStyle(Theme.textPrimary)
-                Text("从一句轻松的话开始，开发者会在真实入口回复，小猫按当前模式参与。")
-                    .font(Theme.subheadFont)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 42)
+            EmptyState(
+                title: "还没有聊天记录",
+                detail: "从一句轻松的话开始，开发者会在真实入口回复，小猫按当前模式参与。",
+                systemImage: "message"
+            )
             .accessibilityIdentifier("chat.empty")
         }
     }
@@ -243,7 +236,7 @@ struct ChatView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             Label(viewModel.errorMessage, systemImage: "exclamationmark.triangle.fill")
                 .font(Theme.subheadFont)
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(visual.textPrimary)
 
             HStack(spacing: Theme.Spacing.small) {
                 if viewModel.canRetryHistory {
@@ -251,7 +244,7 @@ struct ChatView: View {
                         Task { await viewModel.loadHistory() }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Theme.primary)
+                    .tint(visual.primary)
                     .accessibilityIdentifier("chat.retry")
                 }
                 if viewModel.requiresReconfiguration {
@@ -265,7 +258,7 @@ struct ChatView: View {
             }
         }
         .padding(Theme.Spacing.medium)
-        .background(Theme.surface)
+        .background(visual.surface)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
@@ -281,10 +274,10 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("小猫这一轮没有接上")
                     .font(Theme.captionFont)
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(visual.textPrimary)
                 Text("已有消息已经保存，可以只重试小猫。")
                     .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(visual.textSecondary)
             }
             Spacer()
             Button {
@@ -297,11 +290,11 @@ struct ChatView: View {
                 }
             }
             .buttonStyle(.bordered)
-            .tint(Theme.primary)
+            .tint(visual.primary)
             .disabled(!viewModel.canRetryXiaomao(turnID: turnID))
         }
         .padding(12)
-        .background(Color(hex: 0xFFF3ED))
+        .background(visual.surfaceSoft)
         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("chat.xiaomao.retry.\(turnID)")
@@ -310,10 +303,10 @@ struct ChatView: View {
     private var degradedNotice: some View {
         Label("刚才的回复由服务端安全降级生成", systemImage: "shield.lefthalf.filled")
             .font(Theme.captionFont)
-            .foregroundStyle(Theme.textSecondary)
+            .foregroundStyle(visual.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Theme.surfaceWarm)
+            .background(visual.surfaceSoft)
             .clipShape(Capsule())
             .frame(maxWidth: .infinity)
             .accessibilityIdentifier("chat.degraded")
@@ -325,13 +318,23 @@ struct ChatView: View {
                 .font(.system(size: 13))
             Text(viewModel.xiaomaoMode.footerTitle)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.primary)
+                .foregroundStyle(visual.primary)
             Spacer()
         }
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, 7)
-        .background(Theme.bgElevated)
+        .background(visual.backgroundElevated)
         .accessibilityIdentifier("chat.xiaomao.mode")
+    }
+
+    private func isGrouped(message: ChatMessage, direction: Int) -> Bool {
+        guard let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) else {
+            return false
+        }
+        let otherIndex = index + direction
+        guard viewModel.messages.indices.contains(otherIndex) else { return false }
+        let other = viewModel.messages[otherIndex]
+        return message.participant == other.participant && message.turnID == other.turnID
     }
 
     private func isLastMessageInTurn(_ message: ChatMessage) -> Bool {
@@ -344,4 +347,5 @@ struct ChatView: View {
         viewModel: ChatViewModel(service: MockChatService(delays: .zero)),
         isMockMode: true
     )
+    .environmentObject(CompanionModeStore())
 }

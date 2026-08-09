@@ -72,11 +72,18 @@ extension Notification.Name {
 
 private struct RootView: View {
     @ObservedObject var coordinator: AppCoordinator
+    @ObservedObject private var companionStore: CompanionModeStore
     let reload: () -> Void
     @State private var activeCall = false
 #if DEBUG
     @State private var showingDiagnostics = false
 #endif
+
+    init(coordinator: AppCoordinator, reload: @escaping () -> Void) {
+        self.coordinator = coordinator
+        self.reload = reload
+        _companionStore = ObservedObject(wrappedValue: coordinator.companionStore)
+    }
 
     var body: some View {
         ZStack {
@@ -120,7 +127,10 @@ private struct RootView: View {
                 )
                 .fullScreenCover(isPresented: $activeCall) {
                     VoiceCallView(
-                        viewModel: VoiceCallViewModel(controller: coordinator.voiceController),
+                        viewModel: VoiceCallViewModel(
+                            controller: coordinator.voiceController,
+                            companionStore: companionStore
+                        ),
                         close: { activeCall = false }
                     )
                 }
@@ -185,7 +195,9 @@ private struct RootView: View {
                 await coordinator.voiceController.endCurrentCall()
             }
         }
-        .preferredColorScheme(.light)
+        .environmentObject(companionStore)
+        .environment(\.appVisualMode, companionStore.visualMode)
+        .preferredColorScheme(companionStore.visualMode == .mystery ? .dark : .light)
 #if DEBUG
         .sheet(isPresented: $showingDiagnostics) {
             DeveloperDiagnosticsView(snapshot: diagnosticsSnapshot)

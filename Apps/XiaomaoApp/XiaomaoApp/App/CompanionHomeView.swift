@@ -17,6 +17,8 @@ struct CompanionHomeView: View {
     var openSettings: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
+    @EnvironmentObject private var companionStore: CompanionModeStore
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @ObservedObject private var roleStore = CompanionRoleStore.shared
     @State private var appeared = false
@@ -25,8 +27,6 @@ struct CompanionHomeView: View {
     @State private var toastTask: Task<Void, Never>?
     @State private var showPrivacyConfirm = false
     @State private var greetingIndex = 0
-    @State private var nameBreath = false
-    @State private var sonarPulse = false
     // P2.7B-FINAL-MESH: 删除首页旧背景循环光效状态
     // (背景改为 OrganicMeshBackground 慢流动; CTA 仅按压反馈; 人物 halo 静态)
     // P2.6B: 生命周期安全的 Timer 持有 (onDisappear 释放) — 仅问候文字轮换使用
@@ -40,6 +40,11 @@ struct CompanionHomeView: View {
 
     // P2.7B: hero 区中央人物高度 (portrait 模式以 width=size 渲染, height=size*3/2 自动)
     private let heroSize: CGFloat = 200
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
+    private var accent: Color {
+        visualMode == .mystery ? visual.primary : roleStore.previewRole.themeColor
+    }
 
     var body: some View {
         ZStack {
@@ -64,7 +69,7 @@ struct CompanionHomeView: View {
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [roleStore.previewRole.themeColor.opacity(0.30), Theme.primarySoft.opacity(0.15), .clear],
+                                colors: [accent.opacity(0.20), visual.primarySoft.opacity(0.10), .clear],
                                 center: .center,
                                 startRadius: 50,
                                 endRadius: 200
@@ -77,7 +82,7 @@ struct CompanionHomeView: View {
                     Ellipse()
                         .fill(
                             RadialGradient(
-                                colors: [Theme.heroGlow, Theme.heroGlow.opacity(0.4), .clear],
+                                colors: [visual.heroGlow, visual.heroGlow.opacity(0.35), .clear],
                                 center: .center,
                                 startRadius: 10,
                                 endRadius: 140
@@ -111,12 +116,9 @@ struct CompanionHomeView: View {
                 // 状态点声呐 + 动态波形
                 HStack(spacing: 10) {
                     sonarDot
-                    Text("正在陪你")
+                    Text("\(companionStore.current.displayName) · 正在陪你")
                         .font(Theme.captionFont)
-                        .foregroundStyle(Theme.textSecondary)
-                    MiniVoiceWave(active: true, mode: .primary, barCount: 5)
-                        .frame(width: 44, height: 16)
-                        .opacity(0.75)
+                        .foregroundStyle(visual.textSecondary)
                 }
                 .padding(.top, 4)
                 .opacity(appeared ? 1 : 0)
@@ -125,10 +127,8 @@ struct CompanionHomeView: View {
                 // 宋体角色名 (letter-spacing 呼吸, 跟随预览角色)
                 Text(roleStore.previewRole.displayName)
                     .font(Theme.title1Font)
-                    .foregroundStyle(Theme.textPrimary)
-                    .tracking(nameBreath ? 2.5 : 0.5)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 8).repeatForever(autoreverses: true), value: nameBreath)
-                    .onAppear { nameBreath = true }
+                    .foregroundStyle(visual.textPrimary)
+                    .tracking(0.4)
                     .padding(.top, 12)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 10)
@@ -138,10 +138,10 @@ struct CompanionHomeView: View {
                 HStack(spacing: 6) {
                     Text(greetings[greetingIndex].text)
                         .font(Theme.subheadFont)
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(visual.textSecondary)
                     Image(systemName: greetings[greetingIndex].icon)
                         .font(.system(size: 13))
-                        .foregroundStyle(roleStore.previewRole.themeColor)
+                        .foregroundStyle(accent)
                 }
                 .padding(.top, 6)
                 .opacity(appeared ? 1 : 0)
@@ -175,20 +175,19 @@ struct CompanionHomeView: View {
                         Text(roleStore.previewRole.introCopy)
                             .font(Theme.headlineFont)
                     }
-                    .foregroundStyle(Theme.onPrimary)
+                    .foregroundStyle(visual.onPrimary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
                     // P2.8A: 整个胶囊区域可点击, 单击一次立即进入通话页
                     .contentShape(Capsule())
                     .glassEffect(
                         .regular
-                            .tint(Theme.primary)
+                            .tint(visual.primary)
                             .interactive(),
                         in: .capsule
                     )
                     // P2.7B: 更柔的双层阴影 (外层柔散 + 内层贴近), 避免"硬贴"感
-                    .shadow(color: Theme.ctaShadow.opacity(0.35), radius: 18, x: 0, y: 8)
-                    .shadow(color: Theme.primary.opacity(0.18), radius: 6, x: 0, y: 2)
+                    .shadow(color: visual.shadow.opacity(0.75), radius: 16, x: 0, y: 7)
                 }
                 .buttonStyle(PressableButtonStyle())
                 .padding(.horizontal, 40)
@@ -197,13 +196,13 @@ struct CompanionHomeView: View {
                     if let toastMessage {
                         Text(toastMessage)
                             .font(Theme.subheadFont)
-                            .foregroundStyle(Theme.textPrimary)
+                            .foregroundStyle(visual.textPrimary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
                             .glassEffect(
                                 .regular
-                                    .tint(Theme.primarySoft.opacity(0.35)),
+                                    .tint(visual.primarySoft.opacity(0.35)),
                                 in: .capsule
                             )
                             .offset(y: -52)
@@ -219,7 +218,7 @@ struct CompanionHomeView: View {
                 // 时间脚注 (无真实数据时诚实文案, 不显示假时长)
                 Text("连接后即可开始陪伴")
                     .font(Theme.footnoteFont)
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(visual.textTertiary)
                     .padding(.top, 10)
                     .opacity(appeared ? 1 : 0)
                 .animation(.easeOut(duration: 0.4).delay(0.6), value: appeared)
@@ -235,22 +234,21 @@ struct CompanionHomeView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("陪伴记录")
                                 .font(Theme.subheadFont)
-                                .foregroundStyle(Theme.textPrimary)
+                                .foregroundStyle(visual.textPrimary)
                             Text("当前版本暂不展示聊天或录音历史")
                                 .font(Theme.captionFont)
-                                .foregroundStyle(Theme.textTertiary)
+                                .foregroundStyle(visual.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Theme.textTertiary)
+                            .foregroundStyle(visual.textTertiary)
                     }
                     .padding(14)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).stroke(Theme.border, lineWidth: 1))
-                    .cardTopHighlight()
-                    .shadow(color: Theme.shadowRaised, radius: 10, x: 0, y: 3)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                    .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).stroke(visual.border.opacity(0.45), lineWidth: 0.7))
                 }
                 // P2.6J+: 可点击卡片按压反馈
                 .buttonStyle(PressableCardStyle())
@@ -300,10 +298,11 @@ struct CompanionHomeView: View {
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(visual.textSecondary)
                     .frame(width: 40, height: 40)
-                    .background(Theme.surface.opacity(0.7), in: Circle())
-                    .overlay(Circle().stroke(Theme.border, lineWidth: 1))
+                    .background(.ultraThinMaterial, in: Circle())
+                    .background(visual.glassTint, in: Circle())
+                    .overlay(Circle().stroke(visual.border.opacity(0.45), lineWidth: 0.7))
             }
             .accessibilityLabel("设置")
             .accessibilityIdentifier("home.settings")
@@ -325,18 +324,9 @@ struct CompanionHomeView: View {
 
     // MARK: 状态点声呐
     private var sonarDot: some View {
-        ZStack {
-            Circle()
-                .stroke(Theme.online.opacity(0.5), lineWidth: 1.5)
-                .frame(width: 18, height: 18)
-                .scaleEffect(sonarPulse ? 2.2 : 0.8)
-                .opacity(sonarPulse ? 0 : 0.7)
-                .animation(reduceMotion ? nil : .easeOut(duration: Theme.sonarDuration).repeatForever(autoreverses: false), value: sonarPulse)
-                .onAppear { sonarPulse = true }
-            Circle()
-                .fill(Theme.online)
-                .frame(width: 7, height: 7)
-        }
+        Circle()
+            .fill(visualMode == .mystery ? visual.primary.opacity(0.72) : Theme.online)
+            .frame(width: 7, height: 7)
         .frame(width: 20, height: 20)
         .accessibilityHidden(true)
     }
@@ -438,4 +428,5 @@ struct MiniVoiceWave: View {
 // MARK: - 预览
 #Preview {
     CompanionHomeView(startCall: {}, openHistory: {}, openSettings: {})
+        .environmentObject(CompanionModeStore())
 }

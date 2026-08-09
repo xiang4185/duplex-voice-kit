@@ -42,6 +42,7 @@ struct PrivacyAvatar: View {
 
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
     // P2.7A-FIX-1: 仅记录当前实例发起的解锁请求与短暂开锁展示
     @State private var requestedUnlock = false
     @State private var unlockFlash = false
@@ -63,6 +64,7 @@ struct PrivacyAvatar: View {
 
     var body: some View {
         let revealed = privacy.effectiveReveal()
+        let tokens = Theme.visual(visualMode)
 
         ZStack {
             switch variant {
@@ -83,11 +85,11 @@ struct PrivacyAvatar: View {
                 // 覆盖全局状态切换过程；只有本头像成功解锁时替换为 lock.open
                 ZStack {
                     Circle()
-                        .fill(Theme.halo.opacity(unlockFlash ? 0.20 : 0.35))
+                        .fill(tokens.halo.opacity(unlockFlash ? 0.20 : 0.35))
                     Image(systemName: revealed && (requestedUnlock || unlockFlash) ? "lock.open.fill" : "lock.fill")
                         .font(.system(size: resolvedStyle == .portrait ? size * 0.16 : size * 0.22, weight: .medium))
-                        .foregroundStyle(Theme.textOnHalo)
-                        .shadow(color: Theme.shadowOverlay, radius: 6, x: 0, y: 2)
+                        .foregroundStyle(visualMode == .mystery ? tokens.textPrimary : Theme.textOnHalo)
+                        .shadow(color: tokens.shadow, radius: 6, x: 0, y: 2)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .frame(
@@ -102,7 +104,7 @@ struct PrivacyAvatar: View {
                 .accessibilityHidden(revealed)
             }
         }
-        .shadow(color: Theme.shadowRaised, radius: resolvedStyle == .portrait ? size * 0.06 : size * 0.08, x: 0, y: size * 0.04)
+        .shadow(color: tokens.shadow, radius: resolvedStyle == .portrait ? size * 0.06 : size * 0.08, x: 0, y: size * 0.04)
         .contentShape(
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
         )
@@ -167,14 +169,17 @@ struct PrivacyAvatar: View {
     private func portraitCharacter(revealed: Bool) -> some View {
         let width = size
         let height = size * 3.0 / 2.0
+        let mystery = visualMode == .mystery
 
         return Image("Character")
             .resizable()
             .interpolation(.high)
             .aspectRatio(contentMode: .fit)
             .frame(width: width, height: height)
-            .blur(radius: revealed ? 0 : 6)
-            .opacity(revealed ? 1 : 0.92)
+            .blur(radius: mystery ? 8 : (revealed ? 0 : 6))
+            .saturation(mystery ? 0.08 : 1)
+            .brightness(mystery ? -0.16 : 0)
+            .opacity(mystery ? 0.48 : (revealed ? 1 : 0.92))
             // P2.7B-FINAL-VISUAL-FIX: 删除全尺寸人物叠光 (overlay + plus-lighter blend).
             // 该叠光覆盖完整人物容器, 是浅粉矩形边界的来源之一;
             // 父页面已有静态 halo 与 heroGlow 光效, 人物图内部无需整块叠光.
@@ -199,12 +204,15 @@ struct PrivacyAvatar: View {
     // MARK: - Thumbnail 方形小头像 (保留 v6.1 行为)
     // 适用于情绪气泡 / 陪伴记录入口 / 隐私确认浮层等小尺寸场景.
     private func thumbnailCharacter(revealed: Bool) -> some View {
+        let mystery = visualMode == .mystery
         Image("CharacterAvatar")
             .resizable()
             .aspectRatio(contentMode: .fill)
             .frame(width: size, height: size)
-            .blur(radius: revealed ? 0 : 6)
-            .opacity(revealed ? 1 : 0.92)
+            .blur(radius: mystery ? 5 : (revealed ? 0 : 6))
+            .saturation(mystery ? 0.08 : 1)
+            .brightness(mystery ? -0.14 : 0)
+            .opacity(mystery ? 0.58 : (revealed ? 1 : 0.92))
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
             // P2.6J+: 径向柔边遮罩 — 只羽化外缘 (中心 82% 保持清晰, 外缘渐隐)
             .mask {
