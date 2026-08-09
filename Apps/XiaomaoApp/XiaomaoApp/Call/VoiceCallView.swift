@@ -1277,7 +1277,7 @@ struct VoiceAvatarAura: View {
         if visualMode == .mystery {
             return index.isMultiple(of: 2) ? Theme.primary : Theme.halo
         }
-        switch index {
+        return switch index {
         case 0, 2: Theme.primary
         case 1: Theme.roleGold
         default: Theme.primarySoft
