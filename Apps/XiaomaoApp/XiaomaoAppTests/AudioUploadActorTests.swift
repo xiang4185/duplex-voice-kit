@@ -14,8 +14,9 @@ final class AudioUploadActorTests: XCTestCase {
             companionTypeID: CompanionType.mystery.rawValue
         )
 
+        let events = await socket.eventsValue()
         let event = try XCTUnwrap(
-            (await socket.eventsValue()).first(where: { $0.type == .sessionStart })
+            events.first(where: { $0.type == .sessionStart })
         )
         guard case .string(let companionType)? = event.payload["companion_type"] else {
             XCTFail("session.start must include public companion_type")
