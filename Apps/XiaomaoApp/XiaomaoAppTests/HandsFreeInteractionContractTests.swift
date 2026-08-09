@@ -1049,6 +1049,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             return
         }
         let portrait = String(avatar[pStart..<pEnd])
+        XCTAssertTrue(portrait.contains("if companionType == .warm"),
+                      "Warm 原角色与公开样例角色必须使用独立 portrait 渲染分支")
+        XCTAssertTrue(portrait.contains("Image(\"Character\")"),
+                      "Warm 原角色必须继续使用 Character")
         XCTAssertTrue(portrait.contains("Image(companionType.portraitAssetName)"),
                       "portraitCharacter 必须按当前陪伴类型加载公开角色图")
         XCTAssertTrue(portrait.contains("LinearGradient"), "portraitCharacter 必须保留底部渐隐 LinearGradient mask")
@@ -1056,10 +1060,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(portrait.contains("revealed ? 1 : 0.92"), "portraitCharacter 必须保留 reveal opacity 语义")
         XCTAssertTrue(portrait.contains(".scaleEffect(companionType.portraitDisplayScale)"),
                       "公开陪伴角色必须支持独立 portrait 构图缩放")
-        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.35 : 6)"),
-                      "Mystery Mode 解锁后必须清晰可辨，同时保留 locked 模糊")
-        XCTAssertTrue(portrait.contains("mystery ? (revealed ? 0.97 : 0.68)"),
-                      "Mystery Mode 解锁后人物必须保持接近完整显现")
+        XCTAssertTrue(portrait.contains("if companionType == .romantic"),
+                      "黏人浪漫样例必须独立处理下缘 matte")
+        XCTAssertTrue(portrait.contains(".opacity(revealed ? 1 : 0.72)"),
+                      "公开样例解锁后必须完整显现，locked 状态仍保持弱化")
         XCTAssertTrue(portrait.contains(".mask"), "portraitCharacter 必须保留 mask")
         XCTAssertTrue(portrait.contains(".animation(.easeInOut(duration: 0.35), value: revealed)"),
                       "portraitCharacter 必须保留 reveal 动画")

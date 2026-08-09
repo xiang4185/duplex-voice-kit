@@ -95,19 +95,20 @@ struct VoiceCallView: View {
                     .opacity(appeared ? 1 : 0)
                     .scaleEffect(appeared ? 1 : 0.95)
                     .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
-                    // P2.8A: 首次连接加载反馈 (idle/connecting 时浮在人物上方, .ready 自动淡出)
-                    .overlay {
-                        if viewModel.isSwitchingCompanion {
-                            switchingCompanionCard
-                                .transition(.opacity)
-                        } else if !viewModel.controller.hasCompletedInitialConnection,
-                           viewModel.controller.state != .failed,
-                           viewModel.controller.state != .closed,
-                           viewModel.controller.state != .closing {
-                            connectingCard
-                                .transition(.opacity)
-                        }
-                    }
+
+                // 连接/切换反馈放在人物下方，避免遮住角色脸部。
+                if viewModel.isSwitchingCompanion {
+                    switchingCompanionCard
+                        .padding(.top, -4)
+                        .transition(.opacity)
+                } else if !viewModel.controller.hasCompletedInitialConnection,
+                          viewModel.controller.state != .failed,
+                          viewModel.controller.state != .closed,
+                          viewModel.controller.state != .closing {
+                    connectingCard
+                        .padding(.top, -4)
+                        .transition(.opacity)
+                }
 
                 // 名字 (宋体)
                 Text(CompanionRoleStore.shared.productionRole.displayName)
@@ -395,49 +396,53 @@ struct VoiceCallView: View {
 
     // MARK: 首次连接加载反馈 (P2.8A: 明显但克制, 不伪造进度, 不阻塞左上结束入口)
     private var connectingCard: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 10) {
             ProgressView()
                 .tint(visual.primary)
-            Text("正在连接小猫")
-                .font(Theme.subheadFont)
-                .foregroundStyle(visual.textPrimary)
-            Text("通常只需要几秒")
-                .font(Theme.captionFont)
-                .foregroundStyle(visual.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("正在连接小猫")
+                    .font(Theme.captionFont.weight(.semibold))
+                    .foregroundStyle(visual.textPrimary)
+                Text("通常只需要几秒")
+                    .font(Theme.footnoteFont)
+                    .foregroundStyle(visual.textTertiary)
+            }
         }
-        .padding(.horizontal, 30)
-        .padding(.vertical, 18)
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(visual.glassTint, in: Capsule())
+        .background(.ultraThinMaterial, in: Capsule())
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            Capsule()
                 .stroke(visual.border.opacity(0.9), lineWidth: 0.8)
         }
-        .shadow(color: visual.shadow, radius: 16, x: 0, y: 6)
+        .shadow(color: visual.shadow, radius: 10, x: 0, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("call.connecting")
     }
 
     private var switchingCompanionCard: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 10) {
             ProgressView()
                 .tint(visual.primary)
-            Text("正在切换陪伴方式…")
-                .font(Theme.subheadFont)
-                .foregroundStyle(visual.textPrimary)
-            Text("会为你重新建立一段通话")
-                .font(Theme.captionFont)
-                .foregroundStyle(visual.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("正在切换陪伴方式…")
+                    .font(Theme.captionFont.weight(.semibold))
+                    .foregroundStyle(visual.textPrimary)
+                Text("会为你重新建立一段通话")
+                    .font(Theme.footnoteFont)
+                    .foregroundStyle(visual.textTertiary)
+            }
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 18)
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(visual.glassTint, in: Capsule())
+        .background(.ultraThinMaterial, in: Capsule())
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            Capsule()
                 .stroke(visual.border.opacity(0.9), lineWidth: 0.8)
         }
-        .shadow(color: visual.shadow, radius: 16, x: 0, y: 6)
+        .shadow(color: visual.shadow, radius: 10, x: 0, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("call.companion.switching")
     }
@@ -1115,7 +1120,10 @@ private struct CompanionSelectionSheet: View {
                                     .resizable()
                                     .interpolation(.high)
                                     .aspectRatio(contentMode: .fit)
+                                    .scaleEffect(type.thumbnailDisplayScale)
+                                    .offset(y: type.thumbnailVerticalOffset)
                                     .frame(width: 44, height: 52)
+                                    .clipped()
                                     .background(rowAccent(for: type), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .accessibilityHidden(true)

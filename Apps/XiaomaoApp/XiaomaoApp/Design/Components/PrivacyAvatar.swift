@@ -167,70 +167,104 @@ struct PrivacyAvatar: View {
     // 用新图 Character (1024×1536 透明 PNG), 2:3 比例自然展示.
     // 底部柔边渐变 mask 让肩部以下自然消散, 与下方 halo 光晕层融合,
     // 视觉目标: "人像自然融入光里", 不出现硬圆头像.
+    @ViewBuilder
     private func portraitCharacter(revealed: Bool) -> some View {
         let width = size
         let height = size * 3.0 / 2.0
-        let mystery = visualMode == .mystery
 
-        return Image(companionType.portraitAssetName)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(width: width, height: height)
-            .scaleEffect(companionType.portraitDisplayScale)
-            .blur(radius: mystery ? (revealed ? 0.35 : 6) : (revealed ? 0 : 6))
-            .saturation(mystery ? (revealed ? 0.90 : 0.48) : 1)
-            .brightness(mystery ? (revealed ? 0.01 : -0.08) : 0)
-            .opacity(mystery ? (revealed ? 0.97 : 0.68) : (revealed ? 1 : 0.92))
-            // P2.7B-FINAL-VISUAL-FIX: 删除全尺寸人物叠光 (overlay + plus-lighter blend).
-            // 该叠光覆盖完整人物容器, 是浅粉矩形边界的来源之一;
-            // 父页面已有静态 halo 与 heroGlow 光效, 人物图内部无需整块叠光.
-            // 保留: 底部渐隐 mask / reveal 动画 / 隐私模糊.
-            // 底部柔边渐隐: 顶部清晰, 65% 处开始淡出, 100% 完全透明
-            // 与外部 halo 光晕层(在父视图叠加)自然融合
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0.0),
-                        .init(color: .black, location: 0.55),
-                        .init(color: .black.opacity(0.85), location: 0.75),
-                        .init(color: .clear, location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .animation(.easeInOut(duration: 0.35), value: revealed)
+        if companionType == .warm {
+            Image("Character")
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: width, height: height)
+                .blur(radius: revealed ? 0 : 6)
+                .opacity(revealed ? 1 : 0.92)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.55),
+                            .init(color: .black.opacity(0.85), location: 0.75),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        } else {
+            Image(companionType.portraitAssetName)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: width, height: height)
+                .scaleEffect(companionType.portraitDisplayScale)
+                .blur(radius: revealed ? 0 : 6)
+                .opacity(revealed ? 1 : 0.72)
+                // Sample portraits already include their own feathered lower edge.
+                // Romantic currently has a flat lower matte in the sample source,
+                // so fade it before that region instead of applying the legacy mask.
+                .mask {
+                    if companionType == .romantic {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0.0),
+                                .init(color: .black, location: 0.48),
+                                .init(color: .black.opacity(0.72), location: 0.55),
+                                .init(color: .clear, location: 0.66),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    } else {
+                        Color.black
+                    }
+                }
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        }
     }
 
     // MARK: - Thumbnail 方形小头像 (保留 v6.1 行为)
     // 适用于情绪气泡 / 陪伴记录入口 / 隐私确认浮层等小尺寸场景.
+    @ViewBuilder
     private func thumbnailCharacter(revealed: Bool) -> some View {
-        let mystery = visualMode == .mystery
-        return Image(companionType.thumbnailAssetName)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: size, height: size)
-            .scaleEffect(companionType.thumbnailDisplayScale)
-            .blur(radius: mystery ? (revealed ? 0.2 : 5) : (revealed ? 0 : 6))
-            .saturation(mystery ? (revealed ? 0.92 : 0.50) : 1)
-            .brightness(mystery ? (revealed ? 0.02 : -0.07) : 0)
-            .opacity(mystery ? (revealed ? 0.98 : 0.70) : (revealed ? 1 : 0.92))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-            // P2.6J+: 径向柔边遮罩 — 只羽化外缘 (中心 82% 保持清晰, 外缘渐隐)
-            .mask {
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: .black, location: 0.0),
-                        .init(color: .black, location: 0.82),
-                        .init(color: .clear, location: 1.0)
-                    ]),
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: size / 2
-                )
-            }
-            .animation(.easeInOut(duration: 0.35), value: revealed)
+        if companionType == .warm {
+            Image("CharacterAvatar")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: size, height: size)
+                .blur(radius: revealed ? 0 : 6)
+                .opacity(revealed ? 1 : 0.92)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+                .mask {
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.82),
+                            .init(color: .clear, location: 1.0)
+                        ]),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: size / 2
+                    )
+                }
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        } else {
+            Image(companionType.thumbnailAssetName)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .scaleEffect(companionType.thumbnailDisplayScale)
+                .offset(y: companionType.thumbnailVerticalOffset)
+                .frame(width: size, height: size)
+                .clipped()
+                .blur(radius: revealed ? 0 : 5)
+                .opacity(revealed ? 1 : 0.74)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.34, style: .continuous))
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        }
     }
 
     /// 原创程序化占位形象 (渐变圆 + 白色符号, 非小猫角色)

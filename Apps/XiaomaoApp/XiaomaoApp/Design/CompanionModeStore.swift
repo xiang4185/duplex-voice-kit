@@ -52,18 +52,27 @@ enum CompanionType: String, Codable, CaseIterable, Identifiable, Sendable {
     var portraitDisplayScale: CGFloat {
         switch self {
         case .warm: return 1.0
-        case .assertive: return 1.16
-        case .romantic: return 1.14
-        case .mystery: return 1.36
+        case .assertive: return 1.02
+        case .romantic: return 1.02
+        case .mystery: return 1.06
         }
     }
 
     var thumbnailDisplayScale: CGFloat {
         switch self {
         case .warm: return 1.0
-        case .assertive: return 1.85
-        case .romantic: return 1.78
-        case .mystery: return 2.05
+        case .assertive: return 2.05
+        case .romantic: return 2.0
+        case .mystery: return 2.15
+        }
+    }
+
+    var thumbnailVerticalOffset: CGFloat {
+        switch self {
+        case .warm: return 0
+        case .assertive: return 10
+        case .romantic: return 8
+        case .mystery: return 12
         }
     }
 }
