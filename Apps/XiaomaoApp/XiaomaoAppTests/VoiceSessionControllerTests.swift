@@ -1,9 +1,38 @@
+import Combine
 import Foundation
 import XCTest
 @testable import XiaomaoApp
 
 @MainActor
 final class VoiceSessionControllerTests: XCTestCase {
+    func testSilentRealtimeFramesDoNotInvalidateTheWholeCallPagePerFrame() async {
+        let fixture = makeFixture()
+        await fixture.controller.startNewCall()
+
+        var publicationCount = 0
+        let observation = fixture.controller.objectWillChange.sink {
+            publicationCount += 1
+        }
+
+        for _ in 0..<50 {
+            fixture.capture.emit(pcmFrame(amplitude: 0))
+        }
+        let uploaded = await fixture.socket.waitForSentEvent(
+            .audioAppend,
+            count: 10,
+            timeout: .seconds(2)
+        )
+        await settle()
+        withExtendedLifetime(observation) {}
+
+        XCTAssertTrue(uploaded)
+        XCTAssertLessThanOrEqual(
+            publicationCount,
+            15,
+            "one second of realtime frames must not invalidate the call page at 50 Hz"
+        )
+    }
+
     func testStartNewCallCreatesFreshSessionAndResetsIdentifiersAndCounters() async {
         let fixture = makeFixture()
         await fixture.controller.startNewCall()
