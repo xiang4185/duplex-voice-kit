@@ -25,6 +25,8 @@ enum Theme {
         let glassTint: Color
         let primary: Color
         let primarySoft: Color
+        let danger: Color
+        let dangerSoft: Color
         let onPrimary: Color
         let textPrimary: Color
         let textSecondary: Color
@@ -50,6 +52,8 @@ enum Theme {
                 glassTint: Color.white.opacity(0.34),
                 primary: primary,
                 primarySoft: primarySoft,
+                danger: danger,
+                dangerSoft: Color(hex: 0xFCE6E0),
                 onPrimary: onPrimary,
                 textPrimary: textPrimary,
                 textSecondary: textSecondary,
@@ -65,25 +69,27 @@ enum Theme {
             )
         case .mystery:
             return VisualTokens(
-                background: Color(hex: 0x111118),
-                backgroundElevated: Color(hex: 0x171720),
-                surface: Color(hex: 0x1D1D28).opacity(0.94),
-                surfaceSoft: Color(hex: 0x232331).opacity(0.94),
-                glassTint: Color(hex: 0x292837).opacity(0.44),
-                primary: Color(hex: 0xD8D4E7),
-                primarySoft: Color(hex: 0x302E40),
-                onPrimary: Color(hex: 0x1A1920),
-                textPrimary: Color(hex: 0xF3F2F7),
-                textSecondary: Color(hex: 0xBBB7C6),
-                textTertiary: Color(hex: 0x858190),
-                border: Color(hex: 0x3A3748),
-                shadow: Color.black.opacity(0.24),
-                halo: Color(hex: 0x6E6789),
-                heroGlow: Color(hex: 0x8C84A8).opacity(0.24),
-                meshWarmWhite: Color(hex: 0x171720),
-                meshPeach: Color(hex: 0x222130),
-                meshRose: Color(hex: 0x302C42),
-                meshCoolAccent: Color(hex: 0x191D2B)
+                background: Color(hex: 0x0D0F16),
+                backgroundElevated: Color(hex: 0x121520),
+                surface: Color(hex: 0x171923),
+                surfaceSoft: Color(hex: 0x1C1E2A),
+                glassTint: Color(hex: 0x181A25).opacity(0.88),
+                primary: Color(hex: 0xC9C5DE),
+                primarySoft: Color(hex: 0x292738),
+                danger: Color(hex: 0xC78395),
+                dangerSoft: Color(hex: 0x3A242D),
+                onPrimary: Color(hex: 0x11121A),
+                textPrimary: Color(hex: 0xF1EFF7),
+                textSecondary: Color(hex: 0xADA8BA),
+                textTertiary: Color(hex: 0x777482),
+                border: Color(hex: 0x343140),
+                shadow: Color.black.opacity(0.36),
+                halo: Color(hex: 0x4A465F),
+                heroGlow: Color(hex: 0x746D91).opacity(0.18),
+                meshWarmWhite: Color(hex: 0x0E1018),
+                meshPeach: Color(hex: 0x141622),
+                meshRose: Color(hex: 0x1B1B2A),
+                meshCoolAccent: Color(hex: 0x111827)
             )
         }
     }
@@ -122,11 +128,11 @@ enum Theme {
     }
 
     // MARK: 主色 — 西柚玫瑰 (v6.1)
-    static let primary = adaptive(light: 0xD9486B, dark: 0xD8D4E7)          // --color-primary
-    static let primaryHover = adaptive(light: 0xC2405F, dark: 0xC4BFD8)     // --color-primary-hover
-    static let primaryPressed = adaptive(light: 0xA83852, dark: 0xE6E3EE)   // --color-primary-pressed
-    static let primarySoft = adaptive(light: 0xFBE0E6, dark: 0x302E40)      // --color-primary-soft
-    static let onPrimary = adaptive(light: 0xFFFFFF, dark: 0x1A1920)        // --color-on-primary
+    static let primary = adaptive(light: 0xD9486B, dark: 0xC9C5DE)          // --color-primary
+    static let primaryHover = adaptive(light: 0xC2405F, dark: 0xB8B3D2)     // --color-primary-hover
+    static let primaryPressed = adaptive(light: 0xA83852, dark: 0xE2DEEF)   // --color-primary-pressed
+    static let primarySoft = adaptive(light: 0xFBE0E6, dark: 0x292738)      // --color-primary-soft
+    static let onPrimary = adaptive(light: 0xFFFFFF, dark: 0x11121A)        // --color-on-primary
 
     // MARK: 主色层次 (兼容 v3 命名)
     static let primary100 = primarySoft
@@ -140,20 +146,20 @@ enum Theme {
     static let primaryDeep2 = primary700
 
     // MARK: 底色 — 桃粉白 (v6.1)
-    static let bg = adaptive(light: 0xFDF5F1, dark: 0x111118)
-    static let bgElevated = adaptive(light: 0xFFF9F6, dark: 0x171720)
-    static let halo = adaptive(light: 0xF7DDD6, dark: 0x6E6789)
-    static let haloGlow = adaptive(light: 0xF0BCB0, dark: 0x77708F)
-    static let surface = adaptive(light: 0xFFFFFF, dark: 0x1D1D28)
-    static let surfaceWarm = adaptive(light: 0xFBEBE2, dark: 0x232331)
-    static let border = adaptive(light: 0xF7DDD6, dark: 0x3A3748)
+    static let bg = adaptive(light: 0xFDF5F1, dark: 0x0D0F16)
+    static let bgElevated = adaptive(light: 0xFFF9F6, dark: 0x121520)
+    static let halo = adaptive(light: 0xF7DDD6, dark: 0x4A465F)
+    static let haloGlow = adaptive(light: 0xF0BCB0, dark: 0x5E5877)
+    static let surface = adaptive(light: 0xFFFFFF, dark: 0x171923)
+    static let surfaceWarm = adaptive(light: 0xFBEBE2, dark: 0x1C1E2A)
+    static let border = adaptive(light: 0xF7DDD6, dark: 0x343140)
 
     // MARK: 文字 — 深莓果 (v6.1)
-    static let textPrimary = adaptive(light: 0x432B33, dark: 0xF3F2F7)
-    static let textSecondary = adaptive(light: 0x8A6B72, dark: 0xBBB7C6)
-    static let textTertiary = adaptive(light: 0xB99CA2, dark: 0x858190)
-    static let textLink = adaptive(light: 0xC24467, dark: 0xD8D4E7)
-    static let textOnHalo = adaptive(light: 0xFFF9F6, dark: 0xF3F2F7)
+    static let textPrimary = adaptive(light: 0x432B33, dark: 0xF1EFF7)
+    static let textSecondary = adaptive(light: 0x8A6B72, dark: 0xADA8BA)
+    static let textTertiary = adaptive(light: 0xB99CA2, dark: 0x777482)
+    static let textLink = adaptive(light: 0xC24467, dark: 0xC9C5DE)
+    static let textOnHalo = adaptive(light: 0xFFF9F6, dark: 0xF1EFF7)
 
     // MARK: 角色三色 (v6.1)
     static let roleGold = Color(hex: 0xD9486B)         // 西柚玫瑰 (v6.1 定稿 --color-role-gold: #D9486B, warm 角色主色)
@@ -163,13 +169,13 @@ enum Theme {
 
     // MARK: 语义色 (v6.1)
     static let success = Color(hex: 0x71A36B)
-    static let warning = Color(hex: 0xD9486B)
-    static let danger = Color(hex: 0xD5563C)           // 结束通话/解除关系
+    static let warning = adaptive(light: 0xD9486B, dark: 0xA981A5)
+    static let danger = adaptive(light: 0xD5563C, dark: 0xC78395)           // 结束通话/解除关系
     static let info = Color(hex: 0x93A9BC)
     static let online = Color(hex: 0x8FBC86)           // 在线绿点
     static let offline = Color(hex: 0xCDB6B0)
-    static let recording = Color(hex: 0xD5563C)
-    static let voiceActive = Color(hex: 0xE88BA0)      // 语音波形活跃柱
+    static let recording = adaptive(light: 0xD5563C, dark: 0xC78395)
+    static let voiceActive = adaptive(light: 0xE88BA0, dark: 0xA49EC0)      // 语音波形活跃柱
 
     // MARK: 角色冷调 — 灵猫少年 (保留, 用于角色装饰)
     static let characterHair = Color(hex: 0x2B2320)

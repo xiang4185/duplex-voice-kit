@@ -175,17 +175,22 @@ struct CompanionHomeView: View {
                         Text(roleStore.previewRole.introCopy)
                             .font(Theme.headlineFont)
                     }
-                    .foregroundStyle(visual.onPrimary)
+                    .foregroundStyle(visualMode == .mystery ? visual.textPrimary : visual.onPrimary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
                     // P2.8A: 整个胶囊区域可点击, 单击一次立即进入通话页
                     .contentShape(Capsule())
                     .glassEffect(
                         .regular
-                            .tint(visual.primary)
+                            .tint(visualMode == .mystery ? visual.primarySoft : visual.primary)
                             .interactive(),
                         in: .capsule
                     )
+                    .overlay {
+                        if visualMode == .mystery {
+                            Capsule().stroke(visual.border.opacity(0.9), lineWidth: 0.8)
+                        }
+                    }
                     // P2.7B: 更柔的双层阴影 (外层柔散 + 内层贴近), 避免"硬贴"感
                     .shadow(color: visual.shadow.opacity(0.75), radius: 16, x: 0, y: 7)
                 }
@@ -246,9 +251,9 @@ struct CompanionHomeView: View {
                             .foregroundStyle(visual.textTertiary)
                     }
                     .padding(14)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).stroke(visual.border.opacity(0.45), lineWidth: 0.7))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).stroke(visual.border.opacity(visualMode == .mystery ? 0.88 : 0.45), lineWidth: 0.7))
                 }
                 // P2.6J+: 可点击卡片按压反馈
                 .buttonStyle(PressableCardStyle())
@@ -300,9 +305,9 @@ struct CompanionHomeView: View {
                     .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(visual.textSecondary)
                     .frame(width: 40, height: 40)
-                    .background(.ultraThinMaterial, in: Circle())
                     .background(visual.glassTint, in: Circle())
-                    .overlay(Circle().stroke(visual.border.opacity(0.45), lineWidth: 0.7))
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(visual.border.opacity(visualMode == .mystery ? 0.88 : 0.45), lineWidth: 0.7))
             }
             .accessibilityLabel("设置")
             .accessibilityIdentifier("home.settings")

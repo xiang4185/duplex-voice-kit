@@ -94,6 +94,8 @@ final class CompanionModeTests: XCTestCase {
         let theme = try source("XiaomaoApp/Design/Theme.swift")
         let root = try source("XiaomaoApp/App/XiaomaoApp.swift")
         let tabs = try source("XiaomaoApp/App/MainTabView.swift")
+        let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
+        let components = try source("XiaomaoApp/Design/Components/VisualComponents.swift")
 
         XCTAssertTrue(call.contains("call.companion.sheet"))
         XCTAssertTrue(call.contains("call.companion.\\(type.rawValue)"))
@@ -104,6 +106,11 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertTrue(root.contains(".environment(\\.appVisualMode, companionStore.visualMode)"))
         XCTAssertTrue(root.contains(".preferredColorScheme(companionStore.visualMode == .mystery ? .dark : .light)"))
         XCTAssertTrue(tabs.contains("toolbarColorScheme(visualMode == .mystery ? .dark : .light"))
+        XCTAssertTrue(theme.contains("let dangerSoft: Color"))
+        XCTAssertTrue(call.contains("visual.dangerSoft"))
+        XCTAssertTrue(call.contains("visual.glassTint"))
+        XCTAssertTrue(home.contains("visualMode == .mystery ? visual.primarySoft : visual.primary"))
+        XCTAssertTrue(components.contains("visualMode == .mystery ? tokens.primarySoft : tokens.primary"))
 
         for label in ["温柔陪伴", "强势偏爱", "黏人浪漫", "未知", "尚未被定义"] {
             XCTAssertTrue(store.contains(label))

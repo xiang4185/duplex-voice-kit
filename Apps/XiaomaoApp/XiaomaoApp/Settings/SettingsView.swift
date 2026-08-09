@@ -187,8 +187,8 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: visual.shadow.opacity(0.55), radius: 10, x: 0, y: 3)
     }
 
@@ -197,10 +197,13 @@ struct SettingsView: View {
         HStack(spacing: 14) {
             Image(systemName: "sparkles")
                 .font(.system(size: 24))
-                .foregroundStyle(.white)
+                .foregroundStyle(visualMode == .mystery ? visual.textPrimary : .white)
                 .frame(width: 48, height: 48)
                 .background(
-                    LinearGradient(colors: [Theme.roleGold, Theme.primary],
+                    LinearGradient(
+                        colors: visualMode == .mystery
+                            ? [visual.primarySoft, visual.primary.opacity(0.72)]
+                            : [Theme.roleGold, Theme.primary],
                                    startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
@@ -223,17 +226,22 @@ struct SettingsView: View {
             } label: {
                 Text("打开彩蛋")
                     .font(Theme.captionFont)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(visualMode == .mystery ? visual.textPrimary : .white)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(Theme.primary, in: Capsule())
+                    .background(visualMode == .mystery ? visual.primarySoft : Theme.primary, in: Capsule())
+                    .overlay {
+                        if visualMode == .mystery {
+                            Capsule().stroke(visual.border.opacity(0.9), lineWidth: 0.7)
+                        }
+                    }
             }
             .buttonStyle(PressableButtonStyle())
             .accessibilityIdentifier("settings.pro")
         }
         .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
@@ -266,8 +274,8 @@ struct SettingsView: View {
             .padding(.horizontal, 18)
             .frame(minHeight: 60)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
@@ -321,8 +329,8 @@ struct SettingsView: View {
             Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "隐私政策", detail: nil)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 

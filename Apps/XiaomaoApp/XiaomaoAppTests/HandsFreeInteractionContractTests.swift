@@ -615,7 +615,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 4. VoiceCall 状态点颜色映射
         XCTAssertTrue(call.contains("callStatusColor"), "必须存在状态点颜色计算属性")
         XCTAssertTrue(call.contains(".fill(callStatusColor)"), "状态点必须使用 callStatusColor")
-        for token in ["Theme.textTertiary", "Theme.online", "Theme.warning", "Theme.danger"] {
+        for token in ["visual.textTertiary", "Theme.online", "Theme.warning", "visual.danger"] {
             XCTAssertTrue(call.contains(token), "状态颜色映射缺少: \(token)")
         }
 

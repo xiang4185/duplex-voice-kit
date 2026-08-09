@@ -119,8 +119,8 @@ struct MainTabView: View {
             }
             .padding(.horizontal, Theme.Spacing.medium)
             .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
             .background(tokens.glassTint)
+            .background(.ultraThinMaterial)
             .overlay(alignment: .bottom) { Divider().overlay(tokens.border.opacity(0.5)) }
         }
         .buttonStyle(.plain)

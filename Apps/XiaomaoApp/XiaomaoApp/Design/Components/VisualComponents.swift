@@ -22,12 +22,15 @@ struct SurfaceCard<Content: View>: View {
     var body: some View {
         let tokens = Theme.visual(visualMode)
         content
-            .background(tokens.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .background(
+                tokens.surface.opacity(visualMode == .mystery ? 0.96 : 1),
+                in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .stroke(tokens.border.opacity(0.62), lineWidth: 0.7)
+                    .stroke(tokens.border.opacity(visualMode == .mystery ? 0.82 : 0.62), lineWidth: 0.7)
             }
-            .shadow(color: tokens.shadow, radius: 14, x: 0, y: 5)
+            .shadow(color: tokens.shadow, radius: visualMode == .mystery ? 18 : 14, x: 0, y: 5)
     }
 }
 
@@ -42,13 +45,13 @@ struct GlassCard<Content: View>: View {
     var body: some View {
         let tokens = Theme.visual(visualMode)
         content
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             .background(tokens.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .stroke(tokens.border.opacity(0.48), lineWidth: 0.7)
+                    .stroke(tokens.border.opacity(visualMode == .mystery ? 0.88 : 0.48), lineWidth: 0.7)
             }
-            .shadow(color: tokens.shadow, radius: 16, x: 0, y: 6)
+            .shadow(color: tokens.shadow, radius: visualMode == .mystery ? 20 : 16, x: 0, y: 6)
     }
 }
 
@@ -130,10 +133,25 @@ struct PrimaryButton: View {
                 Text(title)
             }
             .font(Theme.headlineFont)
-            .foregroundStyle(isEnabled ? tokens.onPrimary : tokens.textTertiary)
+            .foregroundStyle(
+                isEnabled
+                    ? (visualMode == .mystery ? tokens.textPrimary : tokens.onPrimary)
+                    : tokens.textTertiary
+            )
             .frame(maxWidth: .infinity)
             .frame(minHeight: 52)
-            .background(isEnabled ? tokens.primary : tokens.primarySoft, in: Capsule())
+            .background(
+                isEnabled
+                    ? (visualMode == .mystery ? tokens.primarySoft : tokens.primary)
+                    : tokens.primarySoft,
+                in: Capsule()
+            )
+            .overlay {
+                if visualMode == .mystery {
+                    Capsule()
+                        .stroke(tokens.border.opacity(isEnabled ? 0.95 : 0.55), lineWidth: 0.8)
+                }
+            }
             .shadow(color: isEnabled ? tokens.shadow.opacity(0.7) : .clear, radius: 10, x: 0, y: 4)
         }
         .buttonStyle(PressableButtonStyle())
@@ -159,8 +177,11 @@ struct StatusPill: View {
         .foregroundStyle(tokens.textSecondary)
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
-        .background(tokens.glassTint, in: Capsule())
-        .overlay(Capsule().stroke(tokens.border.opacity(0.5), lineWidth: 0.6))
+        .background(
+            visualMode == .mystery ? tokens.surfaceSoft.opacity(0.92) : tokens.glassTint,
+            in: Capsule()
+        )
+        .overlay(Capsule().stroke(tokens.border.opacity(visualMode == .mystery ? 0.9 : 0.5), lineWidth: 0.6))
     }
 }
 
@@ -178,9 +199,9 @@ struct GlassIconButton: View {
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(tokens.textPrimary)
                 .frame(width: 42, height: 42)
-                .background(.ultraThinMaterial, in: Circle())
                 .background(tokens.glassTint, in: Circle())
-                .overlay(Circle().stroke(tokens.border.opacity(0.48), lineWidth: 0.6))
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(tokens.border.opacity(visualMode == .mystery ? 0.9 : 0.48), lineWidth: 0.6))
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(accessibilityLabel)

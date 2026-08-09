@@ -88,8 +88,8 @@ struct ChatComposerView: View {
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.top, 10)
         .padding(.bottom, Theme.Spacing.small)
-        .background(.ultraThinMaterial)
         .background(visual.glassTint)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider().overlay(visual.border.opacity(0.35)) }
     }
 

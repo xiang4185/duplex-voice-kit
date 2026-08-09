@@ -202,8 +202,8 @@ struct ChatView: View {
         .frame(minHeight: 58)
         .padding(.horizontal, Theme.Spacing.medium)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
         .background(visual.glassTint)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider().overlay(visual.border.opacity(0.45)) }
         .accessibilityIdentifier("chat.header")
     }
