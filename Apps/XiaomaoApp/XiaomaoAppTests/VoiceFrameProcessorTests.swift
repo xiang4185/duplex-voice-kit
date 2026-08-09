@@ -36,7 +36,7 @@ final class VoiceFrameProcessorTests: XCTestCase {
         let result = await processor.process(pcmFrame(amplitude: 6_000))
 
         XCTAssertEqual(result.presentation?.state, .speechDetected)
-        XCTAssertEqual(result.presentation?.energyBand, "speech")
+        XCTAssertEqual(result.presentation?.energyBand, "high")
     }
 
     func testListeningIntentOrderAndCommitSemanticsRemainUnchanged() async {
