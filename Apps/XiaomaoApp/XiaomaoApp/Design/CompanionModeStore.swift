@@ -49,30 +49,17 @@ enum CompanionType: String, Codable, CaseIterable, Identifiable, Sendable {
         self == .warm ? "CharacterAvatar" : portraitAssetName
     }
 
-    var portraitDisplayScale: CGFloat {
-        switch self {
-        case .warm: return 1.0
-        case .assertive: return 1.02
-        case .romantic: return 1.02
-        case .mystery: return 1.06
-        }
-    }
-
     var thumbnailDisplayScale: CGFloat {
         switch self {
         case .warm: return 1.0
-        case .assertive: return 2.05
-        case .romantic: return 2.0
-        case .mystery: return 2.15
+        case .assertive, .romantic, .mystery: return 2.0
         }
     }
 
     var thumbnailVerticalOffset: CGFloat {
         switch self {
         case .warm: return 0
-        case .assertive: return 10
-        case .romantic: return 8
-        case .mystery: return 12
+        case .assertive, .romantic, .mystery: return 8
         }
     }
 }

@@ -167,63 +167,32 @@ struct PrivacyAvatar: View {
     // 用新图 Character (1024×1536 透明 PNG), 2:3 比例自然展示.
     // 底部柔边渐变 mask 让肩部以下自然消散, 与下方 halo 光晕层融合,
     // 视觉目标: "人像自然融入光里", 不出现硬圆头像.
-    @ViewBuilder
     private func portraitCharacter(revealed: Bool) -> some View {
         let width = size
         let height = size * 3.0 / 2.0
 
-        if companionType == .warm {
-            Image("Character")
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: width, height: height)
-                .blur(radius: revealed ? 0 : 6)
-                .opacity(revealed ? 1 : 0.92)
-                .mask {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black, location: 0.0),
-                            .init(color: .black, location: 0.55),
-                            .init(color: .black.opacity(0.85), location: 0.75),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .animation(.easeInOut(duration: 0.35), value: revealed)
-        } else {
-            Image(companionType.portraitAssetName)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: width, height: height)
-                .scaleEffect(companionType.portraitDisplayScale)
-                .blur(radius: revealed ? 0 : 6)
-                .opacity(revealed ? 1 : 0.72)
-                // Sample portraits already include their own feathered lower edge.
-                // Romantic currently has a flat lower matte in the sample source,
-                // so fade it before that region instead of applying the legacy mask.
-                .mask {
-                    if companionType == .romantic {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .black, location: 0.0),
-                                .init(color: .black, location: 0.48),
-                                .init(color: .black.opacity(0.72), location: 0.55),
-                                .init(color: .clear, location: 0.66),
-                                .init(color: .clear, location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    } else {
-                        Color.black
-                    }
-                }
-                .animation(.easeInOut(duration: 0.35), value: revealed)
-        }
+        return Image(companionType.portraitAssetName)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: width, height: height)
+            .blur(radius: revealed ? 0 : 6)
+            .opacity(revealed ? 1 : 0.92)
+            // All public companion portraits now use the same 1024×1536 transparent
+            // template, so they deliberately share the exact same composition mask.
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0.0),
+                        .init(color: .black, location: 0.55),
+                        .init(color: .black.opacity(0.85), location: 0.75),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .animation(.easeInOut(duration: 0.35), value: revealed)
     }
 
     // MARK: - Thumbnail 方形小头像 (保留 v6.1 行为)

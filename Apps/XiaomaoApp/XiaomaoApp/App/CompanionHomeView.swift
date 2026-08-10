@@ -38,16 +38,8 @@ struct CompanionHomeView: View {
         ("一直在", "star.fill")
     ]
 
-    // P2.7B: sample companion portraits carry more transparent breathing room
-    // than the original warm portrait, so give them a larger hero box while
-    // keeping the warm layout unchanged.
-    private var heroSize: CGFloat {
-        switch companionStore.current {
-        case .warm: return 200
-        case .assertive, .romantic: return 226
-        case .mystery: return 242
-        }
-    }
+    // All companion portrait assets share the same 2:3 master template.
+    private let heroSize: CGFloat = 200
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
     private var accent: Color {

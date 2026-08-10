@@ -1049,21 +1049,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             return
         }
         let portrait = String(avatar[pStart..<pEnd])
-        XCTAssertTrue(portrait.contains("if companionType == .warm"),
-                      "Warm 原角色与公开样例角色必须使用独立 portrait 渲染分支")
-        XCTAssertTrue(portrait.contains("Image(\"Character\")"),
-                      "Warm 原角色必须继续使用 Character")
         XCTAssertTrue(portrait.contains("Image(companionType.portraitAssetName)"),
                       "portraitCharacter 必须按当前陪伴类型加载公开角色图")
         XCTAssertTrue(portrait.contains("LinearGradient"), "portraitCharacter 必须保留底部渐隐 LinearGradient mask")
         XCTAssertTrue(portrait.contains("revealed ? 0 : 6"), "portraitCharacter 必须保留 reveal blur 语义")
         XCTAssertTrue(portrait.contains("revealed ? 1 : 0.92"), "portraitCharacter 必须保留 reveal opacity 语义")
-        XCTAssertTrue(portrait.contains(".scaleEffect(companionType.portraitDisplayScale)"),
-                      "公开陪伴角色必须支持独立 portrait 构图缩放")
-        XCTAssertTrue(portrait.contains("if companionType == .romantic"),
-                      "黏人浪漫样例必须独立处理下缘 matte")
-        XCTAssertTrue(portrait.contains(".opacity(revealed ? 1 : 0.72)"),
-                      "公开样例解锁后必须完整显现，locked 状态仍保持弱化")
+        XCTAssertFalse(portrait.contains("portraitDisplayScale"),
+                       "统一 1024×1536 角色模板不得再按陪伴类型做主视觉缩放补丁")
+        XCTAssertFalse(portrait.contains("companionType == .romantic"),
+                       "统一角色模板不得再为黏人浪漫保留独立下缘 matte 补丁")
         XCTAssertTrue(portrait.contains(".mask"), "portraitCharacter 必须保留 mask")
         XCTAssertTrue(portrait.contains(".animation(.easeInOut(duration: 0.35), value: revealed)"),
                       "portraitCharacter 必须保留 reveal 动画")
