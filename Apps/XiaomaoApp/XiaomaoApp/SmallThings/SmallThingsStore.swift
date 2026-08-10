@@ -24,7 +24,7 @@ final class SmallThingsStore: ObservableObject {
     init(
         entries: [SmallThingEntry]? = nil,
         bindingState: SmallThingBindingState = .unbound,
-        ledgerLimit: Double = Self.defaultLedgerLimit,
+        ledgerLimit: Double = 52.0,
         service: (any SmallThingsServicing)? = nil
     ) {
         self.service = service
