@@ -166,9 +166,8 @@ struct VoiceCallView: View {
                         .padding(.top, 6)
                 }
 
-                Spacer(minLength: 0)
-
                 controlArea
+                    .padding(.top, usesSceneBackground ? 14 : 8)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 18)
                     .layoutPriority(1)
@@ -1055,9 +1054,10 @@ struct VoiceCallView: View {
     }
 }
 
-private struct CompanionSelectionSheet: View {
+struct CompanionSelectionSheet: View {
     @ObservedObject var store: CompanionModeStore
     let isSwitching: Bool
+    var identifierPrefix: String = "call.companion"
     let select: (CompanionType) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -1117,7 +1117,7 @@ private struct CompanionSelectionSheet: View {
                         }
                         .buttonStyle(PressableCardStyle())
                         .disabled(isSwitching)
-                        .accessibilityIdentifier("call.companion.\(type.rawValue)")
+                        .accessibilityIdentifier("\(identifierPrefix).\(type.rawValue)")
                     }
                 }
                 .padding(.horizontal, 18)
@@ -1127,7 +1127,7 @@ private struct CompanionSelectionSheet: View {
             .navigationTitle("陪伴")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .accessibilityIdentifier("call.companion.sheet")
+        .accessibilityIdentifier("\(identifierPrefix).sheet")
     }
 
     private func rowBackground(for type: CompanionType) -> Color {

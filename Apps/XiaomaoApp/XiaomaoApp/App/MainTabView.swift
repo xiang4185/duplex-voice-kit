@@ -60,7 +60,6 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             CompanionHomeView(
                 startCall: startCall,
-                openHistory: { selectedTab = .smallThings },
                 openSettings: { selectedTab = .settings }
             )
             .tabItem { Label(Tab.companion.title, systemImage: Tab.companion.icon) }

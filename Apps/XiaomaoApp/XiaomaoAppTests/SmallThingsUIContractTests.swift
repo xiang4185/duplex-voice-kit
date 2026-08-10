@@ -28,8 +28,13 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertFalse(root.contains(".sheet(isPresented:"), "记账与审批必须统一使用导航推进")
         XCTAssertTrue(ledger.contains("smallThings.ledger.addExpense"))
         XCTAssertTrue(ledger.contains("smallThings.ledger.pendingApproval"))
+        XCTAssertTrue(ledger.contains("smallThings.ledger.adjustLimit"), "账本卡必须提供轻量调额入口")
+        XCTAssertTrue(ledger.contains("Label(\"调额\", systemImage: \"slider.horizontal.3\")"))
+        XCTAssertTrue(ledger.contains("store.adjustLedgerLimit(to: value)"))
         XCTAssertTrue(ledger.contains("smallThings.binding"))
         XCTAssertFalse(ledger.contains("glassEffect"), "暖色账本卡不得使用玻璃")
+        XCTAssertTrue(ledger.contains("progressRing"), "小事页必须恢复原有环形进度结构")
+        XCTAssertTrue(ledger.contains("amountRow(\"已点头\""), "小事页必须恢复原有金额明细")
     }
 
     func testComposerIsCustomWarmLayoutWithOneSaveAction() throws {
@@ -162,6 +167,7 @@ final class SmallThingsUIContractTests: XCTestCase {
             "smallThings.ledger",
             "smallThings.ledger.addExpense",
             "smallThings.ledger.pendingApproval",
+            "smallThings.ledger.adjustLimit",
             "smallThings.form.type.note",
             "smallThings.form.type.expense",
             "smallThings.form.save",

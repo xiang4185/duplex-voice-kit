@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class SmallThingsStore: ObservableObject {
-    static let ledgerLimit = 52.0
+    static let defaultLedgerLimit = 52.0
     static let localBindingCode = "842971"
     static let successfulPartnerCode = "135246"
     static let occupiedPartnerCode = "246810"
@@ -13,6 +13,7 @@ final class SmallThingsStore: ObservableObject {
     @Published private(set) var bindingFeedback: SmallThingBindingFeedback = .idle
     @Published private(set) var lastUndo: SmallThingApprovalUndo?
     @Published private(set) var generatedBindingCode: String?
+    @Published private(set) var ledgerLimit: Double
     @Published private(set) var isLoading = false
     @Published private(set) var operationError: String?
     @Published var validationMessage: String?
@@ -23,11 +24,13 @@ final class SmallThingsStore: ObservableObject {
     init(
         entries: [SmallThingEntry]? = nil,
         bindingState: SmallThingBindingState = .unbound,
+        ledgerLimit: Double = Self.defaultLedgerLimit,
         service: (any SmallThingsServicing)? = nil
     ) {
         self.service = service
         self.entries = entries ?? (service == nil ? Self.mockEntries() : [])
         self.bindingState = bindingState
+        self.ledgerLimit = max(0, ledgerLimit)
     }
 
     var isProduction: Bool { service != nil }
@@ -49,11 +52,12 @@ final class SmallThingsStore: ObservableObject {
     }
 
     var remainingAmount: Double {
-        max(0, Self.ledgerLimit - approvedAmount - pendingAmount)
+        max(0, ledgerLimit - approvedAmount - pendingAmount)
     }
 
     var approvedRatio: Double {
-        min(1, approvedAmount / Self.ledgerLimit)
+        guard ledgerLimit > 0 else { return 0 }
+        return min(1, approvedAmount / ledgerLimit)
     }
 
     var pendingApprovals: [SmallThingEntry] {
@@ -80,6 +84,22 @@ final class SmallThingsStore: ObservableObject {
         operationError = nil
     }
 
+    @discardableResult
+    func adjustLedgerLimit(to newLimit: Double) -> Bool {
+        let used = approvedAmount + pendingAmount
+        guard newLimit.isFinite, newLimit > 0 else {
+            validationMessage = "额度需大于 0"
+            return false
+        }
+        guard newLimit >= used else {
+            validationMessage = "额度不能低于已使用和待确认金额"
+            return false
+        }
+        ledgerLimit = (newLimit * 100).rounded() / 100
+        validationMessage = nil
+        return true
+    }
+
     func resetBindingFeedback() {
         guard bindingState == .unbound else { return }
         bindingFeedback = .idle
@@ -94,6 +114,7 @@ final class SmallThingsStore: ObservableObject {
         do {
             let state = try await service.loadState()
             bindingState = state.bindingState
+            ledgerLimit = state.ledgerLimit
             entries = state.entries
             await hydrateRemoteImages(using: service)
         } catch {

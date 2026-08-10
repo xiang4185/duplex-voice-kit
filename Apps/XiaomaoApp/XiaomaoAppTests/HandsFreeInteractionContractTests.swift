@@ -407,14 +407,17 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("小猫在呢"))
         XCTAssertTrue(settings.contains("随时回来和小猫说说话"))
         XCTAssertTrue(settings.contains("关于小猫"))
-        XCTAssertTrue(home.contains("陪伴记录"))
+        XCTAssertTrue(home.contains("切换陪伴"))
         XCTAssertTrue(review.contains("陪伴记录尚未开放"))
         XCTAssertTrue(review.contains("当前版本暂不展示聊天或录音历史。"))
         XCTAssertTrue(settings.contains("使用记录尚未接入"))
         XCTAssertTrue(settings.contains("当前版本暂不展示时长、连续天数或累计统计。"))
 
-        // 首页历史入口直接调用 openHistory()
-        XCTAssertTrue(home.contains("openHistory()"))
+        // 首页右上角未落地的历史入口改为本地陪伴切换，不触发语音或后端。
+        XCTAssertTrue(home.contains("showCompanionPicker = true"))
+        XCTAssertTrue(home.contains("CompanionSelectionSheet("))
+        XCTAssertTrue(home.contains("companionStore.select(type)"))
+        XCTAssertFalse(home.contains("openHistory()"))
         // 不再声明/展示静态 RecentReviewOverlay
         XCTAssertFalse(home.contains("RecentReviewOverlay"))
 
@@ -450,8 +453,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 1. 首页齿轮调用 openSettings()
         XCTAssertTrue(home.contains("openSettings()"), "齿轮必须调用 openSettings()")
-        // 3. 首页历史入口仍调用 openHistory()
-        XCTAssertTrue(home.contains("openHistory()"), "陪伴记录入口必须调用 openHistory()")
+        // 3. 首页右上角承担陪伴切换，且只更新本地选择。
+        XCTAssertTrue(home.contains("home.companion"), "首页必须保留轻量陪伴切换入口")
+        XCTAssertTrue(home.contains("companionStore.select(type)"), "首页切换只允许更新本地 CompanionModeStore")
+        XCTAssertFalse(home.contains("openHistory()"), "未落地的历史入口不得继续占用首页")
 
         // 2. MainTabView 将 openSettings 映射到 .settings
         XCTAssertTrue(maintab.contains("openSettings"), "MainTabView 必须传递 openSettings")
@@ -556,9 +561,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("0.985"), "按压 scale 必须约 0.985")
         XCTAssertTrue(home.contains("accessibilityReduceMotion"), "PressableCardStyle 必须遵循 Reduce Motion")
 
-        // 首页记录已收成顶栏圆形轻入口；设置关于行继续使用通用按压样式。
-        XCTAssertTrue(home.contains("home.history"), "首页记录入口必须保留")
-        XCTAssertTrue(home.contains("clock.arrow.circlepath"), "首页记录入口必须为紧凑顶栏按钮")
+        // 首页陪伴切换使用顶栏圆形轻入口；设置关于行继续使用通用按压样式。
+        XCTAssertTrue(home.contains("home.companion"), "首页陪伴切换入口必须保留")
+        XCTAssertTrue(home.contains("person.2.fill"), "首页陪伴切换必须为紧凑顶栏按钮")
         XCTAssertTrue(settings.contains("buttonStyle(PressableCardStyle())"), "设置关于行必须使用 PressableCardStyle")
         // P2.8A: 角色页 1.0 正式角色卡 (删除旧三角色 pressedRole/0.985/handleRoleTap 断言)
         XCTAssertFalse(characters.contains("pressedRole"), "1.0 角色页不得保留多角色按压状态")
@@ -889,9 +894,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("home.start"), "首页 CTA identifier 必须保留")
         // 行为保留
         XCTAssertTrue(home.contains("openSettings()"), "设置入口必须保留")
-        XCTAssertTrue(home.contains("openHistory()"), "回顾入口必须保留")
+        XCTAssertTrue(home.contains("showCompanionPicker = true"), "首页必须直接打开陪伴选择")
+        XCTAssertTrue(home.contains("companionStore.select(type)"), "首页选择不得重建语音会话")
         XCTAssertTrue(home.contains("isProductionVoice"), "非生产角色门禁必须保留")
-        XCTAssertTrue(home.contains("home.history"), "陪伴记录必须保留为轻量入口")
+        XCTAssertTrue(home.contains("home.companion"), "陪伴切换必须保留为轻量入口")
         XCTAssertTrue(home.contains("AvatarPrivacyConfirmView"), "隐私确认 Sheet 必须保留")
 
         // ===== 通话页 =====
@@ -1142,11 +1148,12 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(home.contains("greetings"), "极简首页不得恢复轮换问候数组")
         XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴必须保留 OrganicMeshBackground 回退")
         XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "其他陪伴必须使用完整场景背景")
-        // CTA / 历史入口 / 隐私确认
+        // CTA / 陪伴切换 / 隐私确认
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须保留 glassEffect")
         XCTAssertTrue(home.contains("interactive()"), "首页 CTA 必须保留 interactive")
         XCTAssertTrue(home.contains("home.start"), "首页 CTA identifier 必须保留")
-        XCTAssertTrue(home.contains("openHistory()"), "首页历史入口必须保留")
+        XCTAssertTrue(home.contains("home.companion"), "首页右上角必须提供陪伴切换")
+        XCTAssertFalse(home.contains("openHistory()"), "首页不得继续保留未落地历史入口")
         XCTAssertTrue(home.contains("AvatarPrivacyConfirmView"), "隐私确认流程必须保留")
 
         // ===== 4. 通话文本 (displayConversationText) =====

@@ -13,7 +13,6 @@ import UIKit
 
 struct CompanionHomeView: View {
     var startCall: () -> Void
-    var openHistory: () -> Void
     var openSettings: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,6 +25,7 @@ struct CompanionHomeView: View {
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @State private var showPrivacyConfirm = false
+    @State private var showCompanionPicker = false
 
     // All companion portrait assets share the same 2:3 master template.
     private let heroSize: CGFloat = 200
@@ -170,6 +170,19 @@ struct CompanionHomeView: View {
             )
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showCompanionPicker) {
+            CompanionSelectionSheet(
+                store: companionStore,
+                isSwitching: false,
+                identifierPrefix: "home.companion",
+                select: { type in
+                    companionStore.select(type)
+                    showCompanionPicker = false
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
         .onAppear { appeared = true }
         // P2.6J: 角色切换时清除残留 Toast (切回小猫不再显示预览提示)
         .onChange(of: roleStore.previewRole) { _ in
@@ -277,9 +290,9 @@ struct CompanionHomeView: View {
 
             Button {
                 WarmHaptics.action()
-                openHistory()
+                showCompanionPicker = true
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: "person.2.fill")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(homeTextSecondary)
                     .frame(width: 40, height: 40)
@@ -287,8 +300,8 @@ struct CompanionHomeView: View {
                     .background(.ultraThinMaterial, in: Circle())
                     .overlay(Circle().stroke(homeBorder.opacity(0.88), lineWidth: 0.7))
             }
-            .accessibilityLabel("陪伴记录")
-            .accessibilityIdentifier("home.history")
+            .accessibilityLabel("切换陪伴")
+            .accessibilityIdentifier("home.companion")
         }
     }
 
@@ -408,6 +421,6 @@ struct MiniVoiceWave: View {
 
 // MARK: - 预览
 #Preview {
-    CompanionHomeView(startCall: {}, openHistory: {}, openSettings: {})
+    CompanionHomeView(startCall: {}, openSettings: {})
         .environmentObject(CompanionModeStore())
 }

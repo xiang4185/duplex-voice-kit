@@ -74,12 +74,12 @@ struct ChatMessageBubble: View {
                 .clipShape(Circle())
                 .accessibilityHidden(true)
         case .xiaomao:
-            Text("🐱")
-                .font(.system(size: 20))
+            PrivacyAvatar(
+                size: 34,
+                tappable: false,
+                style: .thumbnail
+            )
                 .frame(width: 34, height: 34)
-                .background(visual.surfaceSoft)
-                .clipShape(Circle())
-                .overlay { Circle().stroke(visual.border.opacity(0.5), lineWidth: 0.7) }
                 .accessibilityHidden(true)
         case .user:
             EmptyView()
