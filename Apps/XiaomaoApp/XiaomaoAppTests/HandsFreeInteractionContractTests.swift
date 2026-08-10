@@ -8,8 +8,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(source.contains("按住说话"))
         XCTAssertFalse(source.contains("结束本轮"))
         XCTAssertFalse(source.contains("PressToTalkControl"))
-        // P2.7B: 免按键用户提示恢复为产品文案
-        XCTAssertTrue(source.contains("直接说话就好，小猫在听"))
+        // 极简通话页只保留一条真实会话状态，不再叠加第二条免按键提示。
+        XCTAssertTrue(source.contains("callStatusText"))
+        XCTAssertFalse(source.contains("直接说话就好，小猫在听"))
     }
 
     func testForegroundRouteIsFixedToBWithoutRoutePicker() throws {
@@ -312,9 +313,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("reconnectAttempt >= 2"))
         XCTAssertTrue(call.contains("reconnectCardShown"))
         XCTAssertFalse(call.contains("while !Task.isCancelled"), "不得使用五分钟后的轮询")
-        // 关心我按钮调用 randomManual() (唯一随机入口)
-        XCTAssertTrue(call.contains(".randomManual()"))
-        XCTAssertTrue(call.contains("empathyReason = .userRequest"))
+        // 极简通话主界面不再暴露额外「关心我」按钮；随机彩蛋能力仍保留在 EmpathyCard。
+        XCTAssertFalse(call.contains("call.care"))
+        XCTAssertFalse(call.contains(".randomManual()"))
         // 不得声称情绪识别
         XCTAssertFalse(call.contains("由情绪识别触发"))
         // 不得出现伪规则代码
@@ -874,7 +875,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         }
 
         // ===== 首页 =====
-        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "首页必须使用 .home Mesh 背景")
+        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴首页必须保留 .home Mesh 回退背景")
+        XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "非温柔陪伴首页必须支持整张场景背景")
         // 删除旧循环光效
         for token in ["bgLightPulse", "sweepAngle", "ctaPulse"] {
             XCTAssertFalse(home.contains(token), "首页不得保留: \(token)")
@@ -888,13 +890,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("openSettings()"), "设置入口必须保留")
         XCTAssertTrue(home.contains("openHistory()"), "回顾入口必须保留")
         XCTAssertTrue(home.contains("isProductionVoice"), "非生产角色门禁必须保留")
-        XCTAssertTrue(home.contains("当前版本暂不展示聊天或录音历史"), "诚实空状态文案必须保留")
+        XCTAssertTrue(home.contains("home.history"), "陪伴记录必须保留为轻量入口")
         XCTAssertTrue(home.contains("AvatarPrivacyConfirmView"), "隐私确认 Sheet 必须保留")
 
         // ===== 通话页 =====
-        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "通话页必须使用 .call Mesh 背景")
+        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "温柔陪伴通话必须保留 .call Mesh 回退背景")
+        XCTAssertTrue(call.contains("private var callBackground"), "非温柔陪伴通话必须使用完整场景背景")
+        XCTAssertTrue(call.contains("sceneBackgroundAssetName"), "完整场景背景必须由陪伴类型驱动")
         XCTAssertFalse(call.contains("breathingGradientGlow"), "通话页不得保留背景循环呼吸")
-        XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
+        XCTAssertFalse(call.contains("直接说话就好，小猫在听"), "不得再叠加重复免按键提示")
         XCTAssertTrue(call.contains("callStatusText"), "状态文案必须保留")
         XCTAssertTrue(call.contains("callStatusColor"), "状态颜色必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
@@ -960,8 +964,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("重新开始"), "空闲结束弹窗不得提供同页重新开始按钮")
 
         // ===== 既有通话核心契约保留 =====
-        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "Mesh 背景必须保留")
-        XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
+        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "温柔陪伴 Mesh 回退背景必须保留")
+        XCTAssertTrue(call.contains("sceneBackgroundAssetName"), "其他陪伴必须支持完整场景背景")
+        XCTAssertFalse(call.contains("直接说话就好，小猫在听"), "通话页不得重复显示第二条状态提示")
         XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
@@ -1209,16 +1214,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       ".listening 必须被允许恢复采集")
 
         // ===== 2. 首次连接加载反馈 =====
-        XCTAssertTrue(call.contains("call.connecting"), "必须存在 call.connecting identifier")
-        XCTAssertTrue(call.contains("ProgressView"), "连接卡必须包含 ProgressView")
-        XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接文案 正在连接小猫")
-        XCTAssertTrue(call.contains("通常只需要几秒"), "必须存在首次连接说明文案")
+        // 连接状态收口到顶部单一状态行，不再增加独立连接卡。
+        XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接状态文案")
+        XCTAssertTrue(call.contains("callStatusText"), "首次连接状态必须由统一状态映射提供")
         XCTAssertTrue(controller.contains("hasCompletedInitialConnection = false"),
                       "每通新通话必须重置首次连接完成状态")
         XCTAssertTrue(controller.contains("hasCompletedInitialConnection = true"),
                       "麦克风真实可用后必须标记首次连接完成")
         XCTAssertTrue(call.contains("if !viewModel.controller.hasCompletedInitialConnection"),
-                      "连接卡只能由首次连接完成状态控制")
+                      "首次连接状态只能由真实连接完成状态控制")
         XCTAssertFalse(call.contains("if !viewModel.controller.isConversationReady"),
                        "每轮 processing 不得重新显示首次连接卡")
         XCTAssertFalse(call.contains("DispatchSourceTimer"), "连接反馈不得使用定时器")
@@ -1266,18 +1270,21 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(topBar.contains("call.close"), "call.close identifier 必须保留")
         XCTAssertTrue(topBar.contains("收起通话"), "左上 accessibility label 必须为 收起通话")
 
-        // ===== 6. 陪伴入口 (第三控制按钮升级, 保留聊天提示为只读轻文案) =====
+        // ===== 6. 陪伴入口与极简三按钮控制区 =====
         guard let ctlStart = call.range(of: "private var controlArea")?.lowerBound else {
             XCTFail("缺少 controlArea 范围")
             return
         }
         let controlBlock = String(call[ctlStart..<call.endIndex])
-        XCTAssertTrue(controlBlock.contains("聊天提示"), "页面必须保留轻量聊天提示")
+        XCTAssertFalse(controlBlock.contains("聊天提示"), "控制区不得叠加聊天提示")
+        XCTAssertFalse(controlBlock.contains("关心我"), "控制区不得叠加第四个主操作")
+        XCTAssertFalse(controlBlock.contains("call.care"), "旧关心我主入口必须移出通话主界面")
         XCTAssertTrue(controlBlock.contains("title: \"陪伴\""), "第三按钮标题必须为 陪伴")
         XCTAssertFalse(controlBlock.contains("title: \"换个提示\""), "第三按钮不得再承担换提示功能")
         XCTAssertFalse(controlBlock.contains("call.topic"), "旧 call.topic identifier 必须移除")
         XCTAssertTrue(controlBlock.contains("选择陪伴方式并重新建立通话"), "必须明确说明会重建会话")
         XCTAssertTrue(controlBlock.contains("call.companion"), "必须提供 call.companion identifier")
+        XCTAssertTrue(controlBlock.contains(".frame(width: 76, height: 76)"), "三个核心功能键必须使用更大的 76pt 点击视觉尺寸")
         XCTAssertTrue(call.contains("CompanionType.allCases"), "陪伴 Sheet 必须由统一 CompanionType 枚举驱动")
         XCTAssertTrue(call.contains("Text(type.displayName)"), "陪伴 Sheet 必须展示统一类型名称")
         XCTAssertTrue(call.contains("Text(type.summary)"), "陪伴 Sheet 必须展示统一公开说明")

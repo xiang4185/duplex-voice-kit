@@ -60,7 +60,6 @@ final class ChatUIContractTests: XCTestCase {
             "chat.input",
             "chat.send",
             "chat.clear",
-            "chat.xiaomao.mode",
             "chat.xiaomao.retry.",
             "chat.message."
         ] {
@@ -87,11 +86,13 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
         XCTAssertTrue(chat.contains("header"))
-        XCTAssertTrue(chat.contains("modeFooter"))
+        XCTAssertFalse(chat.contains("modeFooter"), "底部参与模式条会抢占聊天主内容，不应回归")
+        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"),
+                      "聊天头部只保留当前陪伴类型，不叠加第二层说明")
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
-            2,
-            "顶部与底部非输入区域都必须可主动收起键盘"
+            1,
+            "顶部非输入区域必须可主动收起键盘"
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")

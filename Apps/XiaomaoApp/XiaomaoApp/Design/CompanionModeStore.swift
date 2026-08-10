@@ -49,6 +49,15 @@ enum CompanionType: String, Codable, CaseIterable, Identifiable, Sendable {
         self == .warm ? "CharacterAvatar" : portraitAssetName
     }
 
+    var sceneBackgroundAssetName: String? {
+        switch self {
+        case .warm: return nil
+        case .assertive: return "CompanionAssertiveBackground"
+        case .romantic: return "CompanionRomanticBackground"
+        case .mystery: return "CompanionMysteryBackground"
+        }
+    }
+
     var thumbnailDisplayScale: CGFloat {
         switch self {
         case .warm: return 1.0

@@ -26,17 +26,6 @@ struct CompanionHomeView: View {
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @State private var showPrivacyConfirm = false
-    @State private var greetingIndex = 0
-    // P2.7B-FINAL-MESH: 删除首页旧背景循环光效状态
-    // (背景改为 OrganicMeshBackground 慢流动; CTA 仅按压反馈; 人物 halo 静态)
-    // P2.6B: 生命周期安全的 Timer 持有 (onDisappear 释放) — 仅问候文字轮换使用
-    @State private var greetingTimer: Timer?
-
-    private let greetings: [(text: String, icon: String)] = [
-        ("在呢", "sun.max.fill"),
-        ("想你了", "moon.stars.fill"),
-        ("一直在", "star.fill")
-    ]
 
     // All companion portrait assets share the same 2:3 master template.
     private let heroSize: CGFloat = 200
@@ -46,11 +35,36 @@ struct CompanionHomeView: View {
         visualMode == .mystery ? visual.primary : roleStore.previewRole.themeColor
     }
 
+    private var usesSceneBackground: Bool {
+        companionStore.current.sceneBackgroundAssetName != nil
+    }
+
+    private var usesDarkSceneChrome: Bool {
+        switch companionStore.current {
+        case .assertive, .mystery: return true
+        case .warm, .romantic: return false
+        }
+    }
+
+    private var homeTextPrimary: Color {
+        usesDarkSceneChrome ? .white.opacity(0.96) : visual.textPrimary
+    }
+
+    private var homeTextSecondary: Color {
+        usesDarkSceneChrome ? .white.opacity(0.70) : visual.textSecondary
+    }
+
+    private var homeGlassTint: Color {
+        usesDarkSceneChrome ? .black.opacity(0.24) : visual.glassTint
+    }
+
+    private var homeBorder: Color {
+        usesDarkSceneChrome ? .white.opacity(0.14) : visual.border
+    }
+
     var body: some View {
         ZStack {
-            // P2.7B-FINAL-MESH: 有机渐变背景 (替换原静态线性渐变背景 + 顶部大圆呼吸)
-            OrganicMeshBackground(mode: .home)
-                .ignoresSafeArea()
+            homeBackground
 
             VStack(spacing: 0) {
                 topBar
@@ -62,108 +76,30 @@ struct CompanionHomeView: View {
 
                 Spacer(minLength: 0)
 
-                // 中央: 柔光晕 + 完整形象 (portrait 模式, 2:3 自然比例 + 底部渐隐)
-                ZStack {
-                    // 人物局部 halo — P2.7B-FINAL-MESH: 静态 RadialGradient (固定透明度/尺寸,
-                    // 不再独立 repeatForever 呼吸; 背景流动由 Mesh 承担)
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    visualMode == .mystery ? visual.primary.opacity(0.16) : accent.opacity(0.20),
-                                    visualMode == .mystery ? visual.halo.opacity(0.22) : visual.primarySoft.opacity(0.10),
-                                    .clear
-                                ],
-                                center: .center,
-                                startRadius: 50,
-                                endRadius: 200
-                            )
-                        )
-                        .frame(width: 380, height: 380)
-                        .accessibilityHidden(true)
-
-                    // 底部光斑 (与 portrait 底部渐隐融合, 强化"人像融入光里") — 静态
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [visual.heroGlow, visual.heroGlow.opacity(0.35), .clear],
-                                center: .center,
-                                startRadius: 10,
-                                endRadius: 140
-                            )
-                        )
-                        .frame(width: 300, height: 60)
-                        .offset(y: heroSize * 0.55)
-                        .blur(radius: 24)
-                        .opacity(0.85)
-                        .accessibilityHidden(true)
-
-                    PrivacyAvatar(
-                        size: heroSize,
-                        tappable: true,
-                        variant: roleStore.previewRole.avatarVariant
-                    ) {
-                        // 轻触解锁 → 弹确认浮层
-                        showPrivacyConfirm = true
-                    }
-                    .scaleEffect(avatarBreath ? 1.012 : 0.988)
-                    .offset(y: avatarBreath ? -3 : 0)   // breathe translateY -3px (微浮)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: Theme.avatarBreathDuration).repeatForever(autoreverses: true), value: avatarBreath)
-                    .onAppear { avatarBreath = true }
-                }
-                // 容器高度 = portrait 高度 + 渐隐预留, 让底部光斑有空间铺开
-                .frame(height: heroSize * 3.0 / 2.0 + 40)
+                homeHero
+                .frame(height: usesSceneBackground ? 390 : heroSize * 3.0 / 2.0 + 40)
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.94)
                 .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
 
-                // 状态点声呐 + 动态波形
-                HStack(spacing: 10) {
-                    sonarDot
-                    Text("\(companionStore.current.displayName) · 正在陪你")
-                        .font(Theme.captionFont)
-                        .foregroundStyle(visual.textSecondary)
-                }
-                .padding(.top, 4)
-                .opacity(appeared ? 1 : 0)
-                .animation(.easeOut(duration: 0.4).delay(0.3), value: appeared)
-
-                // 宋体角色名 (letter-spacing 呼吸, 跟随预览角色)
                 Text(roleStore.previewRole.displayName)
                     .font(Theme.title1Font)
-                    .foregroundStyle(visual.textPrimary)
+                    .foregroundStyle(homeTextPrimary)
                     .tracking(0.4)
-                    .padding(.top, 12)
+                    .padding(.top, 4)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 10)
                     .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
 
-                // 时段问候文案轮换 (9s)
-                HStack(spacing: 6) {
-                    Text(greetings[greetingIndex].text)
-                        .font(Theme.subheadFont)
-                        .foregroundStyle(visual.textSecondary)
-                    Image(systemName: greetings[greetingIndex].icon)
-                        .font(.system(size: 13))
-                        .foregroundStyle(accent)
-                }
+                Text("\(companionStore.current.displayName) · 在呢")
+                    .font(Theme.captionFont.weight(.medium))
+                    .foregroundStyle(homeTextSecondary)
                 .padding(.top, 6)
                 .opacity(appeared ? 1 : 0)
                 .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
-                .onAppear {
-                    guard !reduceMotion else { return }
-                    // P2.6B: 持有 Timer 引用, onDisappear 释放, 避免视图销毁后仍更新 UI
-                    greetingTimer?.invalidate()
-                    greetingTimer = Timer.scheduledTimer(withTimeInterval: 9, repeats: true) { _ in
-                        withAnimation(.easeInOut(duration: 0.6)) {
-                            greetingIndex = (greetingIndex + 1) % greetings.count
-                        }
-                    }
-                }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 12)
 
-                // 大胶囊 CTA (待机脉冲)
                 Button(action: {
                     WarmHaptics.comfort()
                     // P2.6D: 非小猫预览角色不得启动真实通话
@@ -175,27 +111,26 @@ struct CompanionHomeView: View {
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 19, weight: .medium))
                         Text(roleStore.previewRole.introCopy)
                             .font(Theme.headlineFont)
                     }
-                    .foregroundStyle(visualMode == .mystery ? visual.textPrimary : visual.onPrimary)
+                    .foregroundStyle(usesDarkSceneChrome ? .white : visual.onPrimary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 60)
+                    .frame(height: 64)
                     // P2.8A: 整个胶囊区域可点击, 单击一次立即进入通话页
                     .contentShape(Capsule())
                     .glassEffect(
                         .regular
-                            .tint(visualMode == .mystery ? visual.primarySoft : visual.primary)
+                            .tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)
                             .interactive(),
                         in: .capsule
                     )
                     .overlay {
-                        if visualMode == .mystery {
-                            Capsule().stroke(visual.border.opacity(0.9), lineWidth: 0.8)
+                        if usesSceneBackground {
+                            Capsule().stroke(homeBorder.opacity(0.9), lineWidth: 0.8)
                         }
                     }
-                    // P2.7B: 更柔的双层阴影 (外层柔散 + 内层贴近), 避免"硬贴"感
                     .shadow(color: visual.shadow.opacity(0.75), radius: 16, x: 0, y: 7)
                 }
                 .buttonStyle(PressableButtonStyle())
@@ -224,50 +159,7 @@ struct CompanionHomeView: View {
                 .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.75).delay(0.5), value: appeared)
                 .accessibilityIdentifier("home.start")
 
-                // 时间脚注 (无真实数据时诚实文案, 不显示假时长)
-                Text("连接后即可开始陪伴")
-                    .font(Theme.footnoteFont)
-                    .foregroundStyle(visual.textTertiary)
-                    .padding(.top, 10)
-                    .opacity(appeared ? 1 : 0)
-                .animation(.easeOut(duration: 0.4).delay(0.6), value: appeared)
-
-                // 底部回顾入口
-                Button(action: {
-                    WarmHaptics.action()
-                    // P2.6I: 直接进入回顾页, 不再弹出静态假历史
-                    openHistory()
-                }) {
-                    HStack(spacing: 12) {
-                        PrivacyAvatar(size: 38, tappable: false)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("陪伴记录")
-                                .font(Theme.subheadFont)
-                                .foregroundStyle(visual.textPrimary)
-                            Text("当前版本暂不展示聊天或录音历史")
-                                .font(Theme.captionFont)
-                                .foregroundStyle(visual.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(visual.textTertiary)
-                    }
-                    .padding(14)
-                    .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).stroke(visual.border.opacity(visualMode == .mystery ? 0.88 : 0.45), lineWidth: 0.7))
-                }
-                // P2.6J+: 可点击卡片按压反馈
-                .buttonStyle(PressableCardStyle())
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
-                .padding(.bottom, 12)
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 12)
-                .animation(.easeOut(duration: 0.4).delay(0.7), value: appeared)
-                .accessibilityIdentifier("home.history")
+                Spacer(minLength: 18)
             }
         }
         .accessibilityIdentifier("home.screen")
@@ -286,10 +178,76 @@ struct CompanionHomeView: View {
         }
         // P2.6B: 视图销毁时释放 Timer, 避免泄漏与退出后更新 UI
         .onDisappear {
-            greetingTimer?.invalidate()
-            greetingTimer = nil
-            // P2.6D: 视图销毁取消延时 toast
             toastTask?.cancel()
+        }
+    }
+
+    @ViewBuilder
+    private var homeBackground: some View {
+        if let assetName = companionStore.current.sceneBackgroundAssetName {
+            Image(assetName)
+                .resizable()
+                .scaledToFill()
+                .scaleEffect(privacy.effectiveReveal() ? 1.0 : 1.04)
+                .blur(radius: privacy.effectiveReveal() ? 0 : 14)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
+            LinearGradient(
+                stops: [
+                    .init(color: usesDarkSceneChrome ? .black.opacity(0.18) : .white.opacity(0.03), location: 0.0),
+                    .init(color: .clear, location: 0.42),
+                    .init(color: visual.background.opacity(usesDarkSceneChrome ? 0.08 : 0.12), location: 0.66),
+                    .init(color: usesDarkSceneChrome ? .black.opacity(0.76) : visual.background.opacity(0.86), location: 1.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+        } else {
+            OrganicMeshBackground(mode: .home)
+                .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private var homeHero: some View {
+        if usesSceneBackground {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !privacy.effectiveReveal() {
+                        showPrivacyConfirm = true
+                    }
+                }
+                .accessibilityIdentifier(privacy.effectiveReveal() ? "avatar.revealed" : "avatar.locked")
+        } else {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [accent.opacity(0.20), visual.primarySoft.opacity(0.10), .clear],
+                            center: .center,
+                            startRadius: 50,
+                            endRadius: 200
+                        )
+                    )
+                    .frame(width: 380, height: 380)
+                    .accessibilityHidden(true)
+
+                PrivacyAvatar(
+                    size: heroSize,
+                    tappable: true,
+                    variant: roleStore.previewRole.avatarVariant
+                ) {
+                    showPrivacyConfirm = true
+                }
+                .scaleEffect(avatarBreath ? 1.012 : 0.988)
+                .offset(y: avatarBreath ? -3 : 0)
+                .animation(reduceMotion ? nil : .easeInOut(duration: Theme.avatarBreathDuration).repeatForever(autoreverses: true), value: avatarBreath)
+                .onAppear { avatarBreath = true }
+            }
         }
     }
 
@@ -302,21 +260,35 @@ struct CompanionHomeView: View {
         HStack {
             Button {
                 WarmHaptics.action()
-                // P2.6J: 齿轮进入设置, 不再进入回顾页
                 openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(visual.textSecondary)
+                    .foregroundStyle(homeTextSecondary)
                     .frame(width: 40, height: 40)
-                    .background(visual.glassTint, in: Circle())
+                    .background(homeGlassTint, in: Circle())
                     .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(visual.border.opacity(visualMode == .mystery ? 0.88 : 0.45), lineWidth: 0.7))
+                    .overlay(Circle().stroke(homeBorder.opacity(0.88), lineWidth: 0.7))
             }
             .accessibilityLabel("设置")
             .accessibilityIdentifier("home.settings")
 
             Spacer()
+
+            Button {
+                WarmHaptics.action()
+                openHistory()
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(homeTextSecondary)
+                    .frame(width: 40, height: 40)
+                    .background(homeGlassTint, in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(homeBorder.opacity(0.88), lineWidth: 0.7))
+            }
+            .accessibilityLabel("陪伴记录")
+            .accessibilityIdentifier("home.history")
         }
     }
 

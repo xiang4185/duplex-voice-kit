@@ -105,9 +105,6 @@ struct ChatView: View {
                 }
             }
 
-            modeFooter
-                .onTapGesture { inputFocused = false }
-
             ChatComposerView(
                 draft: $viewModel.draft,
                 canSend: viewModel.canSend,
@@ -159,7 +156,7 @@ struct ChatView: View {
         HStack(spacing: 10) {
             PageHeader(
                 "小猫",
-                subtitle: "\(companionStore.current.displayName) · 开发者和小猫都在",
+                subtitle: companionStore.current.displayName,
                 avatarSize: 40
             )
 
@@ -310,21 +307,6 @@ struct ChatView: View {
             .clipShape(Capsule())
             .frame(maxWidth: .infinity)
             .accessibilityIdentifier("chat.degraded")
-    }
-
-    private var modeFooter: some View {
-        HStack(spacing: 6) {
-            Text("🐱")
-                .font(.system(size: 13))
-            Text(viewModel.xiaomaoMode.footerTitle)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(visual.primary)
-            Spacer()
-        }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, 7)
-        .background(visual.backgroundElevated)
-        .accessibilityIdentifier("chat.xiaomao.mode")
     }
 
     private func isGrouped(message: ChatMessage, direction: Int) -> Bool {

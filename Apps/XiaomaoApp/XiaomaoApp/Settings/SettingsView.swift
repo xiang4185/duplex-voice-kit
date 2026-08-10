@@ -48,37 +48,21 @@ struct SettingsView: View {
                     .offset(y: appeared ? 0 : 10)
                     .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
 
-                    // 使用统计卡 (数字滚动)
-                    statsCard
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.22), value: appeared)
-
-                    // 订阅卡
-                    subCard
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.3), value: appeared)
-
                     // 隐私与授权
                     Text("隐私与授权")
                         .font(Theme.title3Font)
                         .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 20)
-                        .padding(.top, 24)
+                        .padding(.top, 22)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.easeOut(duration: 0.4).delay(0.36), value: appeared)
+                        .animation(.easeOut(duration: 0.4).delay(0.22), value: appeared)
 
                     privacyGroup
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
+                        .animation(.easeOut(duration: 0.45).delay(0.28), value: appeared)
 
                     Button {
                         NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
@@ -93,14 +77,6 @@ struct SettingsView: View {
                     .padding(.top, 12)
                     .accessibilityIdentifier("settings.reconfigure")
 
-                    // 授权说明卡
-                    privacyNote
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.48), value: appeared)
-
                     // 关于
                     Text("关于")
                         .font(Theme.title3Font)
@@ -108,7 +84,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.easeOut(duration: 0.4).delay(0.54), value: appeared)
+                        .animation(.easeOut(duration: 0.4).delay(0.36), value: appeared)
 
                     aboutGroup
                         .padding(.horizontal, 20)
@@ -116,7 +92,7 @@ struct SettingsView: View {
                         .padding(.bottom, 40)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.6), value: appeared)
+                        .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
                 }
             }
         }
@@ -323,6 +299,25 @@ struct SettingsView: View {
     // MARK: 关于组
     private var aboutGroup: some View {
         VStack(spacing: 0) {
+            Button {
+                WarmHaptics.action()
+                showProSheet = true
+            } label: {
+                HStack {
+                    Label("小猫 Pro · 彩蛋", systemImage: "sparkles")
+                        .font(Theme.bodyFont)
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .padding(.horizontal, 20)
+                .frame(minHeight: 56)
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("settings.pro")
+            Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "关于小猫", detail: "版本 1.0 (0)")
             Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "帮助与反馈", detail: nil)

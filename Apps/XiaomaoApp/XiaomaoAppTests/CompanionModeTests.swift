@@ -18,6 +18,10 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertEqual(CompanionType.assertive.portraitAssetName, "CompanionAssertive")
         XCTAssertEqual(CompanionType.romantic.portraitAssetName, "CompanionRomantic")
         XCTAssertEqual(CompanionType.mystery.portraitAssetName, "CompanionMystery")
+        XCTAssertNil(CompanionType.warm.sceneBackgroundAssetName)
+        XCTAssertEqual(CompanionType.assertive.sceneBackgroundAssetName, "CompanionAssertiveBackground")
+        XCTAssertEqual(CompanionType.romantic.sceneBackgroundAssetName, "CompanionRomanticBackground")
+        XCTAssertEqual(CompanionType.mystery.sceneBackgroundAssetName, "CompanionMysteryBackground")
     }
 
     func testPublicSampleCompanionPortraitAssetsExist() throws {
@@ -29,7 +33,10 @@ final class CompanionModeTests: XCTestCase {
         for path in [
             "CompanionAssertive.imageset/companion-assertive.png",
             "CompanionRomantic.imageset/companion-romantic.png",
-            "CompanionMystery.imageset/companion-mystery.png"
+            "CompanionMystery.imageset/companion-mystery.png",
+            "CompanionAssertiveBackground.imageset/companion-assertive-background.png",
+            "CompanionRomanticBackground.imageset/companion-romantic-background.png",
+            "CompanionMysteryBackground.imageset/companion-mystery-background.png"
         ] {
             let url = assetsRoot.appendingPathComponent(path)
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "Missing public sample asset: \(path)")
@@ -133,7 +140,10 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertTrue(theme.contains("let dangerSoft: Color"))
         XCTAssertTrue(call.contains("visual.dangerSoft"))
         XCTAssertTrue(call.contains("visual.glassTint"))
-        XCTAssertTrue(home.contains("visualMode == .mystery ? visual.primarySoft : visual.primary"))
+        XCTAssertTrue(home.contains("sceneBackgroundAssetName"))
+        XCTAssertTrue(call.contains("sceneBackgroundAssetName"))
+        XCTAssertTrue(home.contains("Image(assetName)"))
+        XCTAssertTrue(call.contains("Image(assetName)"))
         XCTAssertTrue(components.contains("visualMode == .mystery ? tokens.primarySoft : tokens.primary"))
         XCTAssertTrue(call.contains("Image(type.thumbnailAssetName)"))
 
