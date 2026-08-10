@@ -256,6 +256,22 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(service.sendRequests.first?.xiaomaoMode, .always)
     }
 
+    func testCompanionTypeIsForwardedForTheNextMessage() async {
+        let service = ChatServiceSpy(
+            historyResults: [.success(ChatHistoryResult(
+                sessionID: "server-session",
+                messages: []
+            ))]
+        )
+        let viewModel = ChatViewModel(service: service)
+        await viewModel.loadHistory()
+        viewModel.draft = "合成消息"
+
+        await viewModel.send(companionTypeID: CompanionType.romantic.rawValue)
+
+        XCTAssertEqual(service.sendRequests.first?.companionTypeID, "romantic")
+    }
+
     func testSilentHistoryRefreshReceivesHumanDeveloperMessageWithoutLoadingState() async {
         let developer = serverMessage(
             id: "developer-poll",
@@ -713,17 +729,20 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         let sessionID: String
         let requestID: String
         let xiaomaoMode: XiaomaoParticipationMode
+        let companionTypeID: String
 
         init(
             message: String,
             sessionID: String,
             requestID: String,
-            xiaomaoMode: XiaomaoParticipationMode = .auto
+            xiaomaoMode: XiaomaoParticipationMode = .auto,
+            companionTypeID: String = CompanionType.warm.rawValue
         ) {
             self.message = message
             self.sessionID = sessionID
             self.requestID = requestID
             self.xiaomaoMode = xiaomaoMode
+            self.companionTypeID = companionTypeID
         }
     }
 
@@ -807,13 +826,15 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         message: String,
         sessionID: String,
         requestID: String,
-        xiaomaoMode: XiaomaoParticipationMode
+        xiaomaoMode: XiaomaoParticipationMode,
+        companionTypeID: String
     ) async throws -> ChatSendResult {
         recordSendRequest(.init(
             message: message,
             sessionID: sessionID,
             requestID: requestID,
-            xiaomaoMode: xiaomaoMode
+            xiaomaoMode: xiaomaoMode,
+            companionTypeID: companionTypeID
         ))
         onSend?()
         if sendDelayNanoseconds > 0 {

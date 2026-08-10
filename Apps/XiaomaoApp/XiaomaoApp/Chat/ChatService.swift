@@ -6,7 +6,8 @@ protocol ChatServicing: Sendable {
         message: String,
         sessionID: String,
         requestID: String,
-        xiaomaoMode: XiaomaoParticipationMode
+        xiaomaoMode: XiaomaoParticipationMode,
+        companionTypeID: String
     ) async throws -> ChatSendResult
     func retryXiaomao(
         turnID: String,
@@ -26,7 +27,23 @@ extension ChatServicing {
             message: message,
             sessionID: sessionID,
             requestID: requestID,
-            xiaomaoMode: .auto
+            xiaomaoMode: .auto,
+            companionTypeID: CompanionType.warm.rawValue
+        )
+    }
+
+    func send(
+        message: String,
+        sessionID: String,
+        requestID: String,
+        xiaomaoMode: XiaomaoParticipationMode
+    ) async throws -> ChatSendResult {
+        try await send(
+            message: message,
+            sessionID: sessionID,
+            requestID: requestID,
+            xiaomaoMode: xiaomaoMode,
+            companionTypeID: CompanionType.warm.rawValue
         )
     }
 }
@@ -104,12 +121,14 @@ actor ChatService: ChatServicing {
         let message: String
         let requestID: String
         let xiaomaoMode: String
+        let companionTypeID: String
 
         private enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case message
             case requestID = "request_id"
             case xiaomaoMode = "xiaomao_mode"
+            case companionTypeID = "companion_type"
         }
     }
 
@@ -274,7 +293,8 @@ actor ChatService: ChatServicing {
         message: String,
         sessionID: String,
         requestID: String,
-        xiaomaoMode: XiaomaoParticipationMode
+        xiaomaoMode: XiaomaoParticipationMode,
+        companionTypeID: String
     ) async throws -> ChatSendResult {
         let response = try await execute(
             route: "/v1/chat",
@@ -282,7 +302,8 @@ actor ChatService: ChatServicing {
                 sessionID: sessionID,
                 message: message,
                 requestID: requestID,
-                xiaomaoMode: xiaomaoMode.rawValue
+                xiaomaoMode: xiaomaoMode.rawValue,
+                companionTypeID: companionTypeID
             ),
             as: SendResponse.self
         )

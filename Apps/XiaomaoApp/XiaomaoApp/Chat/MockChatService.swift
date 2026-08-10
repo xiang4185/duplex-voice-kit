@@ -51,11 +51,17 @@ actor MockChatService: ChatServicing {
         message: String,
         sessionID: String,
         requestID: String,
-        xiaomaoMode: XiaomaoParticipationMode
+        xiaomaoMode: XiaomaoParticipationMode,
+        companionTypeID: String
     ) async throws -> ChatSendResult {
         try await pause(delays.sendNanoseconds)
         let key = "send:\(requestID)"
-        let fingerprint = Self.fingerprint(sessionID, message, xiaomaoMode.rawValue)
+        let fingerprint = Self.fingerprint(
+            sessionID,
+            message,
+            xiaomaoMode.rawValue,
+            companionTypeID
+        )
         if let stored = storedResults[key] {
             guard case let .send(storedFingerprint, result) = stored,
                   storedFingerprint == fingerprint else {

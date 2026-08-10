@@ -115,7 +115,9 @@ struct ChatView: View {
                     inputFocused = false
                     Task {
                         await Task.yield()
-                        await viewModel.send()
+                        await viewModel.send(
+                            companionTypeID: companionStore.current.rawValue
+                        )
                     }
                 },
                 inputFocused: $inputFocused
