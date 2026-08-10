@@ -127,8 +127,8 @@ final class CompanionModeTests: XCTestCase {
         let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
         let components = try source("XiaomaoApp/Design/Components/VisualComponents.swift")
 
-        XCTAssertTrue(call.contains("call.companion.sheet"))
-        XCTAssertTrue(call.contains("call.companion.\\(type.rawValue)"))
+        XCTAssertTrue(call.contains("var identifierPrefix: String = \"call.companion\""))
+        XCTAssertTrue(call.contains("\\(identifierPrefix).\\(type.rawValue)"))
         XCTAssertTrue(call.contains("正在切换陪伴方式…"))
         XCTAssertTrue(uploader.contains("\"companion_type\": .string(companionTypeID)"))
         XCTAssertTrue(theme.contains("static func visual(_ mode: AppVisualMode) -> VisualTokens"))
