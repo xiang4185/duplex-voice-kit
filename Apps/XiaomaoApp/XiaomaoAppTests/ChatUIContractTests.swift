@@ -147,9 +147,10 @@ final class ChatUIContractTests: XCTestCase {
         let sendBlock = String(chat[sendRange.lowerBound..<focusBindingRange.lowerBound])
 
         let dismiss = try XCTUnwrap(sendBlock.range(of: "inputFocused = false"))
-        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send()"))
+        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send("))
         XCTAssertLessThan(dismiss.lowerBound, request.lowerBound)
         XCTAssertTrue(sendBlock.contains("await Task.yield()"))
+        XCTAssertTrue(sendBlock.contains("companionTypeID: companionStore.current.rawValue"))
         XCTAssertFalse(chat.contains("inputFocused = true"))
     }
 
