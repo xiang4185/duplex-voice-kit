@@ -154,7 +154,8 @@ final class ChatUIContractTests: XCTestCase {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
         let model = try source("XiaomaoApp/Models/ChatMessage.swift")
 
-        XCTAssertTrue(chat.contains("开发者和小猫都在"))
+        XCTAssertFalse(chat.contains("开发者和小猫都在"), "极简头部不得重复说明参与者")
+        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"))
         XCTAssertTrue(model.contains("case developer"))
         XCTAssertTrue(model.contains("case xiaomao"))
         XCTAssertFalse(model.contains("case companion"))

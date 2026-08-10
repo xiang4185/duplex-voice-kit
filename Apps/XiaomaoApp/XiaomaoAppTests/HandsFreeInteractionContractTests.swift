@@ -81,7 +81,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       "Xiaomao 宿主必须使用低延迟结束静音配置")
 
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
-        XCTAssertTrue(call.contains(".frame(height: 46)"),
+        XCTAssertTrue(call.contains(".frame(height: 38)"),
                       "语音转写必须占用固定高度，出现/消失不得推动人物形象")
         XCTAssertFalse(call.contains("empathy.hug"), "不得保留无真实作用的抱抱我按钮")
         XCTAssertFalse(call.contains("empathy.topic"), "不得保留只改本地文案的换个话题按钮")
@@ -556,8 +556,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("0.985"), "按压 scale 必须约 0.985")
         XCTAssertTrue(home.contains("accessibilityReduceMotion"), "PressableCardStyle 必须遵循 Reduce Motion")
 
-        // 应用位置: 首页记录入口 / 设置关于行 (通用按钮按压样式保留)
-        XCTAssertTrue(home.contains("buttonStyle(PressableCardStyle())"), "首页记录入口必须使用 PressableCardStyle")
+        // 首页记录已收成顶栏圆形轻入口；设置关于行继续使用通用按压样式。
+        XCTAssertTrue(home.contains("home.history"), "首页记录入口必须保留")
+        XCTAssertTrue(home.contains("clock.arrow.circlepath"), "首页记录入口必须为紧凑顶栏按钮")
         XCTAssertTrue(settings.contains("buttonStyle(PressableCardStyle())"), "设置关于行必须使用 PressableCardStyle")
         // P2.8A: 角色页 1.0 正式角色卡 (删除旧三角色 pressedRole/0.985/handleRoleTap 断言)
         XCTAssertFalse(characters.contains("pressedRole"), "1.0 角色页不得保留多角色按压状态")
@@ -712,10 +713,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须使用 glassEffect")
         XCTAssertTrue(home.contains(".interactive()"), "首页 CTA 必须交互玻璃")
         XCTAssertTrue(
-            home.contains(".tint(visualMode == .mystery ? visual.primarySoft : visual.primary)"),
-            "首页 CTA 必须由 Warm / Mystery 全局视觉 Token 驱动 tint"
+            home.contains(".tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)"),
+            "首页 CTA 必须跟随完整场景明暗与全局视觉 Token 驱动 tint"
         )
-        XCTAssertTrue(home.contains("if visualMode == .mystery"), "Mystery 首页 CTA 必须有独立暗色玻璃边界")
+        XCTAssertTrue(home.contains("if usesSceneBackground"), "完整场景首页 CTA 必须有独立玻璃边界")
         XCTAssertFalse(home.contains(".background(Theme.primary, in: Capsule())"), "首页 CTA 不得叠加实体胶囊背景")
         XCTAssertFalse(home.contains("1.015"), "不得保留 1.015 强缩放")
 
@@ -1137,9 +1138,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(topBar.contains("width: 40, height: 40"), "topBar 必须保留 40×40 触控区域")
 
         // ===== 3b. 首页主体层级 (全文件) =====
-        XCTAssertTrue(home.contains("正在陪你"), "首页主体必须保留\"正在陪你\"")
-        XCTAssertTrue(home.contains("greetings"), "问候数组必须保留")
-        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "首页必须使用 OrganicMeshBackground(mode: .home)")
+        XCTAssertTrue(home.contains("· 在呢"), "首页主体必须保留一条轻量陪伴状态")
+        XCTAssertFalse(home.contains("greetings"), "极简首页不得恢复轮换问候数组")
+        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴必须保留 OrganicMeshBackground 回退")
+        XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "其他陪伴必须使用完整场景背景")
         // CTA / 历史入口 / 隐私确认
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须保留 glassEffect")
         XCTAssertTrue(home.contains("interactive()"), "首页 CTA 必须保留 interactive")
