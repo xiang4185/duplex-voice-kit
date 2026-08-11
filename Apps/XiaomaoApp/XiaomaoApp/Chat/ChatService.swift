@@ -81,7 +81,7 @@ struct ChatSendResult: Equatable, Sendable {
     }
 
     var userMessage: ChatMessage {
-        messages.first(where: { $0.participant == .user }) ?? messages[0]
+        messages.first(where: { $0.role == .user }) ?? messages[0]
     }
 
     var developerMessage: ChatMessage? {
@@ -105,7 +105,13 @@ struct ChatClearResult: Equatable, Sendable {
 }
 
 actor ChatService: ChatServicing {
-    private struct HistoryRequest: Encodable {}
+    private struct HistoryRequest: Encodable {
+        let targetDeviceID: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case targetDeviceID = "target_device_id"
+        }
+    }
     private struct HistoryResponse: Decodable {
         let sessionID: String
         let messages: [ServerMessage]
@@ -122,6 +128,7 @@ actor ChatService: ChatServicing {
         let requestID: String
         let xiaomaoMode: String
         let companionTypeID: String
+        let targetDeviceID: String?
 
         private enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
@@ -129,6 +136,7 @@ actor ChatService: ChatServicing {
             case requestID = "request_id"
             case xiaomaoMode = "xiaomao_mode"
             case companionTypeID = "companion_type"
+            case targetDeviceID = "target_device_id"
         }
     }
 
@@ -157,12 +165,14 @@ actor ChatService: ChatServicing {
         let requestID: String
         let turnID: String
         let participant: String
+        let targetDeviceID: String?
 
         private enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case requestID = "request_id"
             case turnID = "turn_id"
             case participant
+            case targetDeviceID = "target_device_id"
         }
     }
 
@@ -189,10 +199,12 @@ actor ChatService: ChatServicing {
     private struct ClearRequest: Encodable {
         let sessionID: String
         let requestID: String
+        let targetDeviceID: String?
 
         private enum CodingKeys: String, CodingKey {
             case sessionID = "session_id"
             case requestID = "request_id"
+            case targetDeviceID = "target_device_id"
         }
     }
 
@@ -268,11 +280,13 @@ actor ChatService: ChatServicing {
     }
 
     private let backend: any BackendAdapter
+    private let targetDeviceID: String?
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init(backend: any BackendAdapter) {
+    init(backend: any BackendAdapter, targetDeviceID: String? = nil) {
         self.backend = backend
+        self.targetDeviceID = targetDeviceID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
     }
@@ -280,7 +294,7 @@ actor ChatService: ChatServicing {
     func loadHistory() async throws -> ChatHistoryResult {
         let response = try await execute(
             route: "/v1/chat/history",
-            body: HistoryRequest(),
+            body: HistoryRequest(targetDeviceID: targetDeviceID),
             as: HistoryResponse.self
         )
         return ChatHistoryResult(
@@ -303,14 +317,17 @@ actor ChatService: ChatServicing {
                 message: message,
                 requestID: requestID,
                 xiaomaoMode: xiaomaoMode.rawValue,
-                companionTypeID: companionTypeID
+                companionTypeID: companionTypeID,
+                targetDeviceID: targetDeviceID
             ),
             as: SendResponse.self
         )
         let messages = try response.messages.map { try $0.clientMessage() }
         guard response.persisted,
               !response.turnID.isEmpty,
-              messages.contains(where: { $0.participant == .user }),
+              messages.contains(where: {
+                  $0.participant == (targetDeviceID == nil ? .user : .developer)
+              }),
               messages.allSatisfy({ $0.turnID == response.turnID }) else {
             throw AppError.protocolError("invalid_chat_contract")
         }
@@ -338,7 +355,8 @@ actor ChatService: ChatServicing {
                 sessionID: sessionID,
                 requestID: requestID,
                 turnID: turnID,
-                participant: ChatParticipant.xiaomao.rawValue
+                participant: ChatParticipant.xiaomao.rawValue,
+                targetDeviceID: targetDeviceID
             ),
             as: RetryResponse.self
         )
@@ -356,7 +374,11 @@ actor ChatService: ChatServicing {
     func clear(sessionID: String, requestID: String) async throws -> ChatClearResult {
         let response = try await execute(
             route: "/v1/chat/clear",
-            body: ClearRequest(sessionID: sessionID, requestID: requestID),
+            body: ClearRequest(
+                sessionID: sessionID,
+                requestID: requestID,
+                targetDeviceID: targetDeviceID
+            ),
             as: ClearResponse.self
         )
         return ChatClearResult(sessionID: response.sessionID, cleared: response.cleared)
@@ -392,4 +414,8 @@ actor ChatService: ChatServicing {
         if let date = fractional.date(from: rawValue) { return date }
         return ISO8601DateFormatter().date(from: rawValue)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

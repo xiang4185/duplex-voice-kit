@@ -318,7 +318,9 @@ struct ChatView: View {
         let otherIndex = index + direction
         guard viewModel.messages.indices.contains(otherIndex) else { return false }
         let other = viewModel.messages[otherIndex]
-        return message.participant == other.participant && message.turnID == other.turnID
+        return message.participant == other.participant
+            && message.role == other.role
+            && message.turnID == other.turnID
     }
 
     private func isLastMessageInTurn(_ message: ChatMessage) -> Bool {

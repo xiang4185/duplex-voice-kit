@@ -4,6 +4,7 @@ struct AppEnvironment: Sendable {
     let apiBaseURL: URL?
     let voiceWebSocketURL: URL?
     let deviceID: String
+    let chatTargetDeviceID: String?
     let appEnvironment: String
     let enableMockVoice: Bool
     let enableMemory: Bool
@@ -17,6 +18,7 @@ struct AppEnvironment: Sendable {
         apiBaseURL: URL?,
         voiceWebSocketURL: URL?,
         deviceID: String,
+        chatTargetDeviceID: String? = nil,
         appEnvironment: String,
         enableMockVoice: Bool,
         enableMemory: Bool,
@@ -29,6 +31,7 @@ struct AppEnvironment: Sendable {
         self.apiBaseURL = apiBaseURL
         self.voiceWebSocketURL = voiceWebSocketURL
         self.deviceID = deviceID
+        self.chatTargetDeviceID = chatTargetDeviceID
         self.appEnvironment = appEnvironment
         self.enableMockVoice = enableMockVoice
         self.enableMemory = enableMemory
@@ -92,11 +95,14 @@ struct AppEnvironment: Sendable {
         let bundleAPIURL = URL(string: value("API_BASE_URL"))
         let bundleVoiceURL = URL(string: value("VOICE_WS_URL"))
         let bundleDeviceID = value("DEVICE_ID")
+        let bundleChatTargetDeviceID = value("CHAT_TARGET_DEVICE_ID")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let usesRuntimeConfiguration = runtimeConfiguration != nil
         return AppEnvironment(
             apiBaseURL: runtimeConfiguration?.apiBaseURL ?? bundleAPIURL,
             voiceWebSocketURL: runtimeConfiguration?.voiceWebSocketURL ?? bundleVoiceURL,
             deviceID: runtimeConfiguration?.deviceID ?? bundleDeviceID,
+            chatTargetDeviceID: bundleChatTargetDeviceID.isEmpty ? nil : bundleChatTargetDeviceID,
             appEnvironment: value("APP_ENVIRONMENT"),
             enableMockVoice: enableMockVoice,
             enableMemory: value("ENABLE_MEMORY").uppercased() == "YES",
@@ -115,6 +121,7 @@ struct AppEnvironment: Sendable {
             apiBaseURL: apiBaseURL,
             voiceWebSocketURL: voiceWebSocketURL,
             deviceID: deviceID,
+            chatTargetDeviceID: chatTargetDeviceID,
             appEnvironment: appEnvironment,
             enableMockVoice: enableMockVoice,
             enableMemory: enableMemory,

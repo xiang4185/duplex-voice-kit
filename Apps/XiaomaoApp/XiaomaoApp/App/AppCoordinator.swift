@@ -59,12 +59,18 @@ final class AppCoordinator: ObservableObject {
             self.chatService = MockChatService()
             self.smallThingsStore = SmallThingsStore()
         } else if dependencies.mode == .production {
-            self.chatService = ChatService(backend: dependencies.backend)
+            self.chatService = ChatService(
+                backend: dependencies.backend,
+                targetDeviceID: environment.chatTargetDeviceID
+            )
             self.smallThingsStore = SmallThingsStore(
                 service: ProductionSmallThingsService(backend: dependencies.backend)
             )
         } else {
-            self.chatService = ChatService(backend: dependencies.backend)
+            self.chatService = ChatService(
+                backend: dependencies.backend,
+                targetDeviceID: environment.chatTargetDeviceID
+            )
             self.smallThingsStore = SmallThingsStore(entries: [])
         }
 

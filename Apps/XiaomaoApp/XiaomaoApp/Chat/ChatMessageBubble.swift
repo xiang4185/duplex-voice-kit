@@ -10,7 +10,7 @@ struct ChatMessageBubble: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
-            if message.participant == .user {
+            if message.role == .user {
                 Spacer(minLength: 56)
                 bubble
             } else {
@@ -31,10 +31,10 @@ struct ChatMessageBubble: View {
 
     private var bubble: some View {
         VStack(
-            alignment: message.participant == .user ? .trailing : .leading,
+            alignment: message.role == .user ? .trailing : .leading,
             spacing: 5
         ) {
-            if message.participant != .user && !groupedWithPrevious {
+            if message.role != .user && !groupedWithPrevious {
                 Text(message.participant.displayName)
                     .font(Theme.captionFont)
                     .foregroundStyle(visual.textSecondary)
