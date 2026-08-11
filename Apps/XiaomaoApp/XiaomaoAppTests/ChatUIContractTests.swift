@@ -133,9 +133,20 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
         XCTAssertTrue(bubble.contains("style: .thumbnail"), "聊天头像必须使用缩略图构图")
         XCTAssertFalse(bubble.contains("Text(\"🐱\")"), "小猫消息不得继续使用固定 emoji 头像")
-        XCTAssertTrue(bubble.contains("message.role == .user"))
+        XCTAssertTrue(bubble.contains("message.participant == localParticipant"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
+    }
+
+    func testSharedChatBubbleAlignmentUsesLocalParticipantIdentity() throws {
+        let mainTab = try source("XiaomaoApp/App/MainTabView.swift")
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
+
+        XCTAssertTrue(mainTab.contains("environment.chatTargetDeviceID == nil ? .user : .developer"))
+        XCTAssertTrue(chat.contains("localParticipant: localParticipant"))
+        XCTAssertTrue(bubble.contains("private var isLocalMessage: Bool { message.participant == localParticipant }"))
+        XCTAssertFalse(bubble.contains("if message.role == .user"))
     }
 
     func testSendDismissesKeyboardBeforeAsyncRequestAndNeverRestoresFocus() throws {

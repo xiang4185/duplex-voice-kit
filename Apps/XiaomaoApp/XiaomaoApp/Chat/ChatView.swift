@@ -10,6 +10,7 @@ struct ChatView: View {
     @EnvironmentObject private var companionStore: CompanionModeStore
 
     private let isMockMode: Bool
+    private let localParticipant: ChatParticipant
     private let onReconfigure: () -> Void
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
@@ -17,10 +18,12 @@ struct ChatView: View {
     init(
         viewModel: @autoclosure @escaping () -> ChatViewModel,
         isMockMode: Bool,
+        localParticipant: ChatParticipant = .user,
         onReconfigure: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.isMockMode = isMockMode
+        self.localParticipant = localParticipant
         self.onReconfigure = onReconfigure
     }
 
@@ -36,6 +39,7 @@ struct ChatView: View {
                         ForEach(viewModel.messages) { message in
                             ChatMessageBubble(
                                 message: message,
+                                localParticipant: localParticipant,
                                 groupedWithPrevious: isGrouped(message: message, direction: -1),
                                 groupedWithNext: isGrouped(message: message, direction: 1)
                             )
