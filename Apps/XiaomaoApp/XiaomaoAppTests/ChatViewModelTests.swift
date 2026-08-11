@@ -114,7 +114,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages, authoritative.messages)
         XCTAssertEqual(viewModel.messages.first?.createdAt, timestamp)
         XCTAssertTrue(viewModel.messages.first?.id.hasPrefix("mock-user-") == true)
-        XCTAssertTrue(viewModel.messages.contains { $0.id.hasPrefix("mock-developer-") })
+        XCTAssertFalse(viewModel.messages.contains { $0.participant == .developer })
         XCTAssertTrue(viewModel.messages.last?.id.hasPrefix("mock-xiaomao-") == true)
     }
 

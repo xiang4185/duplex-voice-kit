@@ -133,7 +133,7 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
         XCTAssertTrue(bubble.contains("style: .thumbnail"), "聊天头像必须使用缩略图构图")
         XCTAssertFalse(bubble.contains("Text(\"🐱\")"), "小猫消息不得继续使用固定 emoji 头像")
-        XCTAssertTrue(bubble.contains("message.participant == .user"))
+        XCTAssertTrue(bubble.contains("message.role == .user"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
     }
