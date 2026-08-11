@@ -2,15 +2,17 @@ import SwiftUI
 
 struct ChatMessageBubble: View {
     let message: ChatMessage
+    var localParticipant: ChatParticipant = .user
     var groupedWithPrevious: Bool = false
     var groupedWithNext: Bool = false
     @Environment(\.appVisualMode) private var visualMode
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
+    private var isLocalMessage: Bool { message.participant == localParticipant }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
-            if message.role == .user {
+            if isLocalMessage {
                 Spacer(minLength: 56)
                 bubble
             } else {
@@ -31,10 +33,10 @@ struct ChatMessageBubble: View {
 
     private var bubble: some View {
         VStack(
-            alignment: message.role == .user ? .trailing : .leading,
+            alignment: isLocalMessage ? .trailing : .leading,
             spacing: 5
         ) {
-            if message.role != .user && !groupedWithPrevious {
+            if !isLocalMessage && !groupedWithPrevious {
                 Text(message.participant.displayName)
                     .font(Theme.captionFont)
                     .foregroundStyle(visual.textSecondary)

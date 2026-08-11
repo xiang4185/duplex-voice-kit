@@ -68,6 +68,7 @@ struct MainTabView: View {
             ChatView(
                 viewModel: chatViewModel,
                 isMockMode: environment.hostAdapters.mode == .mock,
+                localParticipant: environment.chatTargetDeviceID == nil ? .user : .developer,
                 onReconfigure: onReconfigure
             )
                 .tabItem {
