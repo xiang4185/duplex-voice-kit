@@ -83,22 +83,14 @@ actor MockChatService: ChatServicing {
             participant: .user,
             turnID: turnID
         )
-        let developerMessage = ChatMessage(
-            id: "mock-developer-\(UUID().uuidString.lowercased())",
-            role: .assistant,
-            content: "开发者已通过离线 Mock 回复。",
-            createdAt: timestamp.addingTimeInterval(0.001),
-            participant: .developer,
-            turnID: turnID
-        )
-        var turnMessages = [userMessage, developerMessage]
+        var turnMessages = [userMessage]
         var participantResults = [
             ChatParticipantResult(
                 participant: .developer,
                 turnID: turnID,
-                status: .completed,
+                status: .pending,
                 retryable: false,
-                message: developerMessage
+                message: nil
             )
         ]
         if shouldIncludeXiaomao(mode: xiaomaoMode, message: message) {
@@ -106,7 +98,7 @@ actor MockChatService: ChatServicing {
                 id: "mock-xiaomao-\(UUID().uuidString.lowercased())",
                 role: .assistant,
                 content: "小猫也在，先陪你把这一轮接住。",
-                createdAt: timestamp.addingTimeInterval(0.002),
+                createdAt: timestamp.addingTimeInterval(0.001),
                 participant: .xiaomao,
                 turnID: turnID
             )

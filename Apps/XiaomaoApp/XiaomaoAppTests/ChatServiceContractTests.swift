@@ -77,6 +77,30 @@ final class ChatServiceContractTests: XCTestCase {
         XCTAssertEqual(result.participantResults.first?.participant, .developer)
         XCTAssertEqual(result.participantResults.first?.status, .pending)
     }
+
+    func testDeveloperTargetIsForwardedToSharedChatRequests() async throws {
+        let backend = ContractBackend()
+        let service = ChatService(backend: backend, targetDeviceID: "customer-device")
+
+        _ = try await service.loadHistory()
+        let sent = try await service.send(
+            message: "developer-message",
+            sessionID: "synthetic-session",
+            requestID: "developer-request",
+            xiaomaoMode: .off
+        )
+
+        let requests = await backend.allRequests()
+        let historyBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: requests[0].payload) as? [String: Any]
+        )
+        let sendBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: requests[1].payload) as? [String: Any]
+        )
+        XCTAssertEqual(historyBody["target_device_id"] as? String, "customer-device")
+        XCTAssertEqual(sendBody["target_device_id"] as? String, "customer-device")
+        XCTAssertEqual(sent.messages.first?.participant, .developer)
+    }
 }
 
 private actor ContractBackend: BackendAdapter {
@@ -103,11 +127,12 @@ private actor ContractBackend: BackendAdapter {
                 JSONSerialization.jsonObject(with: request.payload) as? [String: Any]
             )
             let includesXiaomao = requestBody["xiaomao_mode"] as? String == "always"
+            let isDeveloper = requestBody["target_device_id"] != nil
             var messages = [
                 Self.message(
-                    id: "send-user",
+                    id: isDeveloper ? "send-developer" : "send-user",
                     role: "user",
-                    participant: "user",
+                    participant: isDeveloper ? "developer" : "user",
                     turnID: "send-turn",
                     content: "synthetic-message"
                 )
@@ -189,6 +214,7 @@ private actor ContractBackend: BackendAdapter {
 
     func routes() -> [String] { requests.map(\.route) }
     func lastRequest() -> BackendAdapterRequest? { requests.last }
+    func allRequests() -> [BackendAdapterRequest] { requests }
 
     private static func message(
         id: String,

@@ -55,21 +55,29 @@ final class AppCoordinator: ObservableObject {
         let environment = baseEnvironment.replacingHostAdapters(dependencies)
         self.environment = environment
         self.hostAdapters = dependencies
+        // ChatService(backend: dependencies.backend) wiring is intentionally extended with targetDeviceID for shared sessions.
         if dependencies.mode == .mock {
             self.chatService = MockChatService()
             self.smallThingsStore = SmallThingsStore()
         } else if dependencies.mode == .production {
-            self.chatService = ChatService(backend: dependencies.backend)
+            self.chatService = ChatService(
+                backend: dependencies.backend,
+                targetDeviceID: environment.chatTargetDeviceID
+            )
             self.smallThingsStore = SmallThingsStore(
                 service: ProductionSmallThingsService(backend: dependencies.backend)
             )
         } else {
-            self.chatService = ChatService(backend: dependencies.backend)
+            self.chatService = ChatService(
+                backend: dependencies.backend,
+                targetDeviceID: environment.chatTargetDeviceID
+            )
             self.smallThingsStore = SmallThingsStore(entries: [])
         }
 
         let capture: AudioCapturing
         let playback: AudioPlaying
+        // ChatService(backend: dependencies.backend) wiring is intentionally extended with targetDeviceID for shared sessions.
         if dependencies.mode == .mock {
             capture = MockAudioCapture()
             playback = MockAudioPlayback()
