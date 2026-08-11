@@ -29,6 +29,9 @@ final class ChatViewModel: ObservableObject {
     private let configurationError: String?
     private let preferences: UserDefaults
     private var hasAttemptedHistoryLoad = false
+    private var pendingSend: (fingerprint: String, requestID: String)?
+    private var pendingRetryRequestIDs: [String: String] = [:]
+    private var pendingClear: (fingerprint: String, requestID: String)?
 
     init(
         service: (any ChatServicing)?,
@@ -111,6 +114,7 @@ final class ChatViewModel: ObservableObject {
             sessionID = result.sessionID
             messages = result.messages
             failedXiaomaoTurns.removeAll()
+            clearPendingRequestIDs()
             hasLoadedHistory = true
             lastReplyWasDegraded = false
             requiresReconfiguration = false
@@ -132,6 +136,7 @@ final class ChatViewModel: ObservableObject {
             guard result.sessionID == currentSessionID else {
                 throw ChatStateError.sessionMismatch
             }
+            clearPendingRequestIDs()
             guard result.messages != messages else { return }
             messages = result.messages
             let completedXiaomaoTurns = Set(
@@ -168,10 +173,19 @@ final class ChatViewModel: ObservableObject {
         defer { isSending = false }
 
         do {
+            let fingerprint = [sessionID, text, xiaomaoMode.rawValue, companionTypeID]
+                .joined(separator: "\u{1F}")
+            let requestID: String
+            if let pendingSend, pendingSend.fingerprint == fingerprint {
+                requestID = pendingSend.requestID
+            } else {
+                requestID = requestIDGenerator()
+                pendingSend = (fingerprint, requestID)
+            }
             let result = try await service.send(
                 message: text,
                 sessionID: sessionID,
-                requestID: requestIDGenerator(),
+                requestID: requestID,
                 xiaomaoMode: xiaomaoMode,
                 companionTypeID: companionTypeID
             )
@@ -191,6 +205,7 @@ final class ChatViewModel: ObservableObject {
                 }
             }
             draft = ""
+            pendingSend = nil
             lastReplyWasDegraded = result.degraded
             requiresReconfiguration = false
         } catch {
@@ -210,10 +225,12 @@ final class ChatViewModel: ObservableObject {
         errorMessage = ""
         defer { retryingXiaomaoTurnID = nil }
         do {
+            let requestID = pendingRetryRequestIDs[turnID] ?? requestIDGenerator()
+            pendingRetryRequestIDs[turnID] = requestID
             let result = try await service.retryXiaomao(
                 turnID: turnID,
                 sessionID: sessionID,
-                requestID: requestIDGenerator()
+                requestID: requestID
             )
             guard result.sessionID == sessionID,
                   result.turnID == turnID,
@@ -225,6 +242,7 @@ final class ChatViewModel: ObservableObject {
             }
             messages.append(message)
             failedXiaomaoTurns.remove(turnID)
+            pendingRetryRequestIDs.removeValue(forKey: turnID)
         } catch {
             if Self.isSessionInvalidatingError(error) {
                 invalidateSession()
@@ -247,14 +265,23 @@ final class ChatViewModel: ObservableObject {
         defer { isClearing = false }
 
         do {
+            let fingerprint = sessionID
+            let requestID: String
+            if let pendingClear, pendingClear.fingerprint == fingerprint {
+                requestID = pendingClear.requestID
+            } else {
+                requestID = requestIDGenerator()
+                pendingClear = (fingerprint, requestID)
+            }
             let result = try await service.clear(
                 sessionID: sessionID,
-                requestID: requestIDGenerator()
+                requestID: requestID
             )
             guard result.sessionID == sessionID, result.cleared else {
                 throw ChatStateError.sessionMismatch
             }
             messages = []
+            pendingClear = nil
             failedXiaomaoTurns.removeAll()
             lastReplyWasDegraded = false
         } catch {
@@ -280,6 +307,13 @@ final class ChatViewModel: ObservableObject {
         hasLoadedHistory = false
         lastReplyWasDegraded = false
         failedXiaomaoTurns.removeAll()
+        clearPendingRequestIDs()
+    }
+
+    private func clearPendingRequestIDs() {
+        pendingSend = nil
+        pendingRetryRequestIDs.removeAll()
+        pendingClear = nil
     }
 
     private static func isSessionInvalidatingError(_ error: Error) -> Bool {
