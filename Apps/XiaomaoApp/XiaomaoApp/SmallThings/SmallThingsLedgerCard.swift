@@ -6,6 +6,9 @@ struct SmallThingsLedgerCard: View {
     let openApprovals: () -> Void
     let openBinding: () -> Void
 
+    @State private var showLimitEditor = false
+    @State private var limitDraft = ""
+
     var body: some View {
         VStack(spacing: Theme.Spacing.medium) {
             header
@@ -22,12 +25,17 @@ struct SmallThingsLedgerCard: View {
         }
         .shadow(color: Theme.shadowRaised, radius: 16, y: 8)
         .accessibilityIdentifier("smallThings.ledger")
+        .sheet(isPresented: $showLimitEditor) {
+            limitEditor
+                .presentationDetents([.height(250)])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxSmall) {
-                Text("52 元小本本")
+                Text("\(store.ledgerLimit.formatted(.number.precision(.fractionLength(0...2)))) 元小本本")
                     .font(Theme.title3Font)
                     .foregroundStyle(Theme.textPrimary)
                 Text("我和对方一起记的账")
@@ -35,13 +43,27 @@ struct SmallThingsLedgerCard: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: Theme.Spacing.small)
-            Label("等我看 \(store.pendingApprovals.count)", systemImage: "clock.fill")
-                .font(.caption.bold())
-                .foregroundStyle(Theme.primary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Theme.primarySoft, in: Capsule())
-                .accessibilityLabel("待审批 \(store.pendingApprovals.count) 笔")
+            VStack(alignment: .trailing, spacing: 6) {
+                Label("等我看 \(store.pendingApprovals.count)", systemImage: "clock.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(Theme.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.primarySoft, in: Capsule())
+                    .accessibilityLabel("待审批 \(store.pendingApprovals.count) 笔")
+
+                Button {
+                    limitDraft = store.ledgerLimit.formatted(.number.precision(.fractionLength(0...2)))
+                    store.clearValidation()
+                    showLimitEditor = true
+                } label: {
+                    Label("调额", systemImage: "slider.horizontal.3")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.textLink)
+                .accessibilityIdentifier("smallThings.ledger.adjustLimit")
+            }
         }
     }
 
@@ -162,6 +184,52 @@ struct SmallThingsLedgerCard: View {
         Text("谁都能记，记了等对方点头")
             .font(.caption2)
             .foregroundStyle(Theme.textSecondary)
+    }
+
+    private var limitEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("调整额度")
+                .font(Theme.title3Font)
+                .foregroundStyle(Theme.textPrimary)
+
+            Text("当前已使用和待确认共 \((store.approvedAmount + store.pendingAmount).formatted(.number.precision(.fractionLength(2)))) 元")
+                .font(Theme.captionFont)
+                .foregroundStyle(Theme.textSecondary)
+
+            HStack(spacing: 8) {
+                Text("¥")
+                    .foregroundStyle(Theme.textSecondary)
+                TextField("52", text: $limitDraft)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 54)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
+
+            if let message = store.validationMessage {
+                Text(message)
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.danger)
+            }
+
+            Button("保存") {
+                let normalized = limitDraft.replacingOccurrences(of: ",", with: "")
+                guard let value = Double(normalized) else {
+                    store.validationMessage = "请输入有效额度"
+                    return
+                }
+                if store.adjustLedgerLimit(to: value) {
+                    showLimitEditor = false
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.primary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .accessibilityIdentifier("smallThings.ledger.adjustLimit.save")
+        }
+        .padding(20)
+        .background(Theme.bg.ignoresSafeArea())
     }
 
     private func amountRow(_ title: String, value: Double, symbol: String) -> some View {

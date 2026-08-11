@@ -13,6 +13,7 @@ struct MainTabView: View {
     @StateObject private var chatViewModel: ChatViewModel
     @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
+    @Environment(\.appVisualMode) private var visualMode
 
     enum Tab: Hashable {
         case companion, chat, smallThings, settings
@@ -55,10 +56,10 @@ struct MainTabView: View {
     }
 
     var body: some View {
+        let tokens = Theme.visual(visualMode)
         TabView(selection: $selectedTab) {
             CompanionHomeView(
                 startCall: startCall,
-                openHistory: { selectedTab = .smallThings },
                 openSettings: { selectedTab = .settings }
             )
             .tabItem { Label(Tab.companion.title, systemImage: Tab.companion.icon) }
@@ -84,7 +85,10 @@ struct MainTabView: View {
                 .tabItem { Label(Tab.settings.title, systemImage: Tab.settings.icon) }
                 .tag(Tab.settings)
         }
-        .tint(Theme.primary)
+        .tint(tokens.primary)
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(visualMode == .mystery ? .dark : .light, for: .tabBar)
         .accessibilityIdentifier("main.tabs")
         .safeAreaInset(edge: .top, spacing: 0) {
             if voiceController.callIsActive {
@@ -94,27 +98,29 @@ struct MainTabView: View {
     }
 
     private var currentCallBar: some View {
-        Button(action: startCall) {
+        let tokens = Theme.visual(visualMode)
+        return Button(action: startCall) {
             HStack(spacing: 10) {
                 Image(systemName: "waveform.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(Theme.primary)
+                    .foregroundStyle(tokens.primary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("当前通话仍在继续")
                         .font(Theme.subheadFont.weight(.semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(tokens.textPrimary)
                     Text(voiceController.state == .speaking ? "小猫正在说话" : "点此返回通话")
                         .font(Theme.captionFont)
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(tokens.textSecondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.up")
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(tokens.textSecondary)
             }
             .padding(.horizontal, Theme.Spacing.medium)
             .padding(.vertical, 10)
+            .background(tokens.glassTint)
             .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) { Divider().overlay(Theme.border) }
+            .overlay(alignment: .bottom) { Divider().overlay(tokens.border.opacity(0.5)) }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("call.resume.bar")
@@ -130,4 +136,5 @@ struct MainTabView: View {
         chatService: MockChatService(),
         smallThingsStore: SmallThingsStore()
     )
+    .environmentObject(CompanionModeStore())
 }

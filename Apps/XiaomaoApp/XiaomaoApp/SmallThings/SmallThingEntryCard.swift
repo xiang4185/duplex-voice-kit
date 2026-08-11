@@ -6,6 +6,7 @@ struct SmallThingEntryCard: View {
     let entry: SmallThingEntry
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
     @State private var commentsOpen = false
     @State private var commentDraft = ""
     @State private var replyTarget: SmallThingReplyTarget?
@@ -13,6 +14,8 @@ struct SmallThingEntryCard: View {
     @State private var showsDeleteConfirmation = false
     @State private var hapticTrigger = 0
     @FocusState private var commentFocused: Bool
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -71,14 +74,22 @@ struct SmallThingEntryCard: View {
                     .transition(reduceMotion ? .identity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(Theme.Spacing.medium)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .stroke(Theme.border.opacity(0.9), lineWidth: 1)
+        .padding(.vertical, Theme.Spacing.small)
+        .padding(.trailing, Theme.Spacing.medium)
+        .padding(.leading, Theme.Spacing.xLarge)
+        .background(visual.surface.opacity(0.54), in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+        .overlay(alignment: .leading) {
+            VStack(spacing: 4) {
+                Circle()
+                    .fill(entry.type == .expense ? visual.primary : visual.textTertiary.opacity(0.72))
+                    .frame(width: 8, height: 8)
+                Rectangle()
+                    .fill(visual.border.opacity(0.55))
+                    .frame(width: 1)
+            }
+            .padding(.leading, 13)
+            .padding(.vertical, 18)
         }
-        .shadow(color: Theme.shadowRaised, radius: 10, y: 4)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: commentsOpen)
         .sensoryFeedback(.impact(weight: .light), trigger: hapticTrigger)
         .fullScreenCover(isPresented: $showingImagePreview) {
@@ -124,7 +135,7 @@ struct SmallThingEntryCard: View {
                 VStack(alignment: .trailing, spacing: Theme.Spacing.xSmall) {
                     Text(entry.amount, format: .number.precision(.fractionLength(2)))
                         .font(Theme.title3Font)
-                        .foregroundStyle(Theme.primary)
+                        .foregroundStyle(visual.primary)
                     Text("元")
                         .font(.caption2)
                         .foregroundStyle(Theme.textSecondary)
@@ -200,7 +211,7 @@ struct SmallThingEntryCard: View {
             .smallThingsSymbolTransition(reduceMotion: reduceMotion)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(entry.reacted ? Theme.primary : Theme.textSecondary)
+        .foregroundStyle(entry.reacted ? visual.primary : visual.textSecondary)
         .accessibilityValue(entry.reacted ? "已回应，再次点击可取消" : "未回应")
     }
 

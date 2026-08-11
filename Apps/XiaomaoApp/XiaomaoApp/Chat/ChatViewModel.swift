@@ -150,7 +150,7 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func send() async {
+    func send(companionTypeID: String = CompanionType.warm.rawValue) async {
         let text = normalizedDraft
         guard !text.isEmpty else { return }
         guard text.count <= Self.maximumMessageLength else {
@@ -172,7 +172,8 @@ final class ChatViewModel: ObservableObject {
                 message: text,
                 sessionID: sessionID,
                 requestID: requestIDGenerator(),
-                xiaomaoMode: xiaomaoMode
+                xiaomaoMode: xiaomaoMode,
+                companionTypeID: companionTypeID
             )
             guard result.sessionID == sessionID else {
                 throw ChatStateError.sessionMismatch

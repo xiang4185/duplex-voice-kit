@@ -42,6 +42,8 @@ struct PrivacyAvatar: View {
 
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
+    @Environment(\.companionType) private var companionType
     // P2.7A-FIX-1: 仅记录当前实例发起的解锁请求与短暂开锁展示
     @State private var requestedUnlock = false
     @State private var unlockFlash = false
@@ -63,6 +65,7 @@ struct PrivacyAvatar: View {
 
     var body: some View {
         let revealed = privacy.effectiveReveal()
+        let tokens = Theme.visual(visualMode)
 
         ZStack {
             switch variant {
@@ -83,11 +86,11 @@ struct PrivacyAvatar: View {
                 // 覆盖全局状态切换过程；只有本头像成功解锁时替换为 lock.open
                 ZStack {
                     Circle()
-                        .fill(Theme.halo.opacity(unlockFlash ? 0.20 : 0.35))
+                        .fill(tokens.halo.opacity(unlockFlash ? 0.20 : 0.35))
                     Image(systemName: revealed && (requestedUnlock || unlockFlash) ? "lock.open.fill" : "lock.fill")
                         .font(.system(size: resolvedStyle == .portrait ? size * 0.16 : size * 0.22, weight: .medium))
-                        .foregroundStyle(Theme.textOnHalo)
-                        .shadow(color: Theme.shadowOverlay, radius: 6, x: 0, y: 2)
+                        .foregroundStyle(visualMode == .mystery ? tokens.textPrimary : Theme.textOnHalo)
+                        .shadow(color: tokens.shadow, radius: 6, x: 0, y: 2)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .frame(
@@ -102,7 +105,7 @@ struct PrivacyAvatar: View {
                 .accessibilityHidden(revealed)
             }
         }
-        .shadow(color: Theme.shadowRaised, radius: resolvedStyle == .portrait ? size * 0.06 : size * 0.08, x: 0, y: size * 0.04)
+        .shadow(color: tokens.shadow, radius: resolvedStyle == .portrait ? size * 0.06 : size * 0.08, x: 0, y: size * 0.04)
         .contentShape(
             RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
         )
@@ -168,19 +171,15 @@ struct PrivacyAvatar: View {
         let width = size
         let height = size * 3.0 / 2.0
 
-        return Image("Character")
+        return Image(companionType.portraitAssetName)
             .resizable()
             .interpolation(.high)
             .aspectRatio(contentMode: .fit)
             .frame(width: width, height: height)
             .blur(radius: revealed ? 0 : 6)
             .opacity(revealed ? 1 : 0.92)
-            // P2.7B-FINAL-VISUAL-FIX: 删除全尺寸人物叠光 (overlay + plus-lighter blend).
-            // 该叠光覆盖完整人物容器, 是浅粉矩形边界的来源之一;
-            // 父页面已有静态 halo 与 heroGlow 光效, 人物图内部无需整块叠光.
-            // 保留: 底部渐隐 mask / reveal 动画 / 隐私模糊.
-            // 底部柔边渐隐: 顶部清晰, 65% 处开始淡出, 100% 完全透明
-            // 与外部 halo 光晕层(在父视图叠加)自然融合
+            // All public companion portraits now use the same 1024×1536 transparent
+            // template, so they deliberately share the exact same composition mask.
             .mask {
                 LinearGradient(
                     stops: [
@@ -198,28 +197,43 @@ struct PrivacyAvatar: View {
 
     // MARK: - Thumbnail 方形小头像 (保留 v6.1 行为)
     // 适用于情绪气泡 / 陪伴记录入口 / 隐私确认浮层等小尺寸场景.
+    @ViewBuilder
     private func thumbnailCharacter(revealed: Bool) -> some View {
-        Image("CharacterAvatar")
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: size, height: size)
-            .blur(radius: revealed ? 0 : 6)
-            .opacity(revealed ? 1 : 0.92)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
-            // P2.6J+: 径向柔边遮罩 — 只羽化外缘 (中心 82% 保持清晰, 外缘渐隐)
-            .mask {
-                RadialGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: .black, location: 0.0),
-                        .init(color: .black, location: 0.82),
-                        .init(color: .clear, location: 1.0)
-                    ]),
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: size / 2
-                )
-            }
-            .animation(.easeInOut(duration: 0.35), value: revealed)
+        if companionType == .warm {
+            Image("CharacterAvatar")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: size, height: size)
+                .blur(radius: revealed ? 0 : 6)
+                .opacity(revealed ? 1 : 0.92)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+                .mask {
+                    RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .black, location: 0.0),
+                            .init(color: .black, location: 0.82),
+                            .init(color: .clear, location: 1.0)
+                        ]),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: size / 2
+                    )
+                }
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        } else {
+            Image(companionType.thumbnailAssetName)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .scaleEffect(companionType.thumbnailDisplayScale)
+                .offset(y: companionType.thumbnailVerticalOffset)
+                .frame(width: size, height: size)
+                .clipped()
+                .blur(radius: revealed ? 0 : 5)
+                .opacity(revealed ? 1 : 0.74)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.34, style: .continuous))
+                .animation(.easeInOut(duration: 0.35), value: revealed)
+        }
     }
 
     /// 原创程序化占位形象 (渐变圆 + 白色符号, 非小猫角色)

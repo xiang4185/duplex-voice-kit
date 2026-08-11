@@ -3,6 +3,9 @@ import SwiftUI
 struct SmallThingsRootView: View {
     @ObservedObject var store: SmallThingsStore
     @State private var path: [SmallThingsRoute] = []
+    @Environment(\.appVisualMode) private var visualMode
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     init(store: SmallThingsStore) {
         self.store = store
@@ -51,7 +54,7 @@ struct SmallThingsRootView: View {
                 .padding(.top, Theme.Spacing.small)
                 .padding(.bottom, Theme.Spacing.large)
             }
-            .background(Theme.bg.ignoresSafeArea())
+            .background(visual.background.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: SmallThingsRoute.self) { route in
                 switch route {
@@ -73,17 +76,19 @@ struct SmallThingsRootView: View {
     }
 
     private var flowHeader: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("小 事")
-                .font(Theme.captionFont.weight(.bold))
-                .foregroundStyle(Theme.textPrimary)
-            Text("· 都值得记下来")
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("生活时间流")
+                    .font(Theme.title3Font)
+                    .foregroundStyle(visual.textPrimary)
+                Spacer(minLength: Theme.Spacing.small)
+                Text("共 \(store.entries.count) 件")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(visual.textTertiary)
+            }
+            Text("小 事 · 都值得记下来")
                 .font(Theme.captionFont)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer(minLength: Theme.Spacing.small)
-            Text("共 \(store.entries.count) 件")
-                .font(.caption2)
-                .foregroundStyle(Theme.textTertiary)
+                .foregroundStyle(visual.textSecondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("小事时间流，共 \(store.entries.count) 件")

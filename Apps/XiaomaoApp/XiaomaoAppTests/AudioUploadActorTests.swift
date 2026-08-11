@@ -3,6 +3,34 @@ import XCTest
 @testable import XiaomaoApp
 
 final class AudioUploadActorTests: XCTestCase {
+    func testSessionStartCarriesOnlyPublicCompanionTypeIdentifier() async throws {
+        let socket = SerialUploadSocket()
+        let uploader = AudioUploadActor(socket: socket)
+        await configure(uploader)
+
+        try await uploader.openConnection(
+            sessionID: "session-one",
+            traceID: "trace-one",
+            companionTypeID: CompanionType.mystery.rawValue
+        )
+
+        let events = await socket.eventsValue()
+        let event = try XCTUnwrap(
+            events.first(where: { $0.type == .sessionStart })
+        )
+        guard case .string(let companionType)? = event.payload["companion_type"] else {
+            XCTFail("session.start must include public companion_type")
+            return
+        }
+        guard case .string(let route)? = event.payload["route"] else {
+            XCTFail("session.start must retain route")
+            return
+        }
+        XCTAssertEqual(companionType, CompanionType.mystery.rawValue)
+        XCTAssertEqual(route, VoiceRoute.b.rawValue)
+        XCTAssertEqual(event.payload.count, 2)
+    }
+
     func testRealtimeOfferDoesNotWaitForDiagnosticsLock() async throws {
         let uploader = AudioUploadActor(socket: SerialUploadSocket())
         await configure(uploader)

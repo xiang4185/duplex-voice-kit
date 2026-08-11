@@ -8,8 +8,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(source.contains("按住说话"))
         XCTAssertFalse(source.contains("结束本轮"))
         XCTAssertFalse(source.contains("PressToTalkControl"))
-        // P2.7B: 免按键用户提示恢复为产品文案
-        XCTAssertTrue(source.contains("直接说话就好，小猫在听"))
+        // 极简通话页只保留一条真实会话状态，不再叠加第二条免按键提示。
+        XCTAssertTrue(source.contains("callStatusText"))
+        XCTAssertFalse(source.contains("直接说话就好，小猫在听"))
     }
 
     func testForegroundRouteIsFixedToBWithoutRoutePicker() throws {
@@ -80,7 +81,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       "Xiaomao 宿主必须使用低延迟结束静音配置")
 
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
-        XCTAssertTrue(call.contains(".frame(height: 46)"),
+        XCTAssertTrue(call.contains(".frame(height: 38)"),
                       "语音转写必须占用固定高度，出现/消失不得推动人物形象")
         XCTAssertFalse(call.contains("empathy.hug"), "不得保留无真实作用的抱抱我按钮")
         XCTAssertFalse(call.contains("empathy.topic"), "不得保留只改本地文案的换个话题按钮")
@@ -312,9 +313,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(call.contains("reconnectAttempt >= 2"))
         XCTAssertTrue(call.contains("reconnectCardShown"))
         XCTAssertFalse(call.contains("while !Task.isCancelled"), "不得使用五分钟后的轮询")
-        // 关心我按钮调用 randomManual() (唯一随机入口)
-        XCTAssertTrue(call.contains(".randomManual()"))
-        XCTAssertTrue(call.contains("empathyReason = .userRequest"))
+        // 极简通话主界面不再暴露额外「关心我」按钮；随机彩蛋能力仍保留在 EmpathyCard。
+        XCTAssertFalse(call.contains("call.care"))
+        XCTAssertFalse(call.contains(".randomManual()"))
         // 不得声称情绪识别
         XCTAssertFalse(call.contains("由情绪识别触发"))
         // 不得出现伪规则代码
@@ -406,14 +407,17 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("小猫在呢"))
         XCTAssertTrue(settings.contains("随时回来和小猫说说话"))
         XCTAssertTrue(settings.contains("关于小猫"))
-        XCTAssertTrue(home.contains("陪伴记录"))
+        XCTAssertTrue(home.contains("切换陪伴"))
         XCTAssertTrue(review.contains("陪伴记录尚未开放"))
         XCTAssertTrue(review.contains("当前版本暂不展示聊天或录音历史。"))
         XCTAssertTrue(settings.contains("使用记录尚未接入"))
         XCTAssertTrue(settings.contains("当前版本暂不展示时长、连续天数或累计统计。"))
 
-        // 首页历史入口直接调用 openHistory()
-        XCTAssertTrue(home.contains("openHistory()"))
+        // 首页右上角未落地的历史入口改为本地陪伴切换，不触发语音或后端。
+        XCTAssertTrue(home.contains("showCompanionPicker = true"))
+        XCTAssertTrue(home.contains("CompanionSelectionSheet("))
+        XCTAssertTrue(home.contains("companionStore.select(type)"))
+        XCTAssertFalse(home.contains("openHistory()"))
         // 不再声明/展示静态 RecentReviewOverlay
         XCTAssertFalse(home.contains("RecentReviewOverlay"))
 
@@ -449,8 +453,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // 1. 首页齿轮调用 openSettings()
         XCTAssertTrue(home.contains("openSettings()"), "齿轮必须调用 openSettings()")
-        // 3. 首页历史入口仍调用 openHistory()
-        XCTAssertTrue(home.contains("openHistory()"), "陪伴记录入口必须调用 openHistory()")
+        // 3. 首页右上角承担陪伴切换，且只更新本地选择。
+        XCTAssertTrue(home.contains("home.companion"), "首页必须保留轻量陪伴切换入口")
+        XCTAssertTrue(home.contains("companionStore.select(type)"), "首页切换只允许更新本地 CompanionModeStore")
+        XCTAssertFalse(home.contains("openHistory()"), "未落地的历史入口不得继续占用首页")
 
         // 2. MainTabView 将 openSettings 映射到 .settings
         XCTAssertTrue(maintab.contains("openSettings"), "MainTabView 必须传递 openSettings")
@@ -555,8 +561,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("0.985"), "按压 scale 必须约 0.985")
         XCTAssertTrue(home.contains("accessibilityReduceMotion"), "PressableCardStyle 必须遵循 Reduce Motion")
 
-        // 应用位置: 首页记录入口 / 设置关于行 (通用按钮按压样式保留)
-        XCTAssertTrue(home.contains("buttonStyle(PressableCardStyle())"), "首页记录入口必须使用 PressableCardStyle")
+        // 首页陪伴切换使用顶栏圆形轻入口；设置关于行继续使用通用按压样式。
+        XCTAssertTrue(home.contains("home.companion"), "首页陪伴切换入口必须保留")
+        XCTAssertTrue(home.contains("person.2.fill"), "首页陪伴切换必须为紧凑顶栏按钮")
         XCTAssertTrue(settings.contains("buttonStyle(PressableCardStyle())"), "设置关于行必须使用 PressableCardStyle")
         // P2.8A: 角色页 1.0 正式角色卡 (删除旧三角色 pressedRole/0.985/handleRoleTap 断言)
         XCTAssertFalse(characters.contains("pressedRole"), "1.0 角色页不得保留多角色按压状态")
@@ -615,7 +622,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 4. VoiceCall 状态点颜色映射
         XCTAssertTrue(call.contains("callStatusColor"), "必须存在状态点颜色计算属性")
         XCTAssertTrue(call.contains(".fill(callStatusColor)"), "状态点必须使用 callStatusColor")
-        for token in ["Theme.textTertiary", "Theme.online", "Theme.warning", "Theme.danger"] {
+        for token in ["visual.textTertiary", "Theme.online", "Theme.warning", "visual.danger"] {
             XCTAssertTrue(call.contains(token), "状态颜色映射缺少: \(token)")
         }
 
@@ -703,12 +710,18 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         // 4. 原生 TabView 保留
         XCTAssertTrue(tabs.contains("TabView(selection:"), "必须保留原生 TabView(selection:)")
         XCTAssertTrue(tabs.contains(".tabItem"), "必须保留 .tabItem")
-        XCTAssertTrue(tabs.contains(".tint(Theme.primary)"), "必须保留 .tint(Theme.primary)")
+        XCTAssertTrue(tabs.contains(".tint(tokens.primary)"), "Tab Bar tint 必须跟随全局视觉 Token")
+        XCTAssertTrue(tabs.contains("toolbarColorScheme(visualMode == .mystery ? .dark : .light"),
+                      "Tab Bar 必须跟随 Warm / Mystery 调整明暗模式")
 
         // 5. 首页主 CTA 玻璃
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须使用 glassEffect")
         XCTAssertTrue(home.contains(".interactive()"), "首页 CTA 必须交互玻璃")
-        XCTAssertTrue(home.contains(".tint(Theme.primary)"), "首页 CTA 必须主色 tint")
+        XCTAssertTrue(
+            home.contains(".tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)"),
+            "首页 CTA 必须跟随完整场景明暗与全局视觉 Token 驱动 tint"
+        )
+        XCTAssertTrue(home.contains("if usesSceneBackground"), "完整场景首页 CTA 必须有独立玻璃边界")
         XCTAssertFalse(home.contains(".background(Theme.primary, in: Capsule())"), "首页 CTA 不得叠加实体胶囊背景")
         XCTAssertFalse(home.contains("1.015"), "不得保留 1.015 强缩放")
 
@@ -868,7 +881,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         }
 
         // ===== 首页 =====
-        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "首页必须使用 .home Mesh 背景")
+        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴首页必须保留 .home Mesh 回退背景")
+        XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "非温柔陪伴首页必须支持整张场景背景")
         // 删除旧循环光效
         for token in ["bgLightPulse", "sweepAngle", "ctaPulse"] {
             XCTAssertFalse(home.contains(token), "首页不得保留: \(token)")
@@ -880,15 +894,18 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains("home.start"), "首页 CTA identifier 必须保留")
         // 行为保留
         XCTAssertTrue(home.contains("openSettings()"), "设置入口必须保留")
-        XCTAssertTrue(home.contains("openHistory()"), "回顾入口必须保留")
+        XCTAssertTrue(home.contains("showCompanionPicker = true"), "首页必须直接打开陪伴选择")
+        XCTAssertTrue(home.contains("companionStore.select(type)"), "首页选择不得重建语音会话")
         XCTAssertTrue(home.contains("isProductionVoice"), "非生产角色门禁必须保留")
-        XCTAssertTrue(home.contains("当前版本暂不展示聊天或录音历史"), "诚实空状态文案必须保留")
+        XCTAssertTrue(home.contains("home.companion"), "陪伴切换必须保留为轻量入口")
         XCTAssertTrue(home.contains("AvatarPrivacyConfirmView"), "隐私确认 Sheet 必须保留")
 
         // ===== 通话页 =====
-        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "通话页必须使用 .call Mesh 背景")
+        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "温柔陪伴通话必须保留 .call Mesh 回退背景")
+        XCTAssertTrue(call.contains("private var callBackground"), "非温柔陪伴通话必须使用完整场景背景")
+        XCTAssertTrue(call.contains("sceneBackgroundAssetName"), "完整场景背景必须由陪伴类型驱动")
         XCTAssertFalse(call.contains("breathingGradientGlow"), "通话页不得保留背景循环呼吸")
-        XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
+        XCTAssertFalse(call.contains("直接说话就好，小猫在听"), "不得再叠加重复免按键提示")
         XCTAssertTrue(call.contains("callStatusText"), "状态文案必须保留")
         XCTAssertTrue(call.contains("callStatusColor"), "状态颜色必须保留")
         XCTAssertTrue(call.contains("GlassEffectContainer"), "玻璃控制区必须保留")
@@ -954,8 +971,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertFalse(call.contains("重新开始"), "空闲结束弹窗不得提供同页重新开始按钮")
 
         // ===== 既有通话核心契约保留 =====
-        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "Mesh 背景必须保留")
-        XCTAssertTrue(call.contains("直接说话就好，小猫在听"), "免按键提示必须保留")
+        XCTAssertTrue(call.contains("OrganicMeshBackground(mode: .call)"), "温柔陪伴 Mesh 回退背景必须保留")
+        XCTAssertTrue(call.contains("sceneBackgroundAssetName"), "其他陪伴必须支持完整场景背景")
+        XCTAssertFalse(call.contains("直接说话就好，小猫在听"), "通话页不得重复显示第二条状态提示")
         XCTAssertFalse(call.contains("finishCall(closePage: false)"), "页面消失不得触发 teardown")
         XCTAssertTrue(call.contains("await Task.yield()"), "P2.6H 渲染让步必须保留")
         XCTAssertTrue(call.contains("await viewModel.appear()"), "真实连接流程必须保留")
@@ -1043,10 +1061,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             return
         }
         let portrait = String(avatar[pStart..<pEnd])
-        XCTAssertTrue(portrait.contains("Image(\"Character\")"), "portraitCharacter 必须保留 Image(\"Character\")")
+        XCTAssertTrue(portrait.contains("Image(companionType.portraitAssetName)"),
+                      "portraitCharacter 必须按当前陪伴类型加载公开角色图")
         XCTAssertTrue(portrait.contains("LinearGradient"), "portraitCharacter 必须保留底部渐隐 LinearGradient mask")
-        XCTAssertTrue(portrait.contains(".blur(radius: revealed"), "portraitCharacter 必须保留 reveal blur")
-        XCTAssertTrue(portrait.contains(".opacity(revealed"), "portraitCharacter 必须保留 reveal opacity")
+        XCTAssertTrue(portrait.contains("revealed ? 0 : 6"), "portraitCharacter 必须保留 reveal blur 语义")
+        XCTAssertTrue(portrait.contains("revealed ? 1 : 0.92"), "portraitCharacter 必须保留 reveal opacity 语义")
+        XCTAssertFalse(portrait.contains("portraitDisplayScale"),
+                       "统一 1024×1536 角色模板不得再按陪伴类型做主视觉缩放补丁")
+        XCTAssertFalse(portrait.contains("companionType == .romantic"),
+                       "统一角色模板不得再为黏人浪漫保留独立下缘 matte 补丁")
         XCTAssertTrue(portrait.contains(".mask"), "portraitCharacter 必须保留 mask")
         XCTAssertTrue(portrait.contains(".animation(.easeInOut(duration: 0.35), value: revealed)"),
                       "portraitCharacter 必须保留 reveal 动画")
@@ -1063,7 +1086,9 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(mesh.contains("width: 3"), "Mesh 组件必须保留 3×3 网格 width: 3")
         XCTAssertTrue(mesh.contains("height: 3"), "Mesh 组件必须保留 3×3 网格 height: 3")
         XCTAssertTrue(mesh.contains("staticMesh"), "Reduce Motion 静态分支必须保留")
-        XCTAssertTrue(mesh.contains("Color.white.opacity(0.14)"), "浅色 veil 必须为 0.14 (淡化色块边界)")
+        XCTAssertTrue(mesh.contains("Color.white.opacity(0.18)"), "Warm Mode 浅色 veil 必须进一步淡化 Mesh 色块边界")
+        XCTAssertTrue(mesh.contains("Color.black.opacity(0.08)"), "Mystery Mode 必须使用克制的深色 veil")
+        XCTAssertTrue(mesh.contains("visualMode == .mystery ? 1.4 : 1.0"), "Mystery Mode 背景动画必须更慢")
         // MeshMotion 实际属性: 不含 glowOpacity (范围化, 不搜索普通注释)
         guard let mmStart = mesh.range(of: "private struct MeshMotion")?.lowerBound,
               let mmEnd = mesh.range(of: "var body: some View")?.lowerBound else {
@@ -1119,14 +1144,16 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(topBar.contains("width: 40, height: 40"), "topBar 必须保留 40×40 触控区域")
 
         // ===== 3b. 首页主体层级 (全文件) =====
-        XCTAssertTrue(home.contains("正在陪你"), "首页主体必须保留\"正在陪你\"")
-        XCTAssertTrue(home.contains("greetings"), "问候数组必须保留")
-        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "首页必须使用 OrganicMeshBackground(mode: .home)")
-        // CTA / 历史入口 / 隐私确认
+        XCTAssertTrue(home.contains("· 在呢"), "首页主体必须保留一条轻量陪伴状态")
+        XCTAssertFalse(home.contains("greetings"), "极简首页不得恢复轮换问候数组")
+        XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴必须保留 OrganicMeshBackground 回退")
+        XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "其他陪伴必须使用完整场景背景")
+        // CTA / 陪伴切换 / 隐私确认
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须保留 glassEffect")
         XCTAssertTrue(home.contains("interactive()"), "首页 CTA 必须保留 interactive")
         XCTAssertTrue(home.contains("home.start"), "首页 CTA identifier 必须保留")
-        XCTAssertTrue(home.contains("openHistory()"), "首页历史入口必须保留")
+        XCTAssertTrue(home.contains("home.companion"), "首页右上角必须提供陪伴切换")
+        XCTAssertFalse(home.contains("openHistory()"), "首页不得继续保留未落地历史入口")
         XCTAssertTrue(home.contains("AvatarPrivacyConfirmView"), "隐私确认流程必须保留")
 
         // ===== 4. 通话文本 (displayConversationText) =====
@@ -1181,6 +1208,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
         let controller = try source("XiaomaoApp/Voice/VoiceSessionController.swift")
         let character = try source("XiaomaoApp/App/CharacterSelectView.swift")
+        let companion = try source("XiaomaoApp/Design/CompanionModeStore.swift")
 
         // ===== 1. 通话启动: 单次门禁 + 无人工延迟 =====
         XCTAssertTrue(app.contains("private func requestCall"), "必须存在单次启动门禁 requestCall()")
@@ -1195,16 +1223,15 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       ".listening 必须被允许恢复采集")
 
         // ===== 2. 首次连接加载反馈 =====
-        XCTAssertTrue(call.contains("call.connecting"), "必须存在 call.connecting identifier")
-        XCTAssertTrue(call.contains("ProgressView"), "连接卡必须包含 ProgressView")
-        XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接文案 正在连接小猫")
-        XCTAssertTrue(call.contains("通常只需要几秒"), "必须存在首次连接说明文案")
+        // 连接状态收口到顶部单一状态行，不再增加独立连接卡。
+        XCTAssertTrue(call.contains("正在连接小猫"), "必须存在首次连接状态文案")
+        XCTAssertTrue(call.contains("callStatusText"), "首次连接状态必须由统一状态映射提供")
         XCTAssertTrue(controller.contains("hasCompletedInitialConnection = false"),
                       "每通新通话必须重置首次连接完成状态")
         XCTAssertTrue(controller.contains("hasCompletedInitialConnection = true"),
                       "麦克风真实可用后必须标记首次连接完成")
         XCTAssertTrue(call.contains("if !viewModel.controller.hasCompletedInitialConnection"),
-                      "连接卡只能由首次连接完成状态控制")
+                      "首次连接状态只能由真实连接完成状态控制")
         XCTAssertFalse(call.contains("if !viewModel.controller.isConversationReady"),
                        "每轮 processing 不得重新显示首次连接卡")
         XCTAssertFalse(call.contains("DispatchSourceTimer"), "连接反馈不得使用定时器")
@@ -1252,17 +1279,28 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(topBar.contains("call.close"), "call.close identifier 必须保留")
         XCTAssertTrue(topBar.contains("收起通话"), "左上 accessibility label 必须为 收起通话")
 
-        // ===== 6. 聊天提示 (换话题降级, 限定控制区范围避免命中历史注释) =====
+        // ===== 6. 陪伴入口与极简三按钮控制区 =====
         guard let ctlStart = call.range(of: "private var controlArea")?.lowerBound else {
             XCTFail("缺少 controlArea 范围")
             return
         }
         let controlBlock = String(call[ctlStart..<call.endIndex])
-        XCTAssertTrue(controlBlock.contains("聊天提示"), "页面必须包含 聊天提示 标签")
-        XCTAssertTrue(controlBlock.contains("换个提示"), "按钮标题必须为 换个提示")
-        XCTAssertFalse(controlBlock.contains("换话题"), "控制区不得再显示 换话题")
-        XCTAssertTrue(controlBlock.contains("更换一个聊天提示"), "必须提供 accessibility hint 更换一个聊天提示")
-        XCTAssertTrue(controlBlock.contains("call.topic"), "call.topic identifier 保留")
+        XCTAssertFalse(controlBlock.contains("聊天提示"), "控制区不得叠加聊天提示")
+        XCTAssertFalse(controlBlock.contains("关心我"), "控制区不得叠加第四个主操作")
+        XCTAssertFalse(controlBlock.contains("call.care"), "旧关心我主入口必须移出通话主界面")
+        XCTAssertTrue(controlBlock.contains("title: \"陪伴\""), "第三按钮标题必须为 陪伴")
+        XCTAssertFalse(controlBlock.contains("title: \"换个提示\""), "第三按钮不得再承担换提示功能")
+        XCTAssertFalse(controlBlock.contains("call.topic"), "旧 call.topic identifier 必须移除")
+        XCTAssertTrue(controlBlock.contains("选择陪伴方式并重新建立通话"), "必须明确说明会重建会话")
+        XCTAssertTrue(controlBlock.contains("call.companion"), "必须提供 call.companion identifier")
+        XCTAssertTrue(controlBlock.contains(".frame(width: 76, height: 76)"), "三个核心功能键必须使用更大的 76pt 点击视觉尺寸")
+        XCTAssertTrue(call.contains("CompanionType.allCases"), "陪伴 Sheet 必须由统一 CompanionType 枚举驱动")
+        XCTAssertTrue(call.contains("Text(type.displayName)"), "陪伴 Sheet 必须展示统一类型名称")
+        XCTAssertTrue(call.contains("Text(type.summary)"), "陪伴 Sheet 必须展示统一公开说明")
+        for label in ["温柔陪伴", "强势偏爱", "黏人浪漫", "未知", "尚未被定义"] {
+            XCTAssertTrue(companion.contains(label), "陪伴类型定义缺少：\(label)")
+        }
+        XCTAssertTrue(call.contains("正在切换陪伴方式…"), "切换期间必须提供短暂状态反馈")
 
         // ===== 7. 角色页 1.0 收口 =====
         XCTAssertFalse(character.contains("CompanionPreviewRole.allCases"), "角色页不得遍历 allCases")

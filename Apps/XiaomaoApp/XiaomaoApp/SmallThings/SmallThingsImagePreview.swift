@@ -4,6 +4,9 @@ import UIKit
 struct SmallThingsImageContent: View {
     let imageData: Data
     var height: CGFloat? = nil
+    @Environment(\.appVisualMode) private var visualMode
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     var body: some View {
         Group {
@@ -21,23 +24,25 @@ struct SmallThingsImageContent: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("小事图片，暖色晚霞占位图")
+        .accessibilityLabel("小事图片占位图")
     }
 
     private var generatedPlaceholder: some View {
         ZStack {
             LinearGradient(
-                colors: [Theme.primary300, Theme.primary, Theme.roleBlush],
+                colors: visualMode == .mystery
+                    ? [visual.surfaceSoft, visual.primarySoft, visual.halo]
+                    : [Theme.primary300, Theme.primary, Theme.roleBlush],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Circle()
-                .fill(Theme.surfaceWarm.opacity(0.9))
+                .fill(visual.surfaceSoft.opacity(0.9))
                 .frame(width: 88, height: 88)
                 .offset(x: 78, y: -48)
             Image(systemName: "sun.horizon.fill")
                 .font(.system(size: 54, weight: .semibold))
-                .foregroundStyle(Theme.onPrimary.opacity(0.95))
+                .foregroundStyle((visualMode == .mystery ? visual.textPrimary : Theme.onPrimary).opacity(0.95))
         }
     }
 }

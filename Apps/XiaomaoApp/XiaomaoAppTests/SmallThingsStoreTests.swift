@@ -12,6 +12,24 @@ final class SmallThingsStoreTests: XCTestCase {
         XCTAssertEqual(store.approvedRatio, 32.0 / 52.0, accuracy: 0.001)
     }
 
+    func testLedgerLimitCanBeAdjustedWithoutTouchingEntries() {
+        let store = SmallThingsStore()
+        let originalEntries = store.entries
+
+        XCTAssertTrue(store.adjustLedgerLimit(to: 80))
+        XCTAssertEqual(store.ledgerLimit, 80, accuracy: 0.001)
+        XCTAssertEqual(store.remainingAmount, 36, accuracy: 0.001)
+        XCTAssertEqual(store.entries, originalEntries)
+    }
+
+    func testLedgerLimitCannotDropBelowUsedAndPendingAmount() {
+        let store = SmallThingsStore()
+
+        XCTAssertFalse(store.adjustLedgerLimit(to: 40))
+        XCTAssertEqual(store.ledgerLimit, 52, accuracy: 0.001)
+        XCTAssertEqual(store.validationMessage, "额度不能低于已使用和待确认金额")
+    }
+
     func testInitialMockContainsAllVisualStatesAndSortedTimeline() {
         let store = SmallThingsStore()
 

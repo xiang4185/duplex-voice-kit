@@ -9,6 +9,7 @@ struct SettingsView: View {
     let close: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @State private var appeared = false
     // P2.6E: 彩蛋入口 (本地 SwiftUI Sheet)
@@ -17,10 +18,12 @@ struct SettingsView: View {
     @State private var showPrivacySheet = false
     @State private var showAboutSheet = false
 
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
+
 
     var body: some View {
         ZStack {
-            Theme.bg
+            visual.background
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
@@ -45,37 +48,21 @@ struct SettingsView: View {
                     .offset(y: appeared ? 0 : 10)
                     .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
 
-                    // 使用统计卡 (数字滚动)
-                    statsCard
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.22), value: appeared)
-
-                    // 订阅卡
-                    subCard
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.3), value: appeared)
-
                     // 隐私与授权
                     Text("隐私与授权")
                         .font(Theme.title3Font)
                         .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal, 20)
-                        .padding(.top, 24)
+                        .padding(.top, 22)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.easeOut(duration: 0.4).delay(0.36), value: appeared)
+                        .animation(.easeOut(duration: 0.4).delay(0.22), value: appeared)
 
                     privacyGroup
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
+                        .animation(.easeOut(duration: 0.45).delay(0.28), value: appeared)
 
                     Button {
                         NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
@@ -90,14 +77,6 @@ struct SettingsView: View {
                     .padding(.top, 12)
                     .accessibilityIdentifier("settings.reconfigure")
 
-                    // 授权说明卡
-                    privacyNote
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.48), value: appeared)
-
                     // 关于
                     Text("关于")
                         .font(Theme.title3Font)
@@ -105,7 +84,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.easeOut(duration: 0.4).delay(0.54), value: appeared)
+                        .animation(.easeOut(duration: 0.4).delay(0.36), value: appeared)
 
                     aboutGroup
                         .padding(.horizontal, 20)
@@ -113,7 +92,7 @@ struct SettingsView: View {
                         .padding(.bottom, 40)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.6), value: appeared)
+                        .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
                 }
             }
         }
@@ -184,9 +163,9 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 16, x: 0, y: 4)
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.55), radius: 10, x: 0, y: 3)
     }
 
     // MARK: 订阅卡
@@ -194,10 +173,13 @@ struct SettingsView: View {
         HStack(spacing: 14) {
             Image(systemName: "sparkles")
                 .font(.system(size: 24))
-                .foregroundStyle(.white)
+                .foregroundStyle(visualMode == .mystery ? visual.textPrimary : .white)
                 .frame(width: 48, height: 48)
                 .background(
-                    LinearGradient(colors: [Theme.roleGold, Theme.primary],
+                    LinearGradient(
+                        colors: visualMode == .mystery
+                            ? [visual.primarySoft, visual.primary.opacity(0.72)]
+                            : [Theme.roleGold, Theme.primary],
                                    startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
@@ -220,18 +202,23 @@ struct SettingsView: View {
             } label: {
                 Text("打开彩蛋")
                     .font(Theme.captionFont)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(visualMode == .mystery ? visual.textPrimary : .white)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(Theme.primary, in: Capsule())
+                    .background(visualMode == .mystery ? visual.primarySoft : Theme.primary, in: Capsule())
+                    .overlay {
+                        if visualMode == .mystery {
+                            Capsule().stroke(visual.border.opacity(0.9), lineWidth: 0.7)
+                        }
+                    }
             }
             .buttonStyle(PressableButtonStyle())
             .accessibilityIdentifier("settings.pro")
         }
         .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     // MARK: 隐私组 (P2.6J: 仅保留真实生效的开关与静态说明, 删除本地无效开关)
@@ -263,9 +250,9 @@ struct SettingsView: View {
             .padding(.horizontal, 18)
             .frame(minHeight: 60)
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     private func privacyRow(icon: String, title: String, detail: String, isOn: Binding<Bool>) -> some View {
@@ -306,21 +293,40 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(Theme.surfaceWarm, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(visual.surfaceSoft.opacity(0.78), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     // MARK: 关于组
     private var aboutGroup: some View {
         VStack(spacing: 0) {
+            Button {
+                WarmHaptics.action()
+                showProSheet = true
+            } label: {
+                HStack {
+                    Label("小猫 Pro · 彩蛋", systemImage: "sparkles")
+                        .font(Theme.bodyFont)
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .padding(.horizontal, 20)
+                .frame(minHeight: 56)
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("settings.pro")
+            Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "关于小猫", detail: "版本 1.0 (0)")
             Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "帮助与反馈", detail: nil)
             Divider().overlay(Theme.border).padding(.leading, 20)
             aboutRow(title: "隐私政策", detail: nil)
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardTopHighlight()
-        .shadow(color: Theme.shadowRaised, radius: 12, x: 0, y: 3)
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
     private func aboutRow(title: String, detail: String?) -> some View {

@@ -15,6 +15,7 @@ struct OrganicMeshBackground: View {
 
     let mode: Mode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appVisualMode) private var visualMode
 
     /// 关键帧值类型 — 仅少量 CGFloat/Double, 每帧不创建复杂对象或随机数
     private struct MeshMotion {
@@ -42,50 +43,51 @@ struct OrganicMeshBackground: View {
         KeyframeAnimator(initialValue: MeshMotion(), repeating: true) { motion in
             meshView(motion: motion)
         } keyframes: { _ in
+            let speed = visualMode == .mystery ? 1.4 : 1.0
             // 完整周期 20s (任务建议 18~22s):
             // 0s 基准 → 4s 中央点轻微向右上 → 9s 中央点缓慢向左下扩散
             // → 14s 上下边缘色斑轻微交换重心 → 20s 回到基准
             KeyframeTrack(\.centerX) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.53, duration: 4)   // 向右上
-                LinearKeyframe(0.47, duration: 5)   // 向左下扩散
-                LinearKeyframe(0.50, duration: 6)   // 回到基准
-                LinearKeyframe(0.50, duration: 5)   // 停留
+                LinearKeyframe(0.53, duration: 4 * speed)   // 向右上
+                LinearKeyframe(0.47, duration: 5 * speed)   // 向左下扩散
+                LinearKeyframe(0.50, duration: 6 * speed)   // 回到基准
+                LinearKeyframe(0.50, duration: 5 * speed)   // 停留
             }
             KeyframeTrack(\.centerY) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.47, duration: 4)
-                LinearKeyframe(0.55, duration: 5)
-                LinearKeyframe(0.50, duration: 6)
-                LinearKeyframe(0.50, duration: 5)
+                LinearKeyframe(0.47, duration: 4 * speed)
+                LinearKeyframe(0.55, duration: 5 * speed)
+                LinearKeyframe(0.50, duration: 6 * speed)
+                LinearKeyframe(0.50, duration: 5 * speed)
             }
             KeyframeTrack(\.topX) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.52, duration: 4)
-                LinearKeyframe(0.48, duration: 5)
-                LinearKeyframe(0.45, duration: 5)   // 上边缘色斑重心偏移
-                LinearKeyframe(0.50, duration: 6)
+                LinearKeyframe(0.52, duration: 4 * speed)
+                LinearKeyframe(0.48, duration: 5 * speed)
+                LinearKeyframe(0.45, duration: 5 * speed)   // 上边缘色斑重心偏移
+                LinearKeyframe(0.50, duration: 6 * speed)
             }
             KeyframeTrack(\.bottomX) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.48, duration: 4)
-                LinearKeyframe(0.52, duration: 5)
-                LinearKeyframe(0.55, duration: 5)   // 下边缘交换重心
-                LinearKeyframe(0.50, duration: 6)
+                LinearKeyframe(0.48, duration: 4 * speed)
+                LinearKeyframe(0.52, duration: 5 * speed)
+                LinearKeyframe(0.55, duration: 5 * speed)   // 下边缘交换重心
+                LinearKeyframe(0.50, duration: 6 * speed)
             }
             KeyframeTrack(\.leftY) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.48, duration: 4)
-                LinearKeyframe(0.52, duration: 5)
-                LinearKeyframe(0.50, duration: 6)
-                LinearKeyframe(0.50, duration: 5)
+                LinearKeyframe(0.48, duration: 4 * speed)
+                LinearKeyframe(0.52, duration: 5 * speed)
+                LinearKeyframe(0.50, duration: 6 * speed)
+                LinearKeyframe(0.50, duration: 5 * speed)
             }
             KeyframeTrack(\.rightY) {
                 LinearKeyframe(0.50, duration: 0)
-                LinearKeyframe(0.52, duration: 4)
-                LinearKeyframe(0.48, duration: 5)
-                LinearKeyframe(0.50, duration: 6)
-                LinearKeyframe(0.50, duration: 5)
+                LinearKeyframe(0.52, duration: 4 * speed)
+                LinearKeyframe(0.48, duration: 5 * speed)
+                LinearKeyframe(0.50, duration: 6 * speed)
+                LinearKeyframe(0.50, duration: 5 * speed)
             }
             // P2.7B-FINAL-VISUAL-FIX: 已移除该 KeyframeTrack 关键帧 (无渲染意义)
         }
@@ -110,7 +112,7 @@ struct OrganicMeshBackground: View {
         .overlay {
             // P2.7B-FINAL-VISUAL-FIX: 浅色 veil 0.06→0.14, 淡化色块边界, 稳定文字对比度,
             // 保留 Liquid Glass 所需的背景层次, 不把页面变纯白.
-            Color.white.opacity(0.14)
+            (visualMode == .mystery ? Color.black.opacity(0.08) : Color.white.opacity(0.18))
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
         }
@@ -146,40 +148,41 @@ struct OrganicMeshBackground: View {
     /// 约束: Rose 最多 1 次, Cool Accent 最多 1 次; 中央为暖白;
     /// 不允许左右两侧同时为 Rose (避免两侧同色 "竖带" 视觉).
     private var colors: [Color] {
+        let tokens = Theme.visual(visualMode)
         switch mode {
         case .home:
             // Rose       Peach      WarmWhite
             // Peach      WarmWhite  Peach
             // WarmWhite  Peach      CoolAccent
             return [
-                Theme.meshRose,
-                Theme.meshPeach,
-                Theme.meshWarmWhite,
+                tokens.meshRose,
+                tokens.meshPeach,
+                tokens.meshWarmWhite,
 
-                Theme.meshPeach,
-                Theme.meshWarmWhite,
-                Theme.meshPeach,
+                tokens.meshPeach,
+                tokens.meshWarmWhite,
+                tokens.meshPeach,
 
-                Theme.meshWarmWhite,
-                Theme.meshPeach,
-                Theme.meshCoolAccent,
+                tokens.meshWarmWhite,
+                tokens.meshPeach,
+                tokens.meshCoolAccent,
             ]
         case .call:
             // Peach      WarmWhite  CoolAccent
             // WarmWhite  WarmWhite  Peach
             // Rose       WarmWhite  Peach
             return [
-                Theme.meshPeach,
-                Theme.meshWarmWhite,
-                Theme.meshCoolAccent,
+                tokens.meshPeach,
+                tokens.meshWarmWhite,
+                tokens.meshCoolAccent,
 
-                Theme.meshWarmWhite,
-                Theme.meshWarmWhite,
-                Theme.meshPeach,
+                tokens.meshWarmWhite,
+                tokens.meshWarmWhite,
+                tokens.meshPeach,
 
-                Theme.meshRose,
-                Theme.meshWarmWhite,
-                Theme.meshPeach,
+                tokens.meshRose,
+                tokens.meshWarmWhite,
+                tokens.meshPeach,
             ]
         }
     }

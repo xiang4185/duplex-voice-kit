@@ -9,12 +9,12 @@ struct ChatComposerView: View {
     let send: () -> Void
 
     @FocusState.Binding var inputFocused: Bool
+    @Environment(\.appVisualMode) private var visualMode
+
+    private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
     var body: some View {
         VStack(spacing: Theme.Spacing.xSmall) {
-            Divider()
-                .overlay(Theme.border)
-
             HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
                 TextField("说点什么", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
@@ -23,7 +23,7 @@ struct ChatComposerView: View {
                     .padding(.horizontal, Theme.Spacing.small)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)
-                    .background(Theme.surface)
+                    .background(visual.surface.opacity(0.72))
                     .clipShape(
                         RoundedRectangle(
                             cornerRadius: Theme.Radius.medium,
@@ -35,7 +35,7 @@ struct ChatComposerView: View {
                             cornerRadius: Theme.Radius.medium,
                             style: .continuous
                         )
-                        .stroke(Theme.border, lineWidth: 1)
+                        .stroke(visual.border.opacity(0.5), lineWidth: 0.7)
                     }
                     .contentShape(
                         RoundedRectangle(
@@ -64,8 +64,8 @@ struct ChatComposerView: View {
                         minWidth: Theme.controlMinimumSize,
                         minHeight: Theme.controlMinimumSize
                     )
-                    .foregroundStyle(canSend ? Theme.onPrimary : Theme.textTertiary)
-                    .background(canSend ? Theme.primary : Theme.primarySoft)
+                    .foregroundStyle(canSend ? visual.onPrimary : visual.textTertiary)
+                    .background(canSend ? visual.primary : visual.primarySoft)
                     .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -81,14 +81,16 @@ struct ChatComposerView: View {
                     Text("\(draft.count)/\(characterLimit)")
                 }
                 .font(Theme.captionFont)
-                .foregroundStyle(isOverLimit ? Theme.danger : Theme.textSecondary)
+                .foregroundStyle(isOverLimit ? Theme.danger : visual.textSecondary)
                 .accessibilityElement(children: .combine)
             }
         }
         .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.top, Theme.Spacing.xSmall)
+        .padding(.top, 10)
         .padding(.bottom, Theme.Spacing.small)
-        .background(Theme.bgElevated)
+        .background(visual.glassTint)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) { Divider().overlay(visual.border.opacity(0.35)) }
     }
 
     private var shouldShowCharacterCount: Bool {

@@ -60,7 +60,6 @@ final class ChatUIContractTests: XCTestCase {
             "chat.input",
             "chat.send",
             "chat.clear",
-            "chat.xiaomao.mode",
             "chat.xiaomao.retry.",
             "chat.message."
         ] {
@@ -87,11 +86,13 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
         XCTAssertTrue(chat.contains("header"))
-        XCTAssertTrue(chat.contains("modeFooter"))
+        XCTAssertFalse(chat.contains("modeFooter"), "底部参与模式条会抢占聊天主内容，不应回归")
+        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"),
+                      "聊天头部只保留当前陪伴类型，不叠加第二层说明")
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
-            2,
-            "顶部与底部非输入区域都必须可主动收起键盘"
+            1,
+            "顶部非输入区域必须可主动收起键盘"
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
@@ -129,6 +130,9 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("\\(message.participant.displayName)：\\(message.content)"))
         XCTAssertTrue(bubble.contains("switch message.participant"))
         XCTAssertTrue(bubble.contains("case .xiaomao:"))
+        XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
+        XCTAssertTrue(bubble.contains("style: .thumbnail"), "聊天头像必须使用缩略图构图")
+        XCTAssertFalse(bubble.contains("Text(\"🐱\")"), "小猫消息不得继续使用固定 emoji 头像")
         XCTAssertTrue(bubble.contains("message.participant == .user"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
@@ -143,9 +147,10 @@ final class ChatUIContractTests: XCTestCase {
         let sendBlock = String(chat[sendRange.lowerBound..<focusBindingRange.lowerBound])
 
         let dismiss = try XCTUnwrap(sendBlock.range(of: "inputFocused = false"))
-        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send()"))
+        let request = try XCTUnwrap(sendBlock.range(of: "await viewModel.send("))
         XCTAssertLessThan(dismiss.lowerBound, request.lowerBound)
         XCTAssertTrue(sendBlock.contains("await Task.yield()"))
+        XCTAssertTrue(sendBlock.contains("companionTypeID: companionStore.current.rawValue"))
         XCTAssertFalse(chat.contains("inputFocused = true"))
     }
 
@@ -153,7 +158,8 @@ final class ChatUIContractTests: XCTestCase {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
         let model = try source("XiaomaoApp/Models/ChatMessage.swift")
 
-        XCTAssertTrue(chat.contains("开发者和小猫都在"))
+        XCTAssertFalse(chat.contains("开发者和小猫都在"), "极简头部不得重复说明参与者")
+        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"))
         XCTAssertTrue(model.contains("case developer"))
         XCTAssertTrue(model.contains("case xiaomao"))
         XCTAssertFalse(model.contains("case companion"))
