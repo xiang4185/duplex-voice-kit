@@ -236,6 +236,44 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.draft, "")
     }
 
+    func testFailedSendReusesRequestIDForSameFingerprint() async {
+        let sequence = RequestIDSequence()
+        let service = ChatServiceSpy(
+            historyResults: [loadedHistory()],
+            sendResult: .failure(SyntheticError.failed)
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { sequence.next() }
+        )
+        await viewModel.loadHistory()
+        viewModel.draft = "弱网重试"
+
+        await viewModel.send(companionTypeID: CompanionType.romantic.rawValue)
+        await viewModel.send(companionTypeID: CompanionType.romantic.rawValue)
+
+        XCTAssertEqual(service.sendRequests.map(\.requestID), ["request-1", "request-1"])
+    }
+
+    func testChangingSendFingerprintGetsNewRequestID() async {
+        let sequence = RequestIDSequence()
+        let service = ChatServiceSpy(
+            historyResults: [loadedHistory()],
+            sendResult: .failure(SyntheticError.failed)
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { sequence.next() }
+        )
+        await viewModel.loadHistory()
+        viewModel.draft = "第一条"
+        await viewModel.send()
+        viewModel.draft = "第二条"
+        await viewModel.send()
+
+        XCTAssertEqual(service.sendRequests.map(\.requestID), ["request-1", "request-2"])
+    }
+
     func testParticipationModeIsForwardedToService() async {
         let service = ChatServiceSpy(
             historyResults: [.success(ChatHistoryResult(
@@ -367,6 +405,69 @@ final class ChatViewModelTests: XCTestCase {
             [.user, .xiaomao]
         )
         XCTAssertFalse(viewModel.failedXiaomaoTurns.contains(turnID))
+    }
+
+    func testFailedRetryReusesRequestIDForSameTurn() async {
+        let sequence = RequestIDSequence()
+        let turnID = "retry-idempotency-turn"
+        let user = serverMessage(
+            id: "retry-idempotency-user",
+            role: .user,
+            content: "合成发送",
+            participant: .user,
+            turnID: turnID
+        )
+        let service = ChatServiceSpy(
+            historyResults: [.success(ChatHistoryResult(sessionID: "server-session", messages: []))],
+            sendResult: .success(ChatSendResult(
+                sessionID: "server-session",
+                turnID: turnID,
+                messages: [user],
+                participantResults: [
+                    ChatParticipantResult(
+                        participant: .xiaomao,
+                        turnID: turnID,
+                        status: .failed,
+                        retryable: true,
+                        message: nil
+                    )
+                ],
+                route: "direct",
+                degraded: false,
+                persisted: true
+            )),
+            retryResult: .failure(SyntheticError.failed)
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { sequence.next() }
+        )
+        await viewModel.loadHistory()
+        viewModel.draft = "合成发送"
+        await viewModel.send()
+
+        await viewModel.retryXiaomao(turnID: turnID)
+        await viewModel.retryXiaomao(turnID: turnID)
+
+        XCTAssertEqual(service.retryRequests.map(\.requestID), ["request-2", "request-2"])
+    }
+
+    func testFailedClearReusesRequestID() async {
+        let sequence = RequestIDSequence()
+        let service = ChatServiceSpy(
+            historyResults: [loadedHistory()],
+            clearResult: .failure(SyntheticError.failed)
+        )
+        let viewModel = ChatViewModel(
+            service: service,
+            requestIDGenerator: { sequence.next() }
+        )
+        await viewModel.loadHistory()
+
+        await viewModel.clear()
+        await viewModel.clear()
+
+        XCTAssertEqual(service.clearRequests.map(\.requestID), ["request-1", "request-1"])
     }
 
     func testSendDoesNotOptimisticallyInsertAndConsecutiveTapSendsOnce() async {
@@ -723,6 +824,18 @@ private enum SyntheticError: Error {
     case failed
 }
 
+private final class RequestIDSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return "request-\(value)"
+    }
+}
+
 private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
     struct SendRequest: Equatable {
         let message: String
@@ -751,6 +864,12 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         let requestID: String
     }
 
+    struct RetryRequest: Equatable {
+        let turnID: String
+        let sessionID: String
+        let requestID: String
+    }
+
     private let lock = NSLock()
     private var historyResults: [Result<ChatHistoryResult, Error>]
     private let sendResult: Result<ChatSendResult, Error>
@@ -764,6 +883,7 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
     private let onClear: (() -> Void)?
     private var storedLoadHistoryCallCount = 0
     private var storedSendRequests: [SendRequest] = []
+    private var storedRetryRequests: [RetryRequest] = []
     private var storedClearRequests: [ClearRequest] = []
 
     init(
@@ -800,6 +920,12 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
 
     var sendCallCount: Int { sendRequests.count }
     var clearCallCount: Int { clearRequests.count }
+
+    var retryRequests: [RetryRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRetryRequests
+    }
 
     var sendRequests: [SendRequest] {
         lock.lock()
@@ -848,9 +974,13 @@ private final class ChatServiceSpy: ChatServicing, @unchecked Sendable {
         sessionID: String,
         requestID: String
     ) async throws -> ChatRetryResult {
-        _ = turnID
-        _ = sessionID
-        _ = requestID
+        lock.lock()
+        storedRetryRequests.append(.init(
+            turnID: turnID,
+            sessionID: sessionID,
+            requestID: requestID
+        ))
+        lock.unlock()
         return try retryResult.get()
     }
 
