@@ -66,6 +66,7 @@ struct ChatView: View {
                     .padding(.vertical, Theme.Spacing.small)
                 }
                 .defaultScrollAnchor(.bottom)
+                .defaultScrollAnchor(.top, for: .alignment)
                 .scrollDismissesKeyboard(.immediately)
                 .simultaneousGesture(
                     TapGesture().onEnded { _ in inputFocused = false }
