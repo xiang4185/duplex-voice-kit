@@ -55,6 +55,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                        "聊天页不得再维护手工键盘高度")
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须停在最新消息")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
+                      "消息不足一屏时必须从顶部开始")
         XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
                       "键盘稳定后必须只做一次最终锚底")
         XCTAssertTrue(chat.contains("keyboardDidHideNotification"),

@@ -96,6 +96,8 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
+                      "消息不足一屏时必须从顶部开始，不得沉到底部")
         XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
                       "键盘最终布局完成后只能做一次锚底")
         XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
@@ -146,6 +148,10 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(mainTab.contains("environment.chatTargetDeviceID == nil ? .user : .developer"))
         XCTAssertTrue(chat.contains("localParticipant: localParticipant"))
         XCTAssertTrue(bubble.contains("private var isLocalMessage: Bool { message.participant == localParticipant }"))
+        XCTAssertTrue(bubble.contains("case .user: return \"客户\""),
+                      "开发者视角中的客户消息不得仍显示成‘你’")
+        XCTAssertTrue(bubble.contains("Text(\"客\")"),
+                      "开发者视角中的客户消息必须有可区分的远端头像")
         XCTAssertFalse(bubble.contains("if message.role == .user"))
     }
 

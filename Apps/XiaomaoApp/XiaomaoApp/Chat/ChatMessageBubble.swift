@@ -9,6 +9,14 @@ struct ChatMessageBubble: View {
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
     private var isLocalMessage: Bool { message.participant == localParticipant }
+    private var participantDisplayName: String {
+        if isLocalMessage { return "你" }
+        switch message.participant {
+        case .user: return "客户"
+        case .developer: return "开发者"
+        case .xiaomao: return "小猫"
+        }
+    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
@@ -27,7 +35,7 @@ struct ChatMessageBubble: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(message.participant.displayName)：\(message.content)")
+        .accessibilityLabel("\(participantDisplayName)：\(message.content)")
         .accessibilityIdentifier("chat.message.\(message.id)")
     }
 
@@ -37,7 +45,7 @@ struct ChatMessageBubble: View {
             spacing: 5
         ) {
             if !isLocalMessage && !groupedWithPrevious {
-                Text(message.participant.displayName)
+                Text(participantDisplayName)
                     .font(Theme.captionFont)
                     .foregroundStyle(visual.textSecondary)
                     .padding(.horizontal, 3)
@@ -84,7 +92,13 @@ struct ChatMessageBubble: View {
                 .frame(width: 34, height: 34)
                 .accessibilityHidden(true)
         case .user:
-            EmptyView()
+            Text("客")
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(visual.textPrimary)
+                .frame(width: 34, height: 34)
+                .background(visual.primarySoft)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
         }
     }
 
