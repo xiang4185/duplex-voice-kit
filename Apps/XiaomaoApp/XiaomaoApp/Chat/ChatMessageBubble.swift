@@ -122,7 +122,7 @@ struct ChatMessageBubble: View {
 
     private var bubbleSurface: Color {
         if isLocalMessage { return Theme.v2InkSurface }
-        switch message.participant {
+        return switch message.participant {
         case .user:
             Theme.v2CoralSoft
         case .developer:
