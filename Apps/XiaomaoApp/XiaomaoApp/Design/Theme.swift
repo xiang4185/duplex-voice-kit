@@ -94,6 +94,18 @@ enum Theme {
         }
     }
 
+    // MARK: - V2 Editorial palette
+    // Core scenes use a stronger ink / coral / warm-paper hierarchy while
+    // legacy screens continue to consume the original semantic tokens.
+    static let v2Ink = adaptive(light: 0x2A1C24, dark: 0xF2EDF0)
+    static let v2InkSurface = adaptive(light: 0x34242D, dark: 0x19171D)
+    static let v2Paper = adaptive(light: 0xFFF9F4, dark: 0x0F0E12)
+    static let v2PaperMuted = adaptive(light: 0xF6EEE8, dark: 0x17151A)
+    static let v2Coral = adaptive(light: 0xF35F72, dark: 0xFF8391)
+    static let v2CoralSoft = adaptive(light: 0xF9DCE0, dark: 0x40252D)
+    static let v2Lavender = adaptive(light: 0xCEC8E8, dark: 0x706A89)
+    static let v2Line = adaptive(light: 0xE8DDD8, dark: 0x332F38)
+
     // MARK: 布局
     static let spacing: CGFloat = Spacing.medium
     static let cornerRadius: CGFloat = Radius.medium

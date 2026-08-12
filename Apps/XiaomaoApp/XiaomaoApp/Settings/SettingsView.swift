@@ -25,21 +25,25 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            visual.background
-                .ignoresSafeArea()
+            settingsBackdrop
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     // 用户行 (P2.6I: 中性小猫文案, 头像复用隐私头像, 不再显示旧品牌与假天数)
                     HStack(spacing: 14) {
-                        PrivacyAvatar(size: 56, tappable: false)
+                        PrivacyAvatar(size: 58, tappable: false)
+                            .overlay(Circle().stroke(Theme.v2Line, lineWidth: 1))
                         VStack(alignment: .leading, spacing: 4) {
+                            Text("PERSONAL SPACE")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .tracking(1.6)
+                                .foregroundStyle(Theme.v2Coral)
                             Text("小猫在呢")
-                                .font(Theme.title3Font)
-                                .foregroundStyle(visual.textPrimary)
+                                .font(.system(size: 28, weight: .semibold, design: .serif))
+                                .foregroundStyle(Theme.v2Ink)
                             Text("随时回来和小猫说说话")
                                 .font(Theme.captionFont)
-                                .foregroundStyle(visual.textSecondary)
+                                .foregroundStyle(Theme.v2Ink.opacity(0.58))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
@@ -151,9 +155,21 @@ struct SettingsView: View {
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(Theme.title3Font)
-            .foregroundStyle(visual.textPrimary)
+            .font(.system(size: 21, weight: .semibold, design: .serif))
+            .foregroundStyle(Theme.v2Ink)
             .padding(.horizontal, 20)
+    }
+
+    private var settingsBackdrop: some View {
+        ZStack {
+            Theme.v2Paper
+            LinearGradient(
+                colors: [Theme.v2Lavender.opacity(0.18), .clear, Theme.v2CoralSoft.opacity(0.24)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
     }
 
     // MARK: 使用统计卡 (P2.6I: 无真实数据时诚实空状态, 不显示 0 分钟/0 天/0%/假进度)
@@ -242,9 +258,8 @@ struct SettingsView: View {
                        get: { privacy.showRealAvatar },
                        set: { privacy.showRealAvatar = $0 }
                    ))
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+        .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.v2Line, lineWidth: 0.8))
     }
 
     // MARK: 隐私与权限
@@ -260,16 +275,15 @@ struct SettingsView: View {
             }
             .buttonStyle(PressableCardStyle())
             .accessibilityIdentifier("settings.microphone")
-            Divider().overlay(visual.border).padding(.leading, 60)
+            Divider().overlay(Theme.v2Line).padding(.leading, 60)
             settingsRow(
                 icon: "waveform.and.mic",
                 title: "实时语音服务",
                 detail: "通话时语音会发送到服务端用于实时对话"
             )
         }
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+        .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.v2Line, lineWidth: 0.8))
     }
 
     // MARK: 高级设置
@@ -285,9 +299,8 @@ struct SettingsView: View {
             )
         }
         .buttonStyle(PressableCardStyle())
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+        .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.v2Line, lineWidth: 0.8))
         .accessibilityIdentifier("settings.reconfigure")
     }
 
@@ -300,27 +313,27 @@ struct SettingsView: View {
         HStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(Theme.info)
+                .foregroundStyle(Theme.v2Coral)
                 .frame(width: 36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(Theme.bodyFont)
-                    .foregroundStyle(visual.textPrimary)
+                    .foregroundStyle(Theme.v2Ink)
                 Text(detail)
                     .font(Theme.captionFont)
-                    .foregroundStyle(visual.textSecondary)
+                    .foregroundStyle(Theme.v2Ink.opacity(0.58))
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             if let trailing {
                 Text(trailing)
                     .font(Theme.captionFont.weight(.semibold))
-                    .foregroundStyle(Theme.textLink)
+                    .foregroundStyle(Theme.v2Coral)
             }
             if trailing != nil {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(visual.textTertiary)
+                    .foregroundStyle(Theme.v2Ink.opacity(0.38))
             }
         }
         .padding(.horizontal, 18)
@@ -358,20 +371,20 @@ struct SettingsView: View {
         HStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 20))
-                .foregroundStyle(Theme.info)
+                .foregroundStyle(Theme.v2Coral)
                 .frame(width: 36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(Theme.bodyFont)
-                    .foregroundStyle(visual.textPrimary)
+                    .foregroundStyle(Theme.v2Ink)
                 Text(detail)
                     .font(Theme.captionFont)
-                    .foregroundStyle(visual.textSecondary)
+                    .foregroundStyle(Theme.v2Ink.opacity(0.58))
             }
             Spacer(minLength: 0)
             Toggle("", isOn: isOn)
                 .labelsHidden()
-                .tint(visual.primary)
+                .tint(Theme.v2Coral)
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("settings.privacy.\(title)")
         }
@@ -405,27 +418,26 @@ struct SettingsView: View {
                 HStack {
                     Label("小猫 Pro · 彩蛋", systemImage: "sparkles")
                         .font(Theme.bodyFont)
-                        .foregroundStyle(visual.textPrimary)
+                        .foregroundStyle(Theme.v2Ink)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(visual.textTertiary)
+                        .foregroundStyle(Theme.v2Ink.opacity(0.38))
                 }
                 .padding(.horizontal, 20)
                 .frame(minHeight: 56)
             }
             .buttonStyle(PressableCardStyle())
             .accessibilityIdentifier("settings.pro")
-            Divider().overlay(visual.border).padding(.leading, 20)
+            Divider().overlay(Theme.v2Line).padding(.leading, 20)
             aboutRow(title: "关于小猫", detail: "版本 1.0 (0)")
-            Divider().overlay(visual.border).padding(.leading, 20)
+            Divider().overlay(Theme.v2Line).padding(.leading, 20)
             aboutRow(title: "帮助与反馈", detail: nil)
-            Divider().overlay(visual.border).padding(.leading, 20)
+            Divider().overlay(Theme.v2Line).padding(.leading, 20)
             aboutRow(title: "隐私政策", detail: nil)
         }
-        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+        .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.v2Line, lineWidth: 0.8))
     }
 
     private func aboutRow(title: String, detail: String?) -> some View {
@@ -442,16 +454,16 @@ struct SettingsView: View {
             HStack {
                 Text(title)
                     .font(Theme.bodyFont)
-                    .foregroundStyle(visual.textPrimary)
+                    .foregroundStyle(Theme.v2Ink)
                 Spacer()
                 if let detail {
                     Text(detail)
                         .font(Theme.captionFont)
-                        .foregroundStyle(visual.textTertiary)
+                        .foregroundStyle(Theme.v2Ink.opacity(0.42))
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(visual.textTertiary)
+                    .foregroundStyle(Theme.v2Ink.opacity(0.38))
             }
             .padding(.horizontal, 20)
             .frame(minHeight: 56)

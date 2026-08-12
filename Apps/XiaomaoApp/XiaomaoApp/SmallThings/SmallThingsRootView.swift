@@ -14,7 +14,7 @@ struct SmallThingsRootView: View {
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                LazyVStack(spacing: Theme.Spacing.medium) {
+                LazyVStack(spacing: 18) {
                     if store.isLoading && store.entries.isEmpty {
                         ProgressView("正在加载小事…")
                             .frame(maxWidth: .infinity)
@@ -37,6 +37,8 @@ struct SmallThingsRootView: View {
                         .warmCard()
                     }
 
+                    v2Masthead
+
                     SmallThingsLedgerCard(
                         store: store,
                         addExpense: { path.append(.composer(.expense)) },
@@ -54,12 +56,12 @@ struct SmallThingsRootView: View {
                         }
                     }
                 }
-                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.horizontal, 18)
                 .padding(.top, Theme.Spacing.small)
-                .padding(.bottom, Theme.Spacing.large)
+                .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
-            .background(visual.background.ignoresSafeArea())
+            .background(smallThingsBackdrop)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: SmallThingsRoute.self) { route in
                 switch route {
@@ -80,24 +82,68 @@ struct SmallThingsRootView: View {
         }
     }
 
+    private var v2Masthead: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("SHARED ARCHIVE")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(1.7)
+                .foregroundStyle(Theme.v2Coral)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("小事本")
+                    .font(.system(size: 35, weight: .semibold, design: .serif))
+                    .foregroundStyle(Theme.v2Ink)
+                Spacer()
+                Text("\(store.entries.count) MOMENTS")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .tracking(1.1)
+                    .foregroundStyle(Color.white.opacity(0.78))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(Theme.v2InkSurface, in: Capsule())
+            }
+
+            Text("把一起生活的证据，慢慢收进这里。")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(visual.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("小事本，共 \(store.entries.count) 件")
+    }
+
+    private var smallThingsBackdrop: some View {
+        ZStack {
+            Theme.v2Paper
+            LinearGradient(
+                colors: [Theme.v2CoralSoft.opacity(0.26), .clear, Theme.v2Lavender.opacity(0.18)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
+    }
+
     private var flowHeader: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
             HStack(alignment: .firstTextBaseline) {
-                Text("生活时间流")
-                    .font(Theme.title3Font)
-                    .foregroundStyle(visual.textPrimary)
+                Text("最近记下")
+                    .font(.system(size: 22, weight: .semibold, design: .serif))
+                    .foregroundStyle(Theme.v2Ink)
                 Spacer(minLength: Theme.Spacing.small)
                 Text("共 \(store.entries.count) 件")
                     .font(Theme.captionFont)
                     .foregroundStyle(visual.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(visual.surfaceSoft, in: Capsule())
+                    .background(Theme.v2PaperMuted, in: Capsule())
             }
             HStack(spacing: Theme.Spacing.xSmall) {
-                Text("小事，都值得记下来")
+                Text("THE LIVING TIMELINE")
                     .font(Theme.captionFont)
-                    .foregroundStyle(visual.textSecondary)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.v2Coral)
                 Spacer(minLength: Theme.Spacing.small)
                 if !store.pendingApprovals.isEmpty {
                     Button {

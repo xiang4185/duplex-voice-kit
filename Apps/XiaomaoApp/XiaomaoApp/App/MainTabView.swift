@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - 主 Tab 框架 (MainTabView)
 // 4 Tab — 陪伴 / 聊天 / 小事 / 我的
@@ -13,6 +14,8 @@ struct MainTabView: View {
     @StateObject private var chatViewModel: ChatViewModel
     @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
+    @State private var keyboardVisible = false
+    @Namespace private var tabSelectionAnimation
     @Environment(\.appVisualMode) private var visualMode
 
     enum Tab: Hashable {
@@ -87,6 +90,7 @@ struct MainTabView: View {
                 .tag(Tab.settings)
         }
         .tint(tokens.primary)
+        .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(visualMode == .mystery ? .dark : .light, for: .tabBar)
@@ -96,6 +100,70 @@ struct MainTabView: View {
                 currentCallBar
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !keyboardVisible {
+                v2TabBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
+        }
+        .animation(.easeOut(duration: Theme.Motion.quick), value: keyboardVisible)
+    }
+
+    private var v2TabBar: some View {
+        HStack(spacing: 5) {
+            v2TabButton(.companion, identifier: "main.tab.companion")
+            v2TabButton(.chat, identifier: "main.tab.chat")
+            v2TabButton(.smallThings, identifier: "main.tab.smallThings")
+            v2TabButton(.settings, identifier: "main.tab.settings")
+        }
+        .padding(6)
+        .frame(height: 64)
+        .background(Theme.v2InkSurface.opacity(0.96), in: Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.22), radius: 24, x: 0, y: 12)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("main.v2TabBar")
+    }
+
+    private func v2TabButton(_ tab: Tab, identifier: String) -> some View {
+        let selected = selectedTab == tab
+        return Button {
+            WarmHaptics.action()
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.78)) {
+                selectedTab = tab
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 17, weight: .semibold))
+                if selected {
+                    Text(tab.title)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+            }
+            .foregroundStyle(selected ? Color.white : Color.white.opacity(0.58))
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background {
+                if selected {
+                    Capsule()
+                        .fill(Theme.v2Coral)
+                        .matchedGeometryEffect(id: "v2.tab.selection", in: tabSelectionAnimation)
+                }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(identifier)
     }
 
     private var currentCallBar: some View {

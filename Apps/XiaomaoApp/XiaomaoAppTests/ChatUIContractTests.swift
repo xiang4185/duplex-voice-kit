@@ -87,8 +87,8 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
         XCTAssertTrue(chat.contains("header"))
         XCTAssertFalse(chat.contains("modeFooter"), "底部参与模式条会抢占聊天主内容，不应回归")
-        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"),
-                      "聊天头部只保留当前陪伴类型，不叠加第二层说明")
+        XCTAssertTrue(chat.contains("\\(companionStore.current.displayName) 正在这里"),
+                      "聊天头部必须保留当前陪伴身份和在线感")
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
             1,
@@ -145,10 +145,23 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("message.participant == localParticipant"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
         XCTAssertTrue(bubble.contains("showsTimestamp"), "时间应按需显示，避免长对话产生重复视觉噪声")
-        XCTAssertTrue(bubble.contains("每条消息都保留头像"), "聊天身份识别应遵循微信式逐条头像")
+        XCTAssertTrue(bubble.contains("每条远端消息都保留头像"), "聊天身份识别应遵循微信式逐条头像")
         XCTAssertFalse(bubble.contains("Color.clear.frame(width: 34"), "连续消息不得再用空白头像占位")
+        XCTAssertTrue(bubble.contains(".frame(width: 32, height: 32)"), "三方头像应使用统一尺寸和轨道")
         XCTAssertTrue(bubble.contains("bubble\n                avatar"), "本地消息也必须保留右侧头像")
+        XCTAssertTrue(bubble.contains(".frame(maxWidth: 278"), "长消息必须限制行宽，避免铺满屏幕")
+        XCTAssertTrue(bubble.contains("isLocalMessage { return Theme.v2InkSurface }"), "自己的消息必须建立稳定的高识别度视觉锚点")
+        XCTAssertFalse(bubble.contains(".shadow("), "聊天气泡不得堆叠卡片阴影制造视觉噪声")
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
+    }
+
+    func testConversationUsesSpeakerBasedVerticalRhythm() throws {
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+
+        XCTAssertTrue(chat.contains("LazyVStack(spacing: 4)"))
+        XCTAssertTrue(chat.contains("messageSpacingBefore(message)"))
+        XCTAssertTrue(chat.contains("previous.participant == message.participant ? 2 : 10"),
+                      "连续发言应收紧，换人发言才拉开段落")
     }
 
     func testSharedChatBubbleAlignmentUsesLocalParticipantIdentity() throws {
@@ -161,8 +174,12 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("private var isLocalMessage: Bool { message.participant == localParticipant }"))
         XCTAssertTrue(bubble.contains("case .user: return \"客户\""),
                       "开发者视角中的客户消息不得仍显示成‘你’")
-        XCTAssertTrue(bubble.contains("Text(\"客\")"),
-                      "开发者视角中的客户消息必须有可区分的远端头像")
+        XCTAssertTrue(bubble.contains("Image(systemName: \"person.fill\")"),
+                      "远端真人参与者应使用克制的人物剪影头像")
+        XCTAssertFalse(bubble.contains("Text(\"客\")"),
+                       "聊天头像不得使用破坏陪伴氛围的后台身份缩写")
+        XCTAssertFalse(bubble.contains("Text(\"开\")"),
+                       "聊天头像不得使用破坏陪伴氛围的后台身份缩写")
         XCTAssertFalse(bubble.contains("if message.role == .user"))
     }
 
@@ -187,11 +204,39 @@ final class ChatUIContractTests: XCTestCase {
         let model = try source("XiaomaoApp/Models/ChatMessage.swift")
 
         XCTAssertFalse(chat.contains("开发者和小猫都在"), "极简头部不得重复说明参与者")
-        XCTAssertTrue(chat.contains("subtitle: companionStore.current.displayName"))
+        XCTAssertTrue(chat.contains("\\(companionStore.current.displayName) 正在这里"))
         XCTAssertTrue(model.contains("case developer"))
         XCTAssertTrue(model.contains("case xiaomao"))
         XCTAssertFalse(model.contains("case companion"))
         XCTAssertTrue(model.contains("case .developer: \"开发者\""))
+    }
+
+    func testV2VisualRefreshHasOneSharedEditorialLanguage() throws {
+        let theme = try source("XiaomaoApp/Design/Theme.swift")
+        let tabs = try source("XiaomaoApp/App/MainTabView.swift")
+        let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let smallThings = try source("XiaomaoApp/SmallThings/SmallThingsRootView.swift")
+        let ledger = try source("XiaomaoApp/SmallThings/SmallThingsLedgerCard.swift")
+        let settings = try source("XiaomaoApp/Settings/SettingsView.swift")
+
+        for token in ["v2InkSurface", "v2Paper", "v2Coral", "v2Lavender"] {
+            XCTAssertTrue(theme.contains(token), "V2 缺少共享视觉令牌：\(token)")
+        }
+        XCTAssertTrue(tabs.contains("main.v2TabBar"))
+        XCTAssertTrue(tabs.contains("matchedGeometryEffect"))
+        XCTAssertTrue(home.contains("LIVE COMPANION"))
+        XCTAssertFalse(home.contains("LIVE COMPANION  /"), "正式界面不得保留设计稿序号")
+        XCTAssertTrue(home.contains("homeControlDeck"))
+        XCTAssertTrue(chat.contains("CONVERSATION"))
+        XCTAssertFalse(chat.contains("CONVERSATION  /"), "正式界面不得保留设计稿序号")
+        XCTAssertTrue(chat.contains("chatBackdrop"))
+        XCTAssertTrue(smallThings.contains("SHARED ARCHIVE"))
+        XCTAssertFalse(smallThings.contains("SHARED ARCHIVE  /"), "正式界面不得保留设计稿序号")
+        XCTAssertTrue(smallThings.contains("v2Masthead"))
+        XCTAssertTrue(ledger.contains("Theme.v2InkSurface"))
+        XCTAssertTrue(settings.contains("PERSONAL SPACE"))
+        XCTAssertTrue(settings.contains("settingsBackdrop"), "我的页必须进入同一套 V2 视觉语言")
     }
 
     private func source(_ relativePath: String) throws -> String {
