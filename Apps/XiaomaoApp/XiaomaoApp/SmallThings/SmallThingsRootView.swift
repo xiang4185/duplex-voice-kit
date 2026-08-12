@@ -46,14 +46,19 @@ struct SmallThingsRootView: View {
 
                     flowHeader
 
-                    ForEach(store.sortedEntries) { entry in
-                        SmallThingEntryCard(store: store, entry: entry)
+                    if store.sortedEntries.isEmpty && !store.isLoading {
+                        emptyTimeline
+                    } else {
+                        ForEach(store.sortedEntries) { entry in
+                            SmallThingEntryCard(store: store, entry: entry)
+                        }
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.medium)
                 .padding(.top, Theme.Spacing.small)
                 .padding(.bottom, Theme.Spacing.large)
             }
+            .scrollIndicators(.hidden)
             .background(visual.background.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: SmallThingsRoute.self) { route in
@@ -76,7 +81,7 @@ struct SmallThingsRootView: View {
     }
 
     private var flowHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
             HStack(alignment: .firstTextBaseline) {
                 Text("生活时间流")
                     .font(Theme.title3Font)
@@ -84,14 +89,55 @@ struct SmallThingsRootView: View {
                 Spacer(minLength: Theme.Spacing.small)
                 Text("共 \(store.entries.count) 件")
                     .font(Theme.captionFont)
-                    .foregroundStyle(visual.textTertiary)
+                    .foregroundStyle(visual.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(visual.surfaceSoft, in: Capsule())
             }
-            Text("小 事 · 都值得记下来")
-                .font(Theme.captionFont)
-                .foregroundStyle(visual.textSecondary)
+            HStack(spacing: Theme.Spacing.xSmall) {
+                Text("小事，都值得记下来")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(visual.textSecondary)
+                Spacer(minLength: Theme.Spacing.small)
+                if !store.pendingApprovals.isEmpty {
+                    Button {
+                        path.append(.approval)
+                    } label: {
+                        Label("待我确认 \(store.pendingApprovals.count)", systemImage: "clock")
+                            .font(Theme.captionFont.weight(.semibold))
+                            .foregroundStyle(visual.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("smallThings.timeline.pending")
+                }
+            }
         }
+        .padding(.top, Theme.Spacing.xSmall)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("小事时间流，共 \(store.entries.count) 件")
+    }
+
+    private var emptyTimeline: some View {
+        VStack(spacing: Theme.Spacing.small) {
+            Image(systemName: "heart.text.square")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(visual.primary)
+            Text("还没有记下小事")
+                .font(Theme.headlineFont)
+                .foregroundStyle(visual.textPrimary)
+            Text("从上面记一笔开始，让两个人的日常慢慢长出来。")
+                .font(Theme.captionFont)
+                .foregroundStyle(visual.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xLarge)
+        .padding(.horizontal, Theme.Spacing.large)
+        .background(visual.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .stroke(visual.border.opacity(0.75), lineWidth: 1)
+        }
     }
 }
 

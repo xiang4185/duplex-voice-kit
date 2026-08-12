@@ -46,36 +46,10 @@ struct SmallThingComposerView: View {
                             .accessibilityLabel("无法保存：\(validationMessage)")
                     }
 
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        Text("保存")
-                            .font(Theme.headlineFont)
-                            .foregroundStyle(Theme.onPrimary)
-                            .frame(maxWidth: .infinity, minHeight: 56)
-                            .background(
-                                canSave ? Theme.primary : Theme.primary.opacity(0.38),
-                                in: RoundedRectangle(
-                                    cornerRadius: Theme.Radius.medium,
-                                    style: .continuous
-                                )
-                            )
-                            .shadow(
-                                color: canSave ? Theme.ctaShadow : .clear,
-                                radius: 12,
-                                y: 5
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!canSave || store.isLoading)
-                    .accessibilityIdentifier("smallThings.form.save")
-                    .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
-                    .id(Field.save)
                 }
                 .padding(.horizontal, Theme.Spacing.medium)
                 .padding(.top, Theme.Spacing.medium)
-                .padding(.bottom, Theme.Spacing.xLarge)
+                .padding(.bottom, Theme.Spacing.large)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedField) { _, field in
@@ -91,6 +65,10 @@ struct SmallThingComposerView: View {
         .navigationTitle("记下来")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            saveBar
+        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -133,6 +111,41 @@ struct SmallThingComposerView: View {
                 )
             }
         }
+    }
+
+    private var saveBar: some View {
+        VStack(spacing: 0) {
+            Divider().overlay(Theme.border)
+            Button {
+                focusedField = nil
+                Task { await save() }
+            } label: {
+                HStack(spacing: Theme.Spacing.xSmall) {
+                    if store.isLoading {
+                        ProgressView()
+                            .tint(Theme.onPrimary)
+                    }
+                    Text("保存")
+                        .font(Theme.headlineFont)
+                }
+                .foregroundStyle(Theme.onPrimary)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(
+                    canSave ? Theme.primary : Theme.textTertiary.opacity(0.42),
+                    in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                )
+                .shadow(color: canSave ? Theme.ctaShadow.opacity(0.7) : .clear, radius: 12, y: 5)
+            }
+            .buttonStyle(PressableButtonStyle())
+            .disabled(!canSave || store.isLoading)
+            .accessibilityIdentifier("smallThings.form.save")
+            .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
+            .id(Field.save)
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.top, Theme.Spacing.small)
+            .padding(.bottom, Theme.Spacing.xSmall)
+        }
+        .background(.ultraThinMaterial)
     }
 
     @ViewBuilder

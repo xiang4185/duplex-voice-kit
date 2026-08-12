@@ -321,7 +321,7 @@ struct VoiceCallView: View {
                 WarmHaptics.action()
                 close()
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: "chevron.down")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(callTextSecondary)
                     .frame(width: 40, height: 40)
@@ -345,17 +345,42 @@ struct VoiceCallView: View {
     // MARK: 状态行 (P2.6J: 真实会话状态文案, 普通界面隐藏内部技术信息)
     private var statusRow: some View {
         HStack {
-            HStack(spacing: 6) {
+            Spacer(minLength: 0)
+            HStack(spacing: 7) {
                 Circle()
                     .fill(callStatusColor)
                     .frame(width: 7, height: 7)
+                    .shadow(color: callStatusColor.opacity(0.42), radius: 4)
+                Image(systemName: callStatusIcon)
+                    .font(.system(size: 12, weight: .semibold))
                 Text(callStatusText)
-                    .font(Theme.captionFont)
-                    .foregroundStyle(callTextSecondary)
+                    .font(Theme.captionFont.weight(.semibold))
             }
-            Spacer()
+            .foregroundStyle(callTextSecondary)
+            .padding(.horizontal, 13)
+            .frame(minHeight: 34)
+            .background(callGlassTint, in: Capsule())
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(callBorder.opacity(0.8), lineWidth: 0.8))
+            Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("通话状态：\(callStatusText)")
+    }
+
+    private var callStatusIcon: String {
+        if viewModel.isSwitchingCompanion { return "person.2.badge.gearshape" }
+        switch viewModel.controller.state {
+        case .idle, .connecting: return "antenna.radiowaves.left.and.right"
+        case .ready, .listening, .endpointing: return "mic.fill"
+        case .processing: return "ellipsis.bubble.fill"
+        case .speaking, .interrupting: return "waveform"
+        case .reconnecting: return "arrow.triangle.2.circlepath"
+        case .degraded: return "wifi.exclamationmark"
+        case .closing, .closed: return "phone.down.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
     }
 
     // P2.6J: 通话状态文案 (纯 UI 映射, 不接入连接流程)
