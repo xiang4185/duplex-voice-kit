@@ -1,10 +1,10 @@
 import SwiftUI
 import UIKit
 
-// MARK: - v6.1 设计令牌系统 (西柚玫瑰活力版)
-// v6.1 设计令牌: 主色 #D9486B 西柚玫瑰, 桃粉白底 #FDF5F1,
+// MARK: - v6.2 设计令牌系统 (西柚玫瑰清晰版)
+// v6.2 设计令牌: 主色 #C83B5D 西柚玫瑰, 桃粉白底 #FDF5F1,
 // 深莓果文字 #432B33, 标题宋体衬线. 保留 v3 兼容成员名 (primary100/primary500/...)
-// 使已有页面引用自动跟随换色, 无需逐个改动.
+// 在保留陪伴感的同时提升小字号文字和主操作对比度.
 
 enum Theme {
     private static func adaptive(light: UInt32, dark: UInt32, opacity: Double = 1) -> Color {
@@ -127,11 +127,11 @@ enum Theme {
         static let ambientMystery: Double = 28
     }
 
-    // MARK: 主色 — 西柚玫瑰 (v6.1)
-    static let primary = adaptive(light: 0xD9486B, dark: 0xC9C5DE)          // --color-primary
-    static let primaryHover = adaptive(light: 0xC2405F, dark: 0xB8B3D2)     // --color-primary-hover
-    static let primaryPressed = adaptive(light: 0xA83852, dark: 0xE2DEEF)   // --color-primary-pressed
-    static let primarySoft = adaptive(light: 0xFBE0E6, dark: 0x292738)      // --color-primary-soft
+    // MARK: 主色 — 西柚玫瑰 (v6.2 AA 对比度)
+    static let primary = adaptive(light: 0xC83B5D, dark: 0xC9C5DE)          // 白字对比度 4.95:1
+    static let primaryHover = adaptive(light: 0xB93453, dark: 0xB8B3D2)
+    static let primaryPressed = adaptive(light: 0x9F2E48, dark: 0xE2DEEF)
+    static let primarySoft = adaptive(light: 0xF8E4E9, dark: 0x292738)
     static let onPrimary = adaptive(light: 0xFFFFFF, dark: 0x11121A)        // --color-on-primary
 
     // MARK: 主色层次 (兼容 v3 命名)
@@ -156,23 +156,23 @@ enum Theme {
 
     // MARK: 文字 — 深莓果 (v6.1)
     static let textPrimary = adaptive(light: 0x432B33, dark: 0xF1EFF7)
-    static let textSecondary = adaptive(light: 0x8A6B72, dark: 0xADA8BA)
-    static let textTertiary = adaptive(light: 0xB99CA2, dark: 0x777482)
-    static let textLink = adaptive(light: 0xC24467, dark: 0xC9C5DE)
+    static let textSecondary = adaptive(light: 0x765A62, dark: 0xBEB9C9)
+    static let textTertiary = adaptive(light: 0x82636B, dark: 0x9692A1)
+    static let textLink = adaptive(light: 0xB93453, dark: 0xD6D2E5)
     static let textOnHalo = adaptive(light: 0xFFF9F6, dark: 0xF1EFF7)
 
     // MARK: 角色三色 (v6.1)
-    static let roleGold = Color(hex: 0xD9486B)         // 西柚玫瑰 (v6.1 定稿 --color-role-gold: #D9486B, warm 角色主色)
+    static let roleGold = Color(hex: 0xC83B5D)         // 西柚玫瑰 (warm 角色主色)
     static let roleBlush = Color(hex: 0xF4A7B8)        // 樱 (治愈少女 halo)
     static let roleCaramel = Color(hex: 0xA26A48)      // 可可 (沉稳大叔 halo)
     static let roleSoft = Color(hex: 0xFBEBE2)
 
     // MARK: 语义色 (v6.1)
     static let success = Color(hex: 0x71A36B)
-    static let warning = adaptive(light: 0xD9486B, dark: 0xA981A5)
+    static let warning = adaptive(light: 0xB45B30, dark: 0xC99A76)
     static let danger = adaptive(light: 0xD5563C, dark: 0xC78395)           // 结束通话/解除关系
-    static let info = Color(hex: 0x93A9BC)
-    static let online = Color(hex: 0x8FBC86)           // 在线绿点
+    static let info = adaptive(light: 0x5D7184, dark: 0xA9B8C7)
+    static let online = adaptive(light: 0x557F50, dark: 0x9AC695)           // 在线绿点
     static let offline = Color(hex: 0xCDB6B0)
     static let recording = adaptive(light: 0xD5563C, dark: 0xC78395)
     static let voiceActive = adaptive(light: 0xE88BA0, dark: 0xA49EC0)      // 语音波形活跃柱

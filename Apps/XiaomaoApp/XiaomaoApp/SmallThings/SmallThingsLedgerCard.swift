@@ -16,14 +16,21 @@ struct SmallThingsLedgerCard: View {
             actions
             footer
         }
-        .padding(Theme.Spacing.medium)
-        .background(Theme.surfaceWarm)
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Theme.surface, Theme.surfaceWarm.opacity(0.78)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous)
                 .stroke(Theme.border.opacity(0.8), lineWidth: 1)
         }
-        .shadow(color: Theme.shadowRaised, radius: 16, y: 8)
+        .cardTopHighlight()
+        .shadow(color: Theme.shadowRaised, radius: 18, y: 8)
         .accessibilityIdentifier("smallThings.ledger")
         .sheet(isPresented: $showLimitEditor) {
             limitEditor
@@ -34,17 +41,17 @@ struct SmallThingsLedgerCard: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xxSmall) {
-                Text("\(store.ledgerLimit.formatted(.number.precision(.fractionLength(0...2)))) 元小本本")
-                    .font(Theme.title3Font)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("两个人的小本本")
+                    .font(Theme.headlineFont)
                     .foregroundStyle(Theme.textPrimary)
-                Text("我和对方一起记的账")
+                Text("总额度 ¥\(store.ledgerLimit.formatted(.number.precision(.fractionLength(0...2))))")
                     .font(Theme.captionFont)
                     .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: Theme.Spacing.small)
             VStack(alignment: .trailing, spacing: 6) {
-                Label("等我看 \(store.pendingApprovals.count)", systemImage: "clock.fill")
+                Label("待确认 \(store.pendingApprovals.count)", systemImage: "clock.fill")
                     .font(.caption.bold())
                     .foregroundStyle(Theme.primary)
                     .padding(.horizontal, 10)
@@ -68,15 +75,30 @@ struct SmallThingsLedgerCard: View {
     }
 
     private var summary: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.large) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+            Text("还可以一起记")
+                .font(Theme.captionFont)
+                .foregroundStyle(Theme.textSecondary)
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("¥")
+                    .font(Theme.title3Font)
+                    .foregroundStyle(Theme.primary)
+                Text(store.remainingAmount, format: .number.precision(.fractionLength(2)))
+                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                Spacer(minLength: Theme.Spacing.small)
                 progressRing
-                amounts
             }
-            VStack(spacing: Theme.Spacing.medium) {
-                progressRing
-                amounts
-            }
+
+            amounts
+        }
+        .padding(Theme.Spacing.medium)
+        .background(Theme.bgElevated.opacity(0.86), in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
+                .stroke(Theme.border.opacity(0.75), lineWidth: 1)
         }
     }
 
@@ -100,16 +122,18 @@ struct SmallThingsLedgerCard: View {
                     .foregroundStyle(Theme.textSecondary)
             }
         }
-        .frame(width: 78, height: 78)
+        .frame(width: 62, height: 62)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("已点头进度 \(Int((store.approvedRatio * 100).rounded())) 百分比")
     }
 
     private var amounts: some View {
-        VStack(spacing: Theme.Spacing.xSmall) {
+        HStack(spacing: Theme.Spacing.small) {
             amountRow("已点头", value: store.approvedAmount, symbol: "checkmark.circle.fill")
+            Divider()
+                .overlay(Theme.border)
+                .frame(height: 34)
             amountRow("等待确认", value: store.pendingAmount, symbol: "clock.fill")
-            amountRow("还剩下", value: store.remainingAmount, symbol: "wallet.bifold.fill")
         }
         .frame(maxWidth: .infinity)
     }
@@ -141,8 +165,8 @@ struct SmallThingsLedgerCard: View {
 
     private var approvalsButton: some View {
         Button(action: openApprovals) {
-            Label("等你点头", systemImage: "checkmark.seal")
-                .font(Theme.headlineFont)
+            Label("待确认", systemImage: "checkmark.seal")
+                .font(Theme.subheadFont.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
         }
         .buttonStyle(.bordered)
@@ -152,14 +176,11 @@ struct SmallThingsLedgerCard: View {
     }
 
     private var footer: some View {
-        ViewThatFits(in: .horizontal) {
+        VStack(spacing: Theme.Spacing.small) {
+            Divider().overlay(Theme.border)
             HStack(spacing: Theme.Spacing.small) {
                 bindingButton
                 Spacer(minLength: Theme.Spacing.xSmall)
-                explanation
-            }
-            VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
-                bindingButton
                 explanation
             }
         }
@@ -233,20 +254,20 @@ struct SmallThingsLedgerCard: View {
     }
 
     private func amountRow(_ title: String, value: Double, symbol: String) -> some View {
-        HStack(spacing: Theme.Spacing.xSmall) {
-            Image(systemName: symbol)
-                .foregroundStyle(Theme.primary)
-                .frame(width: 18)
-            Text(title)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer(minLength: Theme.Spacing.small)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .foregroundStyle(Theme.primary)
+                    .font(.caption)
+                Text(title)
+                    .foregroundStyle(Theme.textSecondary)
+            }
             Text(value, format: .number.precision(.fractionLength(2)))
-                .fontWeight(.semibold)
+                .font(Theme.headlineFont)
                 .foregroundStyle(Theme.textPrimary)
-            Text("元")
-                .foregroundStyle(Theme.textSecondary)
         }
-        .font(Theme.subheadFont)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .font(Theme.captionFont)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) \(value.formatted(.number.precision(.fractionLength(2)))) 元")
     }

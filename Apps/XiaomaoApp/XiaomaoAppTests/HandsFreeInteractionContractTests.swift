@@ -1274,7 +1274,7 @@ final class HandsFreeInteractionContractTests: XCTestCase {
             return
         }
         let topBar = String(call[topStart..<topEnd])
-        XCTAssertTrue(topBar.contains("xmark"), "左上按钮必须使用 xmark 图标")
+        XCTAssertTrue(topBar.contains("chevron.down"), "左上按钮必须使用向下箭头表达收起而不是结束")
         XCTAssertFalse(topBar.contains("showHangupConfirm = true"), "左上点击不得显示挂断确认")
         XCTAssertTrue(topBar.contains("close()"), "左上点击必须只收起通话页面")
         XCTAssertFalse(topBar.contains("finishCall()"), "左上按钮不得直接调用 finishCall()")
