@@ -470,7 +470,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(service.clearRequests.map(\.requestID), ["request-1", "request-1"])
     }
 
-    func testSendDoesNotOptimisticallyInsertAndConsecutiveTapSendsOnce() async {
+    func testSendOptimisticallyInsertsAndConsecutiveTapSendsOnce() async {
         let started = expectation(description: "send started")
         let service = ChatServiceSpy(
             historyResults: [.success(ChatHistoryResult(sessionID: "server-session", messages: []))],
@@ -484,7 +484,11 @@ final class ChatViewModelTests: XCTestCase {
 
         let first = Task { await viewModel.send() }
         await fulfillment(of: [started], timeout: 1)
-        XCTAssertTrue(viewModel.messages.isEmpty)
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.content, "合成发送")
+        XCTAssertEqual(viewModel.messages.first?.status, .sending)
+        XCTAssertEqual(viewModel.messages.first?.role, .user)
+        XCTAssertTrue(viewModel.draft.isEmpty)
         let second = Task { await viewModel.send() }
         await second.value
         await first.value

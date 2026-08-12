@@ -155,7 +155,10 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func send(companionTypeID: String = CompanionType.warm.rawValue) async {
+    func send(
+        companionTypeID: String = CompanionType.warm.rawValue,
+        senderParticipant: ChatParticipant = .user
+    ) async {
         let text = normalizedDraft
         guard !text.isEmpty else { return }
         guard text.count <= Self.maximumMessageLength else {
@@ -172,16 +175,31 @@ final class ChatViewModel: ObservableObject {
         errorMessage = ""
         defer { isSending = false }
 
+        let fingerprint = [sessionID, text, xiaomaoMode.rawValue, companionTypeID]
+            .joined(separator: "\u{1F}")
+        let requestID: String
+        if let pendingSend, pendingSend.fingerprint == fingerprint {
+            requestID = pendingSend.requestID
+        } else {
+            requestID = requestIDGenerator()
+            pendingSend = (fingerprint, requestID)
+        }
+
+        // 发送动作和模型回复解耦：先让本地消息立即进入时间线，
+        // 服务端完成后再用持久化消息替换，并独立追加小猫回复。
+        let optimisticMessageID = "local-\(requestID)"
+        messages.append(ChatMessage(
+            id: optimisticMessageID,
+            role: senderParticipant == .xiaomao ? .assistant : .user,
+            content: text,
+            createdAt: Date(),
+            participant: senderParticipant,
+            turnID: "pending-\(requestID)",
+            status: .sending
+        ))
+        draft = ""
+
         do {
-            let fingerprint = [sessionID, text, xiaomaoMode.rawValue, companionTypeID]
-                .joined(separator: "\u{1F}")
-            let requestID: String
-            if let pendingSend, pendingSend.fingerprint == fingerprint {
-                requestID = pendingSend.requestID
-            } else {
-                requestID = requestIDGenerator()
-                pendingSend = (fingerprint, requestID)
-            }
             let result = try await service.send(
                 message: text,
                 sessionID: sessionID,
@@ -195,6 +213,7 @@ final class ChatViewModel: ObservableObject {
             guard result.persisted else {
                 throw ChatStateError.notPersisted
             }
+            messages.removeAll { $0.id == optimisticMessageID }
             messages.append(contentsOf: result.messages)
             for participantResult in result.participantResults
             where participantResult.participant == .xiaomao {
@@ -204,11 +223,12 @@ final class ChatViewModel: ObservableObject {
                     failedXiaomaoTurns.remove(participantResult.turnID)
                 }
             }
-            draft = ""
             pendingSend = nil
             lastReplyWasDegraded = result.degraded
             requiresReconfiguration = false
         } catch {
+            messages.removeAll { $0.id == optimisticMessageID }
+            draft = text
             if Self.isSessionInvalidatingError(error) {
                 invalidateSession()
             }

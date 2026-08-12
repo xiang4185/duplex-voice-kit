@@ -8,6 +8,8 @@ struct SmallThingsLedgerCard: View {
 
     @State private var showLimitEditor = false
     @State private var limitDraft = ""
+    @State private var animatedApprovedRatio = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: Theme.Spacing.medium) {
@@ -107,7 +109,7 @@ struct SmallThingsLedgerCard: View {
             Circle()
                 .stroke(Theme.border.opacity(0.85), lineWidth: 8)
             Circle()
-                .trim(from: 0, to: store.approvedRatio)
+                .trim(from: 0, to: animatedApprovedRatio)
                 .stroke(
                     Theme.primary,
                     style: StrokeStyle(lineWidth: 8, lineCap: .round)
@@ -123,8 +125,23 @@ struct SmallThingsLedgerCard: View {
             }
         }
         .frame(width: 62, height: 62)
+        .onAppear { animateProgress(to: store.approvedRatio) }
+        .onChange(of: store.approvedRatio) { _, value in
+            animateProgress(to: value)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("已点头进度 \(Int((store.approvedRatio * 100).rounded())) 百分比")
+    }
+
+    private func animateProgress(to value: Double) {
+        let target = min(max(value, 0), 1)
+        guard !reduceMotion else {
+            animatedApprovedRatio = target
+            return
+        }
+        withAnimation(.spring(response: 0.82, dampingFraction: 0.78)) {
+            animatedApprovedRatio = target
+        }
     }
 
     private var amounts: some View {

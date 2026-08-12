@@ -6,6 +6,7 @@ struct ChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
     @State private var keyboardVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
     @EnvironmentObject private var companionStore: CompanionModeStore
 
@@ -43,7 +44,8 @@ struct ChatView: View {
                                 groupedWithPrevious: isGrouped(message: message, direction: -1),
                                 groupedWithNext: isGrouped(message: message, direction: 1)
                             )
-                                .id(message.id)
+                            .id(message.id)
+                            .transition(messageTransition)
 
                             if isLastMessageInTurn(message),
                                viewModel.failedXiaomaoTurns.contains(message.turnID) {
@@ -64,6 +66,10 @@ struct ChatView: View {
                     }
                     .padding(.horizontal, Theme.Spacing.medium)
                     .padding(.vertical, Theme.Spacing.small)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
+                        value: viewModel.messages.map(\.id)
+                    )
                 }
                 .defaultScrollAnchor(.bottom)
                 .defaultScrollAnchor(.top, for: .alignment)
@@ -123,7 +129,8 @@ struct ChatView: View {
                     Task {
                         await Task.yield()
                         await viewModel.send(
-                            companionTypeID: companionStore.current.rawValue
+                            companionTypeID: companionStore.current.rawValue,
+                            senderParticipant: localParticipant
                         )
                     }
                 },
@@ -131,6 +138,7 @@ struct ChatView: View {
             )
         }
         .background(visual.background.ignoresSafeArea())
+        .toolbar(inputFocused ? .hidden : .visible, for: .tabBar)
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()
@@ -159,6 +167,16 @@ struct ChatView: View {
         withTransaction(transaction) {
             proxy.scrollTo("chat.bottom", anchor: .bottom)
         }
+    }
+
+    private var messageTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: .move(edge: .bottom)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.97, anchor: .bottom)),
+            removal: .opacity
+        )
     }
 
     private var header: some View {
