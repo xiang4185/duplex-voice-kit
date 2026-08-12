@@ -92,9 +92,11 @@ struct ChatView: View {
                 ) { _ in
                     guard !keyboardVisible else { return }
                     keyboardVisible = true
-                    // safe-area 已落到最终高度，只做一次无动画锚底。
-                    // 不再监听 willChangeFrame，避免候选栏/输入法内部 frame 变化反复推动页面。
-                    scrollToBottomWithoutAnimation(proxy)
+                    // keyboardDidShow 与 SwiftUI safe-area 的最终布局提交不完全同步。
+                    // 下一轮主线程再锚底，避免按过渡期高度计算出多余底部空白。
+                    DispatchQueue.main.async {
+                        scrollToBottomWithoutAnimation(proxy)
+                    }
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(

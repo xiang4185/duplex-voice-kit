@@ -111,7 +111,11 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
                        "不得复制系统键盘动画驱动 ScrollView")
         XCTAssertTrue(chat.contains("DispatchQueue.main.async"),
-                      "收键盘后的滚动必须等最终 safe-area 布局落定")
+                      "键盘显示/收回后的滚动必须等最终 safe-area 布局落定")
+        let keyboardShowBlock = chat.components(separatedBy: "keyboardDidShowNotification")[1]
+            .components(separatedBy: "keyboardDidHideNotification")[0]
+        XCTAssertTrue(keyboardShowBlock.contains("DispatchQueue.main.async"),
+                      "键盘显示路径必须延后一轮主线程再锚底，避免使用过渡期 viewport 产生底部空白")
         XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
                        "聊天页必须交回系统键盘 safe-area，不能让 Tab Bar 留在键盘下方形成空白")
         XCTAssertFalse(chat.contains("keyboardOverlap"),
