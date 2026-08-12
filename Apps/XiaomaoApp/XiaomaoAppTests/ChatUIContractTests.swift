@@ -128,8 +128,9 @@ final class ChatUIContractTests: XCTestCase {
         let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
 
         XCTAssertTrue(bubble.contains("chat.message.\\(message.id)"))
-        XCTAssertTrue(bubble.contains("message.participant.displayName"))
-        XCTAssertTrue(bubble.contains("\\(message.participant.displayName)：\\(message.content)"))
+        XCTAssertTrue(bubble.contains("private var participantDisplayName: String"))
+        XCTAssertTrue(bubble.contains("case .user: return \"客户\""))
+        XCTAssertTrue(bubble.contains("\\(participantDisplayName)：\\(message.content)"))
         XCTAssertTrue(bubble.contains("switch message.participant"))
         XCTAssertTrue(bubble.contains("case .xiaomao:"))
         XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
