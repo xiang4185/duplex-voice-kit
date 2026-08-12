@@ -24,8 +24,9 @@ struct SmallThingEntryCard: View {
 
             if !entry.body.isEmpty {
                 Text(entry.body)
-                    .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .lineSpacing(3)
+                    .foregroundStyle(Theme.v2Ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -61,10 +62,10 @@ struct SmallThingEntryCard: View {
                     Image(systemName: "quote.bubble.fill")
                 }
                 .font(Theme.footnoteFont)
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.v2Ink.opacity(0.62))
                 .padding(Theme.Spacing.small)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.primarySoft.opacity(0.68))
+                .background(Theme.v2CoralSoft.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
             }
 
@@ -75,17 +76,21 @@ struct SmallThingEntryCard: View {
                     .transition(reduceMotion ? .identity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, Theme.Spacing.small)
+        .padding(.vertical, 16)
         .padding(.trailing, Theme.Spacing.medium)
         .padding(.leading, Theme.Spacing.xLarge)
-        .background(visual.surface.opacity(0.54), in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
+        .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Theme.v2Line.opacity(0.88), lineWidth: 0.8)
+        }
         .overlay(alignment: .leading) {
             VStack(spacing: 4) {
                 Circle()
-                    .fill(entry.type == .expense ? visual.primary : visual.textTertiary.opacity(0.72))
+                    .fill(entry.type == .expense ? Theme.v2Coral : Theme.v2Lavender)
                     .frame(width: 8, height: 8)
                 Rectangle()
-                    .fill(visual.border.opacity(0.55))
+                    .fill(Theme.v2Line)
                     .frame(width: 1)
             }
             .padding(.leading, 13)
@@ -122,8 +127,8 @@ struct SmallThingEntryCard: View {
         HStack(alignment: .top, spacing: Theme.Spacing.small) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxSmall) {
                 Text(entryTitle)
-                    .font(Theme.headlineFont)
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(.system(size: 18, weight: .semibold, design: .serif))
+                    .foregroundStyle(Theme.v2Ink)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: Theme.Spacing.xxSmall) {
@@ -134,7 +139,7 @@ struct SmallThingEntryCard: View {
                     Text(Self.numericDateFormatter.string(from: entry.createdAt))
                 }
                 .font(Theme.captionFont)
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.v2Ink.opacity(0.52))
                 .accessibilityElement(children: .combine)
             }
 
@@ -144,10 +149,10 @@ struct SmallThingEntryCard: View {
                 VStack(alignment: .trailing, spacing: Theme.Spacing.xSmall) {
                     Text(entry.amount, format: .number.precision(.fractionLength(2)))
                         .font(Theme.title3Font)
-                        .foregroundStyle(visual.primary)
+                        .foregroundStyle(Theme.v2Coral)
                     Text("元")
                         .font(.caption2)
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.v2Ink.opacity(0.52))
                     if let status = entry.expenseStatus {
                         SmallThingStatusBadge(
                             status: status,
@@ -168,7 +173,7 @@ struct SmallThingEntryCard: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.v2Ink.opacity(0.48))
                     .frame(width: Theme.controlMinimumSize, height: Theme.controlMinimumSize)
                     .contentShape(Rectangle())
             }

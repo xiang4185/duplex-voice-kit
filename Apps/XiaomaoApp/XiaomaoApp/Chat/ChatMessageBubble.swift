@@ -20,16 +20,17 @@ struct ChatMessageBubble: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
+        HStack(alignment: .bottom, spacing: 10) {
             if isLocalMessage {
-                Spacer(minLength: 44)
+                Spacer(minLength: 48)
                 bubble
                 avatar
             } else {
-                // 微信式布局：每条消息都保留头像，连续消息仅收紧气泡间距。
+                // 微信式身份识别：每条远端消息都保留头像。
+                // 头像固定在同一轨道，换人时由列表层级拉开段落。
                 avatar
                 bubble
-                Spacer(minLength: 44)
+                Spacer(minLength: 36)
             }
         }
         .frame(maxWidth: .infinity)
@@ -39,21 +40,23 @@ struct ChatMessageBubble: View {
     }
 
     private var bubble: some View {
-        VStack(
-            alignment: isLocalMessage ? .trailing : .leading,
-            spacing: 5
-        ) {
+        VStack(alignment: isLocalMessage ? .trailing : .leading, spacing: 5) {
             Text(message.content)
-                .font(Theme.bodyFont)
-                .foregroundStyle(visual.textPrimary)
+                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .lineSpacing(3)
+                .foregroundStyle(bubbleTextColor)
                 .textSelection(.enabled)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .background(bubbleSurface)
                 .clipShape(
-                    RoundedRectangle(cornerRadius: groupedWithPrevious || groupedWithNext ? 14 : 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
-                .shadow(color: visual.shadow.opacity(0.55), radius: 7, x: 0, y: 3)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(bubbleBorder, lineWidth: 0.7)
+                }
+                .frame(maxWidth: 278, alignment: isLocalMessage ? .trailing : .leading)
 
             if message.status == .sending {
                 ProgressView()
@@ -83,40 +86,57 @@ struct ChatMessageBubble: View {
     private var avatar: some View {
         switch message.participant {
         case .developer:
-            Text("开")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(visual.primary)
-                .clipShape(Circle())
-                .accessibilityHidden(true)
+            humanAvatar(
+                foreground: Theme.v2InkSurface,
+                background: Theme.v2Lavender.opacity(0.72)
+            )
         case .xiaomao:
             PrivacyAvatar(
-                size: 34,
+                size: 32,
                 tappable: false,
                 style: .thumbnail
             )
-                .frame(width: 34, height: 34)
+                .frame(width: 32, height: 32)
+                .background(Theme.v2PaperMuted, in: Circle())
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Theme.v2Line, lineWidth: 0.7))
                 .accessibilityHidden(true)
         case .user:
-            Text("客")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(visual.textPrimary)
-                .frame(width: 34, height: 34)
-                .background(visual.primarySoft)
-                .clipShape(Circle())
-                .accessibilityHidden(true)
+            humanAvatar(
+                foreground: Theme.v2Ink.opacity(0.66),
+                background: Theme.v2CoralSoft
+            )
         }
     }
 
+    private func humanAvatar(foreground: Color, background: Color) -> some View {
+        Image(systemName: "person.fill")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(foreground)
+            .frame(width: 32, height: 32)
+            .background(background)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Theme.v2Line, lineWidth: 0.7))
+            .accessibilityHidden(true)
+    }
+
     private var bubbleSurface: Color {
-        switch message.participant {
+        if isLocalMessage { return Theme.v2InkSurface }
+        return switch message.participant {
         case .user:
-            visualMode == .mystery ? visual.primarySoft.opacity(0.92) : Color(hex: 0xF4D9DF).opacity(0.82)
+            Theme.v2CoralSoft
         case .developer:
-            visual.surface.opacity(0.78)
+            Theme.v2Lavender.opacity(0.55)
         case .xiaomao:
-            visual.surfaceSoft.opacity(0.82)
+            Theme.v2Paper
         }
+    }
+
+    private var bubbleTextColor: Color {
+        isLocalMessage ? Color.white : Theme.v2Ink
+    }
+
+    private var bubbleBorder: Color {
+        isLocalMessage ? .clear : Theme.v2Line.opacity(0.86)
     }
 }

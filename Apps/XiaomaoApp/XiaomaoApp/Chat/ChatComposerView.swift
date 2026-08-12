@@ -15,31 +15,32 @@ struct ChatComposerView: View {
 
     var body: some View {
         VStack(spacing: Theme.Spacing.xSmall) {
-            HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
+            HStack(alignment: .bottom, spacing: 10) {
                 TextField("说点什么", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
                     .focused($inputFocused)
                     .font(Theme.bodyFont)
-                    .padding(.horizontal, Theme.Spacing.small)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 11)
                     .frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)
-                    .background(visual.surface.opacity(0.72))
+                    .foregroundStyle(Theme.v2Ink)
+                    .background(Theme.v2Paper)
                     .clipShape(
                         RoundedRectangle(
-                            cornerRadius: Theme.Radius.medium,
+                            cornerRadius: 20,
                             style: .continuous
                         )
                     )
                     .overlay {
                         RoundedRectangle(
-                            cornerRadius: Theme.Radius.medium,
+                            cornerRadius: 20,
                             style: .continuous
                         )
-                        .stroke(visual.border.opacity(0.5), lineWidth: 0.7)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
                     }
                     .contentShape(
                         RoundedRectangle(
-                            cornerRadius: Theme.Radius.medium,
+                            cornerRadius: 20,
                             style: .continuous
                         )
                     )
@@ -64,8 +65,8 @@ struct ChatComposerView: View {
                         minWidth: Theme.controlMinimumSize,
                         minHeight: Theme.controlMinimumSize
                     )
-                    .foregroundStyle(canSend ? visual.onPrimary : visual.textTertiary)
-                    .background(canSend ? visual.primary : visual.primarySoft)
+                    .foregroundStyle(canSend ? Color.white : Color.white.opacity(0.40))
+                    .background(canSend ? Theme.v2Coral : Color.white.opacity(0.10))
                     .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -81,16 +82,19 @@ struct ChatComposerView: View {
                     Text("\(draft.count)/\(characterLimit)")
                 }
                 .font(Theme.captionFont)
-                .foregroundStyle(isOverLimit ? Theme.danger : visual.textSecondary)
+                .foregroundStyle(isOverLimit ? Theme.v2Coral : Color.white.opacity(0.58))
                 .accessibilityElement(children: .combine)
             }
         }
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.top, 10)
-        .padding(.bottom, Theme.Spacing.small)
-        .background(visual.glassTint)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) { Divider().overlay(visual.border.opacity(0.35)) }
+        .padding(7)
+        .background(Theme.v2InkSurface, in: RoundedRectangle(cornerRadius: 27, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 27, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        }
+        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 9)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private var shouldShowCharacterCount: Bool {

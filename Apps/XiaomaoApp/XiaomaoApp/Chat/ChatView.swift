@@ -35,7 +35,7 @@ struct ChatView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 7) {
+                    LazyVStack(spacing: 4) {
                         stateContent
                         ForEach(viewModel.messages) { message in
                             ChatMessageBubble(
@@ -46,6 +46,7 @@ struct ChatView: View {
                             )
                             .id(message.id)
                             .transition(messageTransition)
+                            .padding(.top, messageSpacingBefore(message))
 
                             if isLastMessageInTurn(message),
                                viewModel.failedXiaomaoTurns.contains(message.turnID) {
@@ -64,8 +65,9 @@ struct ChatView: View {
 
                         Color.clear.frame(height: 1).id("chat.bottom")
                     }
-                    .padding(.horizontal, Theme.Spacing.medium)
-                    .padding(.vertical, Theme.Spacing.small)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
                     .animation(
                         reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
                         value: viewModel.messages.map(\.id)
@@ -137,8 +139,7 @@ struct ChatView: View {
                 inputFocused: $inputFocused
             )
         }
-        .background(visual.background.ignoresSafeArea())
-        .toolbar(inputFocused ? .hidden : .visible, for: .tabBar)
+        .background(chatBackdrop)
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()
@@ -180,21 +181,38 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            PageHeader(
-                "小猫",
-                subtitle: companionStore.current.displayName,
-                avatarSize: 40
-            )
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("CONVERSATION")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundStyle(Theme.v2Coral)
+                Text("对话")
+                    .font(.system(size: 31, weight: .semibold, design: .serif))
+                    .foregroundStyle(Theme.v2Ink)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isMockMode ? visual.textTertiary : Theme.online)
+                        .frame(width: 6, height: 6)
+                    Text("\(companionStore.current.displayName) 正在这里")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(visual.textSecondary)
+                }
+            }
+
+            Spacer(minLength: 8)
 
             if isMockMode {
                 StatusPill(text: "离线", systemImage: "wifi.slash")
                     .accessibilityIdentifier("chat.mode.mock")
             }
 
-            Spacer(minLength: 0)
+            PrivacyAvatar(size: 42, tappable: false, style: .thumbnail)
+                .frame(width: 42, height: 42)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Theme.v2Line, lineWidth: 1))
 
-                Menu {
+            Menu {
                     Section("小猫参与方式") {
                         ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
                             Button {
@@ -214,22 +232,35 @@ struct ChatView: View {
                             showsClearConfirmation = true
                         }
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(visual.textPrimary)
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("聊天选项")
-                .accessibilityIdentifier("chat.clear")
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Theme.v2Ink)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.v2PaperMuted, in: Circle())
+            }
+            .accessibilityLabel("聊天选项")
+            .accessibilityIdentifier("chat.clear")
         }
-        .frame(minHeight: 58)
-        .padding(.horizontal, Theme.Spacing.medium)
-        .padding(.vertical, 8)
-        .background(visual.glassTint)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) { Divider().overlay(visual.border.opacity(0.45)) }
+        .frame(minHeight: 86)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(Theme.v2Paper.opacity(0.92))
+        .overlay(alignment: .bottom) { Divider().overlay(Theme.v2Line.opacity(0.75)) }
         .accessibilityIdentifier("chat.header")
+    }
+
+    private var chatBackdrop: some View {
+        ZStack {
+            Theme.v2Paper
+            LinearGradient(
+                colors: [Theme.v2Lavender.opacity(0.18), .clear, Theme.v2CoralSoft.opacity(0.22)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
     }
 
     @ViewBuilder
@@ -350,6 +381,15 @@ struct ChatView: View {
 
     private func isLastMessageInTurn(_ message: ChatMessage) -> Bool {
         viewModel.messages.last(where: { $0.turnID == message.turnID })?.id == message.id
+    }
+
+    private func messageSpacingBefore(_ message: ChatMessage) -> CGFloat {
+        guard let index = viewModel.messages.firstIndex(where: { $0.id == message.id }),
+              index > viewModel.messages.startIndex else {
+            return 4
+        }
+        let previous = viewModel.messages[index - 1]
+        return previous.participant == message.participant ? 2 : 10
     }
 }
 

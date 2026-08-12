@@ -70,97 +70,43 @@ struct CompanionHomeView: View {
             VStack(spacing: 0) {
                 topBar
                     .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                    .padding(.top, 10)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : -8)
                     .animation(.easeOut(duration: 0.4).delay(0.05), value: appeared)
 
-                Spacer(minLength: 0)
+                HStack {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("LIVE COMPANION")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .tracking(1.8)
+                        Text("此刻，只属于你们")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                    }
+                    .foregroundStyle(homeTextSecondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 22)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.12), value: appeared)
+
+                Spacer(minLength: 6)
 
                 homeHero
-                .frame(height: usesSceneBackground ? 390 : heroSize * 3.0 / 2.0 + 40)
-                .opacity(appeared ? 1 : 0)
-                .scaleEffect(appeared ? 1 : 0.94)
-                .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
-
-                Text(roleStore.previewRole.displayName)
-                    .font(Theme.title1Font)
-                    .foregroundStyle(homeTextPrimary)
-                    .tracking(0.4)
-                    .padding(.top, 4)
+                    .frame(height: usesSceneBackground ? 398 : heroSize * 3.0 / 2.0 + 46)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 10)
-                    .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
+                    .scaleEffect(appeared ? 1 : 0.94)
+                    .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
 
-                Text("\(companionStore.current.displayName) · 在呢")
-                    .font(Theme.captionFont.weight(.medium))
-                    .foregroundStyle(homeTextSecondary)
-                .padding(.top, 6)
-                .opacity(appeared ? 1 : 0)
-                .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
+                Spacer(minLength: 8)
 
-                Spacer(minLength: 12)
-
-                Button(action: {
-                    WarmHaptics.comfort()
-                    // P2.6D: 非小猫预览角色不得启动真实通话
-                    if roleStore.previewRole.isProductionVoice {
-                        startCall()
-                    } else {
-                        showLocalToast("先和小猫说说话吧。")
-                    }
-                }) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 19, weight: .medium))
-                        Text(roleStore.previewRole.introCopy)
-                            .font(Theme.headlineFont)
-                    }
-                    .foregroundStyle(usesDarkSceneChrome ? .white : visual.onPrimary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 64)
-                    // P2.8A: 整个胶囊区域可点击, 单击一次立即进入通话页
-                    .contentShape(Capsule())
-                    .glassEffect(
-                        .regular
-                            .tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)
-                            .interactive(),
-                        in: .capsule
-                    )
-                    .overlay {
-                        if usesSceneBackground {
-                            Capsule().stroke(homeBorder.opacity(0.9), lineWidth: 0.8)
-                        }
-                    }
-                    .shadow(color: visual.shadow.opacity(0.75), radius: 16, x: 0, y: 7)
-                }
-                .buttonStyle(PressableButtonStyle())
-                .padding(.horizontal, 40)
-                // P2.6J: Toast 锚定 CTA 上方, 不遮挡按钮文字, 不拦截点击
-                .overlay(alignment: .top) {
-                    if let toastMessage {
-                        Text(toastMessage)
-                            .font(Theme.subheadFont)
-                            .foregroundStyle(visual.textPrimary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .glassEffect(
-                                .regular
-                                    .tint(visual.primarySoft.opacity(0.35)),
-                                in: .capsule
-                            )
-                            .offset(y: -52)
-                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                            .allowsHitTesting(false)
-                    }
-                }
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 14)
-                .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.75).delay(0.5), value: appeared)
-                .accessibilityIdentifier("home.start")
-
-                Spacer(minLength: 18)
+                homeControlDeck
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 18)
+                    .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.78).delay(0.36), value: appeared)
             }
         }
         .accessibilityIdentifier("home.screen")
@@ -196,6 +142,89 @@ struct CompanionHomeView: View {
         // P2.6B: 视图销毁时释放 Timer, 避免泄漏与退出后更新 UI
         .onDisappear {
             toastTask?.cancel()
+        }
+    }
+
+    private var homeControlDeck: some View {
+        Button(action: beginConversation) {
+            HStack(spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(Color.white.opacity(0.88))
+                            .frame(width: 6, height: 6)
+                        Text("AVAILABLE NOW")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .tracking(1.5)
+                    }
+                    .foregroundStyle(Color.white.opacity(0.72))
+
+                    Text(roleStore.previewRole.displayName)
+                        .font(.system(size: 30, weight: .semibold, design: .serif))
+                        .tracking(0.3)
+
+                    Text(roleStore.previewRole.introCopy)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                }
+
+                Spacer(minLength: 8)
+
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                    Image(systemName: "waveform.and.mic")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(Theme.v2InkSurface)
+                }
+                .frame(width: 60, height: 60)
+                .shadow(color: Color.black.opacity(0.16), radius: 14, y: 7)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, minHeight: 118)
+            .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .glassEffect(
+                .regular
+                    .tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)
+                    .interactive(),
+                in: .rect(cornerRadius: 30)
+            )
+            .overlay {
+                if usesSceneBackground {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(homeBorder.opacity(0.9), lineWidth: 0.8)
+                }
+            }
+        }
+        .buttonStyle(PressableButtonStyle())
+        .overlay(alignment: .top) {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(Theme.subheadFont)
+                    .foregroundStyle(visual.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .glassEffect(
+                        .regular
+                            .tint(visual.primarySoft.opacity(0.35)),
+                        in: .capsule
+                    )
+                    .offset(y: -50)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .accessibilityIdentifier("home.start")
+    }
+
+    private func beginConversation() {
+        WarmHaptics.comfort()
+        if roleStore.previewRole.isProductionVoice {
+            startCall()
+        } else {
+            showLocalToast("先和小猫说说话吧。")
         }
     }
 
