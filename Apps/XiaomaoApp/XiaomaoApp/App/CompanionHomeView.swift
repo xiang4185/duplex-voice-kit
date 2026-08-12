@@ -26,6 +26,7 @@ struct CompanionHomeView: View {
     @State private var toastTask: Task<Void, Never>?
     @State private var showPrivacyConfirm = false
     @State private var showCompanionPicker = false
+    @State private var sceneDrift = false
 
     // All companion portrait assets share the same 2:3 master template.
     private let heroSize: CGFloat = 200
@@ -183,7 +184,10 @@ struct CompanionHomeView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
-        .onAppear { appeared = true }
+        .onAppear {
+            appeared = true
+            sceneDrift = true
+        }
         // P2.6J: 角色切换时清除残留 Toast (切回小猫不再显示预览提示)
         .onChange(of: roleStore.previewRole) { _ in
             toastTask?.cancel()
@@ -201,8 +205,21 @@ struct CompanionHomeView: View {
             Image(assetName)
                 .resizable()
                 .scaledToFill()
-                .scaleEffect(privacy.effectiveReveal() ? 1.0 : 1.04)
+                .scaleEffect(
+                    (privacy.effectiveReveal() ? 1.0 : 1.04)
+                        * (sceneDrift && !reduceMotion ? 1.018 : 1.0)
+                )
+                .offset(
+                    x: sceneDrift && !reduceMotion ? 4 : -4,
+                    y: sceneDrift && !reduceMotion ? -3 : 3
+                )
                 .blur(radius: privacy.effectiveReveal() ? 0 : 14)
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 12).repeatForever(autoreverses: true),
+                    value: sceneDrift
+                )
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
@@ -292,13 +309,14 @@ struct CompanionHomeView: View {
                 WarmHaptics.action()
                 showCompanionPicker = true
             } label: {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 18, weight: .medium))
+                Label(companionStore.current.displayName, systemImage: "person.2.fill")
+                    .font(Theme.captionFont.weight(.semibold))
                     .foregroundStyle(homeTextSecondary)
-                    .frame(width: 40, height: 40)
-                    .background(homeGlassTint, in: Circle())
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(homeBorder.opacity(0.88), lineWidth: 0.7))
+                    .padding(.horizontal, 13)
+                    .frame(minHeight: 40)
+                    .background(homeGlassTint, in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(homeBorder.opacity(0.88), lineWidth: 0.7))
             }
             .accessibilityLabel("切换陪伴")
             .accessibilityIdentifier("home.companion")

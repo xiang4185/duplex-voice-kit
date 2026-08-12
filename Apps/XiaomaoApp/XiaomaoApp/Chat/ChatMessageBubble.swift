@@ -6,6 +6,7 @@ struct ChatMessageBubble: View {
     var groupedWithPrevious: Bool = false
     var groupedWithNext: Bool = false
     @Environment(\.appVisualMode) private var visualMode
+    @State private var showsTimestamp = false
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
     private var isLocalMessage: Bool { message.participant == localParticipant }
@@ -21,14 +22,12 @@ struct ChatMessageBubble: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xSmall) {
             if isLocalMessage {
-                Spacer(minLength: 56)
+                Spacer(minLength: 44)
                 bubble
+                avatar
             } else {
-                if groupedWithPrevious {
-                    Color.clear.frame(width: 34, height: 1)
-                } else {
-                    avatar
-                }
+                // 微信式布局：每条消息都保留头像，连续消息仅收紧气泡间距。
+                avatar
                 bubble
                 Spacer(minLength: 44)
             }
@@ -44,13 +43,6 @@ struct ChatMessageBubble: View {
             alignment: isLocalMessage ? .trailing : .leading,
             spacing: 5
         ) {
-            if !isLocalMessage && !groupedWithPrevious {
-                Text(participantDisplayName)
-                    .font(Theme.captionFont)
-                    .foregroundStyle(visual.textSecondary)
-                    .padding(.horizontal, 3)
-            }
-
             Text(message.content)
                 .font(Theme.bodyFont)
                 .foregroundStyle(visual.textPrimary)
@@ -63,13 +55,28 @@ struct ChatMessageBubble: View {
                 )
                 .shadow(color: visual.shadow.opacity(0.55), radius: 7, x: 0, y: 3)
 
-            if !groupedWithNext {
+            if message.status == .sending {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(visual.textTertiary)
+                    .padding(.horizontal, 4)
+                    .accessibilityLabel("正在发送")
+            } else if !groupedWithNext && showsTimestamp {
                 Text(message.createdAt, style: .time)
                     .font(.system(size: 10, weight: .regular, design: .rounded))
                     .foregroundStyle(visual.textTertiary)
                     .padding(.horizontal, 4)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !groupedWithNext else { return }
+            withAnimation(.easeOut(duration: Theme.Motion.quick)) {
+                showsTimestamp.toggle()
+            }
+        }
+        .accessibilityHint(groupedWithNext ? "" : "轻点显示或隐藏发送时间")
     }
 
     @ViewBuilder

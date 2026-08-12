@@ -13,6 +13,7 @@ struct SmallThingEntryCard: View {
     @State private var showingImagePreview = false
     @State private var showsDeleteConfirmation = false
     @State private var hapticTrigger = 0
+    @State private var hasAppeared = false
     @FocusState private var commentFocused: Bool
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
@@ -90,6 +91,14 @@ struct SmallThingEntryCard: View {
             .padding(.leading, 13)
             .padding(.vertical, 18)
         }
+        .opacity(reduceMotion || hasAppeared ? 1 : 0)
+        .offset(y: reduceMotion || hasAppeared ? 0 : 14)
+        .scaleEffect(reduceMotion || hasAppeared ? 1 : 0.985)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.84),
+            value: hasAppeared
+        )
+        .onAppear { hasAppeared = true }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: commentsOpen)
         .sensoryFeedback(.impact(weight: .light), trigger: hapticTrigger)
         .fullScreenCover(isPresented: $showingImagePreview) {

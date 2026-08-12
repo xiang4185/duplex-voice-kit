@@ -32,7 +32,7 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(chat.contains("清空聊天记录"))
         XCTAssertTrue(chat.contains("刚才的回复由服务端安全降级生成"))
         XCTAssertTrue(chat.contains("ChatTypingIndicator()"))
-        XCTAssertTrue(typing.contains("正在发送消息"))
+        XCTAssertTrue(typing.contains("正在等待回复"))
         XCTAssertFalse(typing.contains("小猫正在回复"))
         XCTAssertTrue(chat.contains("refreshHistorySilently"))
         XCTAssertTrue(chat.contains("Task.sleep(for: .seconds(4))"))
@@ -135,6 +135,8 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("private var participantDisplayName: String"))
         XCTAssertTrue(bubble.contains("case .user: return \"客户\""))
         XCTAssertTrue(bubble.contains("\\(participantDisplayName)：\\(message.content)"))
+        XCTAssertFalse(bubble.contains("Text(participantDisplayName)"),
+                       "聊天区不得显示客户/开发者/小猫姓名，身份只用头像和左右位置区分")
         XCTAssertTrue(bubble.contains("switch message.participant"))
         XCTAssertTrue(bubble.contains("case .xiaomao:"))
         XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
@@ -142,6 +144,10 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertFalse(bubble.contains("Text(\"🐱\")"), "小猫消息不得继续使用固定 emoji 头像")
         XCTAssertTrue(bubble.contains("message.participant == localParticipant"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
+        XCTAssertTrue(bubble.contains("showsTimestamp"), "时间应按需显示，避免长对话产生重复视觉噪声")
+        XCTAssertTrue(bubble.contains("每条消息都保留头像"), "聊天身份识别应遵循微信式逐条头像")
+        XCTAssertFalse(bubble.contains("Color.clear.frame(width: 34"), "连续消息不得再用空白头像占位")
+        XCTAssertTrue(bubble.contains("bubble\n                avatar"), "本地消息也必须保留右侧头像")
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
     }
 

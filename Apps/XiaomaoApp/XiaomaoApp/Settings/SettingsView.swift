@@ -1,4 +1,6 @@
+import AVFoundation
 import SwiftUI
+import UIKit
 
 // MARK: - 屏 7 设置 / 仪表盘 (SettingsView)
 // v6.1: 记录卡(未接入) + 彩蛋卡 + 隐私分组(角色形象开关 + 实时语音静态说明) + 授权说明卡 + 关于
@@ -34,10 +36,10 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("小猫在呢")
                                 .font(Theme.title3Font)
-                                .foregroundStyle(Theme.textPrimary)
+                                .foregroundStyle(visual.textPrimary)
                             Text("随时回来和小猫说说话")
                                 .font(Theme.captionFont)
-                                .foregroundStyle(Theme.textSecondary)
+                                .foregroundStyle(visual.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
@@ -48,43 +50,47 @@ struct SettingsView: View {
                     .offset(y: appeared ? 0 : 10)
                     .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
 
-                    // 隐私与授权
-                    Text("隐私与授权")
-                        .font(Theme.title3Font)
-                        .foregroundStyle(Theme.textPrimary)
-                        .padding(.horizontal, 20)
+                    sectionTitle("角色与外观")
                         .padding(.top, 22)
                         .opacity(appeared ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.22), value: appeared)
 
-                    privacyGroup
+                    appearanceGroup
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
                         .animation(.easeOut(duration: 0.45).delay(0.28), value: appeared)
 
-                    Button {
-                        NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
-                    } label: {
-                        Label("重新配置连接", systemImage: "network.badge.shield.half.filled")
-                            .font(Theme.bodyFont)
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(Theme.primary)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-                    .accessibilityIdentifier("settings.reconfigure")
-
-                    // 关于
-                    Text("关于")
-                        .font(Theme.title3Font)
-                        .foregroundStyle(Theme.textPrimary)
-                        .padding(.horizontal, 20)
+                    sectionTitle("隐私与权限")
                         .padding(.top, 24)
                         .opacity(appeared ? 1 : 0)
-                        .animation(.easeOut(duration: 0.4).delay(0.36), value: appeared)
+                        .animation(.easeOut(duration: 0.36).delay(0.34), value: appeared)
+
+                    privacyGroup
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 14)
+                        .animation(.easeOut(duration: 0.42).delay(0.38), value: appeared)
+
+                    sectionTitle("高级设置")
+                        .padding(.top, 24)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.36).delay(0.44), value: appeared)
+
+                    advancedGroup
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 14)
+                        .animation(.easeOut(duration: 0.42).delay(0.48), value: appeared)
+
+                    // 关于
+                    sectionTitle("关于")
+                        .padding(.top, 24)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.36).delay(0.54), value: appeared)
 
                     aboutGroup
                         .padding(.horizontal, 20)
@@ -92,7 +98,7 @@ struct SettingsView: View {
                         .padding(.bottom, 40)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
-                        .animation(.easeOut(duration: 0.45).delay(0.42), value: appeared)
+                        .animation(.easeOut(duration: 0.42).delay(0.58), value: appeared)
                 }
             }
         }
@@ -141,6 +147,13 @@ struct SettingsView: View {
         .onAppear {
             appeared = true
         }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.title3Font)
+            .foregroundStyle(visual.textPrimary)
+            .padding(.horizontal, 20)
     }
 
     // MARK: 使用统计卡 (P2.6I: 无真实数据时诚实空状态, 不显示 0 分钟/0 天/0%/假进度)
@@ -221,38 +234,124 @@ struct SettingsView: View {
         .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
     }
 
-    // MARK: 隐私组 (P2.6J: 仅保留真实生效的开关与静态说明, 删除本地无效开关)
+    // MARK: 角色与外观
+    private var appearanceGroup: some View {
+        privacyRow(icon: "eye.slash.fill", title: "显示角色形象",
+                   detail: "关闭后头像和场景会保持模糊",
+                   isOn: Binding(
+                       get: { privacy.showRealAvatar },
+                       set: { privacy.showRealAvatar = $0 }
+                   ))
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+    }
+
+    // MARK: 隐私与权限
     private var privacyGroup: some View {
         VStack(spacing: 0) {
-            privacyRow(icon: "eye.slash.fill", title: "显示角色形象",
-                       detail: "关闭后头像会保持模糊",
-                       isOn: Binding(
-                           get: { privacy.showRealAvatar },
-                           set: { privacy.showRealAvatar = $0 }
-                       ))
-            Divider().overlay(Theme.border).padding(.leading, 60)
-            // 静态说明行: 不提供无法改变真实行为的 Toggle
-            HStack(spacing: 14) {
-                Image(systemName: "waveform.and.mic")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Theme.info)
-                    .frame(width: 36)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("实时语音服务")
-                        .font(Theme.bodyFont)
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("通话时语音会发送到服务端用于实时对话")
-                        .font(Theme.captionFont)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer(minLength: 0)
+            Button(action: openSystemSettings) {
+                settingsRow(
+                    icon: microphonePermissionIcon,
+                    title: "麦克风权限",
+                    detail: microphonePermissionText,
+                    trailing: microphonePermissionAction
+                )
             }
-            .padding(.horizontal, 18)
-            .frame(minHeight: 60)
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("settings.microphone")
+            Divider().overlay(visual.border).padding(.leading, 60)
+            settingsRow(
+                icon: "waveform.and.mic",
+                title: "实时语音服务",
+                detail: "通话时语音会发送到服务端用于实时对话"
+            )
         }
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+    }
+
+    // MARK: 高级设置
+    private var advancedGroup: some View {
+        Button {
+            NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
+        } label: {
+            settingsRow(
+                icon: "network.badge.shield.half.filled",
+                title: "服务连接",
+                detail: "服务器地址、设备和鉴权配置",
+                trailing: "配置"
+            )
+        }
+        .buttonStyle(PressableCardStyle())
+        .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .shadow(color: visual.shadow.opacity(0.5), radius: 9, x: 0, y: 3)
+        .accessibilityIdentifier("settings.reconfigure")
+    }
+
+    private func settingsRow(
+        icon: String,
+        title: String,
+        detail: String,
+        trailing: String? = nil
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(Theme.info)
+                .frame(width: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(Theme.bodyFont)
+                    .foregroundStyle(visual.textPrimary)
+                Text(detail)
+                    .font(Theme.captionFont)
+                    .foregroundStyle(visual.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            if let trailing {
+                Text(trailing)
+                    .font(Theme.captionFont.weight(.semibold))
+                    .foregroundStyle(Theme.textLink)
+            }
+            if trailing != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(visual.textTertiary)
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(minHeight: 64)
+        .contentShape(Rectangle())
+    }
+
+    private var microphonePermissionText: String {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return "已开启，可用于实时陪伴"
+        case .denied, .restricted: return "未开启，通话时无法听到你"
+        case .notDetermined: return "首次通话时会请求权限"
+        @unknown default: return "状态暂不可用"
+        }
+    }
+
+    private var microphonePermissionIcon: String {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            ? "mic.fill"
+            : "mic.slash"
+    }
+
+    private var microphonePermissionAction: String {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            ? "已开启"
+            : "去设置"
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func privacyRow(icon: String, title: String, detail: String, isOn: Binding<Bool>) -> some View {
@@ -264,15 +363,15 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(visual.textPrimary)
                 Text(detail)
                     .font(Theme.captionFont)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(visual.textSecondary)
             }
             Spacer(minLength: 0)
             Toggle("", isOn: isOn)
                 .labelsHidden()
-                .tint(Theme.primary)
+                .tint(visual.primary)
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("settings.privacy.\(title)")
         }
@@ -306,22 +405,22 @@ struct SettingsView: View {
                 HStack {
                     Label("小猫 Pro · 彩蛋", systemImage: "sparkles")
                         .font(Theme.bodyFont)
-                        .foregroundStyle(Theme.textPrimary)
+                        .foregroundStyle(visual.textPrimary)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textTertiary)
+                        .foregroundStyle(visual.textTertiary)
                 }
                 .padding(.horizontal, 20)
                 .frame(minHeight: 56)
             }
             .buttonStyle(PressableCardStyle())
             .accessibilityIdentifier("settings.pro")
-            Divider().overlay(Theme.border).padding(.leading, 20)
+            Divider().overlay(visual.border).padding(.leading, 20)
             aboutRow(title: "关于小猫", detail: "版本 1.0 (0)")
-            Divider().overlay(Theme.border).padding(.leading, 20)
+            Divider().overlay(visual.border).padding(.leading, 20)
             aboutRow(title: "帮助与反馈", detail: nil)
-            Divider().overlay(Theme.border).padding(.leading, 20)
+            Divider().overlay(visual.border).padding(.leading, 20)
             aboutRow(title: "隐私政策", detail: nil)
         }
         .background(visual.glassTint, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
@@ -343,16 +442,16 @@ struct SettingsView: View {
             HStack {
                 Text(title)
                     .font(Theme.bodyFont)
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(visual.textPrimary)
                 Spacer()
                 if let detail {
                     Text(detail)
                         .font(Theme.captionFont)
-                        .foregroundStyle(Theme.textTertiary)
+                        .foregroundStyle(visual.textTertiary)
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.textTertiary)
+                    .foregroundStyle(visual.textTertiary)
             }
             .padding(.horizontal, 20)
             .frame(minHeight: 56)
