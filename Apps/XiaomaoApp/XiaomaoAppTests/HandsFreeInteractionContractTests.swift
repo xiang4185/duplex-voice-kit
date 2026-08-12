@@ -1146,7 +1146,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(topBar.contains("width: 40, height: 40"), "topBar 必须保留 40×40 触控区域")
 
         // ===== 3b. 首页主体层级 (全文件) =====
-        XCTAssertTrue(home.contains("· 在呢"), "首页主体必须保留一条轻量陪伴状态")
+        XCTAssertTrue(home.contains("LIVE COMPANION"), "V2 首页主体必须保留陪伴状态层级")
+        XCTAssertTrue(home.contains("AVAILABLE NOW"), "V2 首页 CTA 必须明确当前陪伴可用状态")
         XCTAssertFalse(home.contains("greetings"), "极简首页不得恢复轮换问候数组")
         XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴必须保留 OrganicMeshBackground 回退")
         XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "其他陪伴必须使用完整场景背景")
