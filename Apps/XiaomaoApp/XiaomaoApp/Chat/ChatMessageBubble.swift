@@ -20,7 +20,7 @@ struct ChatMessageBubble: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             if isLocalMessage {
                 Spacer(minLength: 48)
                 bubble
