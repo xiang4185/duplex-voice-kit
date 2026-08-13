@@ -352,11 +352,18 @@ extension View {
 
 // MARK: - 触觉反馈 (设计 §9.1)
 enum WarmHaptics {
+    private static let actionGenerator = UIImpactFeedbackGenerator(style: .light)
+
+    static func prepareAction() {
+        actionGenerator.prepare()
+    }
+
     static func comfort() {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
     static func action() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        actionGenerator.impactOccurred(intensity: 0.82)
+        actionGenerator.prepare()
     }
     static func success() {
         UINotificationFeedbackGenerator().notificationOccurred(.success)

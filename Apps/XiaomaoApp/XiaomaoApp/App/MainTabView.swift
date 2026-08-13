@@ -57,7 +57,7 @@ struct MainTabView: View {
 
     var body: some View {
         let tokens = Theme.visual(visualMode)
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             CompanionHomeView(
                 startCall: startCall,
                 openSettings: { selectedTab = .settings }
@@ -103,7 +103,20 @@ struct MainTabView: View {
                 currentCallBar
             }
         }
-        .sensoryFeedback(.selection, trigger: selectedTab)
+        .onAppear {
+            WarmHaptics.prepareAction()
+        }
+    }
+
+    private var tabSelection: Binding<Tab> {
+        Binding(
+            get: { selectedTab },
+            set: { newTab in
+                guard newTab != selectedTab else { return }
+                WarmHaptics.action()
+                selectedTab = newTab
+            }
+        )
     }
 
     private var currentCallBar: some View {

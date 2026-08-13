@@ -105,8 +105,8 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
-        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
-                      "消息不足一屏时必须从顶部开始，不得沉到底部")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(keyboardVisible ? .bottom : .top, for: .alignment)"),
+                      "短消息在键盘关闭时顶部对齐，键盘打开时必须贴近输入框底部对齐")
         XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
                       "键盘最终布局完成后只能做一次锚底")
         XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
@@ -157,6 +157,8 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("每条远端消息都保留头像"), "聊天身份识别应遵循微信式逐条头像")
         XCTAssertFalse(bubble.contains("Color.clear.frame(width: 34"), "连续消息不得再用空白头像占位")
         XCTAssertTrue(bubble.contains(".frame(width: 32, height: 32)"), "三方头像应使用统一尺寸和轨道")
+        XCTAssertTrue(bubble.contains("HStack(alignment: .top, spacing: 10)"),
+                      "长消息头像必须从气泡顶部开始对齐，不得掉到消息末尾")
         XCTAssertTrue(bubble.contains("bubble\n                avatar"), "本地消息也必须保留右侧头像")
         XCTAssertTrue(bubble.contains(".frame(maxWidth: 278"), "长消息必须限制行宽，避免铺满屏幕")
         XCTAssertTrue(bubble.contains("isLocalMessage { return Theme.v2InkSurface }"), "自己的消息必须建立稳定的高识别度视觉锚点")
@@ -239,8 +241,14 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertFalse(tabs.contains("main.v2TabBar"), "不得再叠加第二层自绘 Dock")
         XCTAssertFalse(tabs.contains("matchedGeometryEffect"), "系统 Tab Bar 不需要复制选中滑块")
         XCTAssertFalse(tabs.contains(".toolbar(.hidden, for: .tabBar)"), "根 Tab 必须交回 iOS 26 原生 Tab Bar")
-        XCTAssertTrue(tabs.contains(".sensoryFeedback(.selection, trigger: selectedTab)"),
-                      "恢复系统 Tab 后仍必须使用原生 selection 触感反馈")
+        XCTAssertTrue(tabs.contains("WarmHaptics.prepareAction()"),
+                      "系统 Tab 出现时必须预热轻击反馈，减少首次触感延迟")
+        XCTAssertTrue(tabs.contains("TabView(selection: tabSelection)"),
+                      "原生 Tab selection 必须经由即时触感 Binding 提交")
+        XCTAssertTrue(tabs.contains("WarmHaptics.action()"),
+                      "系统 Tab 切换必须保留即时轻击反馈")
+        XCTAssertFalse(tabs.contains(".sensoryFeedback(.selection, trigger: selectedTab)"),
+                       "Tab 反馈不得等 selection 状态提交后才触发")
         XCTAssertTrue(home.contains("LIVE COMPANION"))
         XCTAssertFalse(home.contains("LIVE COMPANION  /"), "正式界面不得保留设计稿序号")
         XCTAssertTrue(home.contains("homeControlDeck"))
