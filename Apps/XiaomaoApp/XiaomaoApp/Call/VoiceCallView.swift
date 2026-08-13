@@ -90,11 +90,17 @@ struct VoiceCallView: View {
     var body: some View {
         ZStack {
             callBackground
+                .opacity(reduceMotion ? (appeared ? 1 : 0) : 1)
+                .animation(.easeOut(duration: 0.18), value: appeared)
 
             VStack(spacing: 0) {
                 topBar
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
+                    .animation(
+                        reduceMotion ? .easeOut(duration: 0.18) : .easeOut(duration: 0.34),
+                        value: appeared
+                    )
 
                 statusRow
                     .padding(.top, 8)
@@ -105,7 +111,12 @@ struct VoiceCallView: View {
                     }
                     .accessibilityHint("长按查看语音诊断")
                     .opacity(appeared ? 1 : 0)
-                    .animation(.easeOut(duration: 0.4).delay(0.15), value: appeared)
+                    .animation(
+                        reduceMotion
+                            ? .easeOut(duration: 0.18)
+                            : .easeOut(duration: 0.4).delay(0.15),
+                        value: appeared
+                    )
 
                 Spacer(minLength: 0)
 
@@ -114,9 +125,14 @@ struct VoiceCallView: View {
                         minHeight: usesSceneBackground ? 280 : heroMinSize * 3.0 / 2.0 + 16,
                         maxHeight: usesSceneBackground ? 370 : heroSize * 3.0 / 2.0 + 24
                     )
-                    .opacity(appeared ? 1 : 0)
-                    .scaleEffect(appeared ? 1 : 0.95)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.82).delay(0.25), value: appeared)
+                    .opacity(reduceMotion ? (appeared ? 1 : 0) : 1)
+                    .scaleEffect(reduceMotion || appeared ? 1 : 0.985)
+                    .animation(
+                        reduceMotion
+                            ? .easeOut(duration: 0.18)
+                            : .spring(response: 0.6, dampingFraction: 0.82).delay(0.12),
+                        value: appeared
+                    )
 
                 VStack(spacing: 4) {
                     Text(CompanionRoleStore.shared.productionRole.displayName)
@@ -127,7 +143,12 @@ struct VoiceCallView: View {
                         .foregroundStyle(callTextSecondary)
                 }
                 .opacity(appeared ? 1 : 0)
-                .animation(.easeOut(duration: 0.4).delay(0.35), value: appeared)
+                .animation(
+                    reduceMotion
+                        ? .easeOut(duration: 0.18)
+                        : .easeOut(duration: 0.4).delay(0.28),
+                    value: appeared
+                )
 
                 ZStack(alignment: .top) {
                     Color.clear
@@ -144,6 +165,10 @@ struct VoiceCallView: View {
                 .frame(height: 38)
                 .padding(.top, 6)
                 .opacity(appeared ? 1 : 0)
+                .animation(
+                    reduceMotion ? .easeOut(duration: 0.18) : .easeOut(duration: 0.32),
+                    value: appeared
+                )
 
                 if viewModel.controller.state == .reconnecting {
                     Text(viewModel.controller.reconnectStatusText)
@@ -172,8 +197,13 @@ struct VoiceCallView: View {
                     .padding(.bottom, 18)
                     .layoutPriority(1)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
-                    .animation(.easeOut(duration: 0.5).delay(0.5), value: appeared)
+                    .offset(y: reduceMotion || appeared ? 0 : 16)
+                    .animation(
+                        reduceMotion
+                            ? .easeOut(duration: 0.18)
+                            : .easeOut(duration: 0.5).delay(0.38),
+                        value: appeared
+                    )
             }
         }
         .accessibilityIdentifier("call.screen")
@@ -434,8 +464,10 @@ struct VoiceCallView: View {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    // P2.7B-FINAL-MESH: 删除背景循环光效状态; 仅保留人物极轻呼吸
-    @State private var avatarBreathScale = false
+
+    private var characterPhase: CharacterPresencePhase {
+        CharacterPresencePhase(voiceState: viewModel.controller.state)
+    }
 
     // 正在聆听时麦克风轻微 pulse；扬声器静音不影响持续采集。
     private var micPulseActive: Bool {
@@ -503,7 +535,13 @@ struct VoiceCallView: View {
     private var heroSection: some View {
         Group {
             if usesSceneBackground {
-                Color.clear
+                ZStack {
+                    Color.clear
+                    Color.clear
+                        .frame(width: heroSize, height: heroSize * 3.0 / 2.0)
+                        .characterAlive(phase: characterPhase, style: .hero)
+                        .allowsHitTesting(false)
+                }
             } else {
                 GeometryReader { heroGeo in
                     let maxH = heroGeo.size.height
@@ -534,10 +572,7 @@ struct VoiceCallView: View {
                             tappable: false,
                             variant: .xiaomao
                         )
-                        .scaleEffect(avatarBreathScale ? 1.012 : 0.988)
-                        .offset(y: avatarBreathScale ? -3 : 0)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 3.2).repeatForever(autoreverses: true), value: avatarBreathScale)
-                        .onAppear { avatarBreathScale = true }
+                        .characterAlive(phase: characterPhase, style: .hero)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

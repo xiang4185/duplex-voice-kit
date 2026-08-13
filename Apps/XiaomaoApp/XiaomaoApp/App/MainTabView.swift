@@ -7,12 +7,18 @@ import SwiftUI
 struct MainTabView: View {
     let environment: AppEnvironment
     let startCall: () -> Void
+    let characterNamespace: Namespace.ID
     let onReconfigure: () -> Void
     @ObservedObject private var voiceController: VoiceSessionController
 
     @StateObject private var chatViewModel: ChatViewModel
     @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
+    @State private var characterRelayVisible = false
+    @State private var characterRelayArrived = false
+    @State private var reducedTabFade = false
+    @State private var characterRelayTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
 
     enum Tab: Hashable {
@@ -40,6 +46,7 @@ struct MainTabView: View {
     init(
         environment: AppEnvironment,
         startCall: @escaping () -> Void,
+        characterNamespace: Namespace.ID,
         voiceController: VoiceSessionController,
         chatService: any ChatServicing,
         smallThingsStore: SmallThingsStore,
@@ -47,6 +54,7 @@ struct MainTabView: View {
     ) {
         self.environment = environment
         self.startCall = startCall
+        self.characterNamespace = characterNamespace
         self.onReconfigure = onReconfigure
         _voiceController = ObservedObject(wrappedValue: voiceController)
         _chatViewModel = StateObject(
@@ -60,10 +68,17 @@ struct MainTabView: View {
         TabView(selection: tabSelection) {
             CompanionHomeView(
                 startCall: startCall,
-                openSettings: { selectedTab = .settings }
+                openSettings: { selectedTab = .settings },
+                voiceController: voiceController,
+                characterNamespace: characterNamespace
             )
+            .modifier(V2TabSceneMotion(isActive: selectedTab == .companion))
             .tabItem {
                 Label(Tab.companion.title, systemImage: Tab.companion.icon)
+                    .symbolEffect(
+                        .bounce,
+                        value: !reduceMotion && selectedTab == .companion
+                    )
                     .accessibilityIdentifier("main.tab.companion")
             }
             .tag(Tab.companion)
@@ -74,37 +89,62 @@ struct MainTabView: View {
                 localParticipant: environment.chatTargetDeviceID == nil ? .user : .developer,
                 onReconfigure: onReconfigure
             )
+                .modifier(V2TabSceneMotion(isActive: selectedTab == .chat))
                 .tabItem {
                     Label(Tab.chat.title, systemImage: Tab.chat.icon)
+                        .symbolEffect(
+                            .bounce,
+                            value: !reduceMotion && selectedTab == .chat
+                        )
                         .accessibilityIdentifier("main.tab.chat")
                 }
                 .tag(Tab.chat)
 
             SmallThingsRootView(store: smallThingsStore)
+                .modifier(V2TabSceneMotion(isActive: selectedTab == .smallThings))
                 .tabItem {
                     Label(Tab.smallThings.title, systemImage: Tab.smallThings.icon)
+                        .symbolEffect(
+                            .bounce,
+                            value: !reduceMotion && selectedTab == .smallThings
+                        )
                         .accessibilityIdentifier("main.tab.smallThings")
                 }
                 .tag(Tab.smallThings)
                 .accessibilityIdentifier("smallThings.tab")
 
             SettingsView(store: SettingsStore(environment: environment), close: {})
+                .modifier(V2TabSceneMotion(isActive: selectedTab == .settings))
                 .tabItem {
                     Label(Tab.settings.title, systemImage: Tab.settings.icon)
+                        .symbolEffect(
+                            .bounce,
+                            value: !reduceMotion && selectedTab == .settings
+                        )
                         .accessibilityIdentifier("main.tab.settings")
                 }
                 .tag(Tab.settings)
         }
         .tint(tokens.primary)
+        .opacity(reducedTabFade ? 0 : 1)
         .toolbarColorScheme(visualMode == .mystery ? .dark : .light, for: .tabBar)
         .accessibilityIdentifier("main.tabs")
+        .overlay { characterRelayOverlay }
         .safeAreaInset(edge: .top, spacing: 0) {
             if voiceController.callIsActive {
                 currentCallBar
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.84),
+            value: voiceController.callIsActive
+        )
         .onAppear {
             WarmHaptics.prepareAction()
+        }
+        .onDisappear {
+            characterRelayTask?.cancel()
         }
     }
 
@@ -114,9 +154,88 @@ struct MainTabView: View {
             set: { newTab in
                 guard newTab != selectedTab else { return }
                 WarmHaptics.action()
-                selectedTab = newTab
+                characterRelayTask?.cancel()
+
+                if selectedTab == .companion, newTab == .chat, !reduceMotion {
+                    beginCharacterRelay(to: newTab)
+                } else if reduceMotion {
+                    characterRelayVisible = false
+                    selectWithReducedMotion(newTab)
+                } else {
+                    characterRelayVisible = false
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        selectedTab = newTab
+                    }
+                }
             }
         )
+    }
+
+    private func beginCharacterRelay(to newTab: Tab) {
+        var setup = Transaction()
+        setup.disablesAnimations = true
+        withTransaction(setup) {
+            characterRelayArrived = false
+            characterRelayVisible = true
+            selectedTab = newTab
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.46)) {
+                characterRelayArrived = true
+            }
+        }
+
+        characterRelayTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            characterRelayVisible = false
+            characterRelayArrived = false
+        }
+    }
+
+    private func selectWithReducedMotion(_ newTab: Tab) {
+        withAnimation(.linear(duration: 0.08)) {
+            reducedTabFade = true
+        }
+
+        characterRelayTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled else { return }
+            selectedTab = newTab
+            withAnimation(.easeOut(duration: 0.14)) {
+                reducedTabFade = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var characterRelayOverlay: some View {
+        if characterRelayVisible, !reduceMotion {
+            GeometryReader { proxy in
+                let start = CGPoint(
+                    x: proxy.size.width * 0.5,
+                    y: proxy.size.height * 0.41
+                )
+                let destination = CGPoint(
+                    x: proxy.size.width - 58,
+                    y: max(24, proxy.safeAreaInsets.top + 22)
+                )
+
+                PrivacyAvatar(
+                    size: 168,
+                    tappable: false,
+                    variant: .xiaomao,
+                    style: .portrait
+                )
+                .scaleEffect(characterRelayArrived ? 0.18 : 1)
+                .position(characterRelayArrived ? destination : start)
+                .opacity(characterRelayArrived ? 0 : 1)
+                .shadow(color: Theme.visual(visualMode).shadow, radius: 18, y: 8)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private var currentCallBar: some View {
@@ -126,6 +245,11 @@ struct MainTabView: View {
                 Image(systemName: "waveform.circle.fill")
                     .font(.system(size: 22))
                     .foregroundStyle(tokens.primary)
+                    .symbolEffect(
+                        .pulse,
+                        options: .repeating,
+                        isActive: voiceController.callIsActive && !reduceMotion
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("当前通话仍在继续")
                         .font(Theme.subheadFont.weight(.semibold))
@@ -149,14 +273,39 @@ struct MainTabView: View {
     }
 }
 
+private struct V2TabSceneMotion: ViewModifier {
+    let isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(reduceMotion || isActive ? 1 : 0.94)
+            .scaleEffect(reduceMotion || isActive ? 1 : 0.985, anchor: .bottom)
+            .offset(y: reduceMotion || isActive ? 0 : 8)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.86),
+                value: isActive
+            )
+    }
+}
+
 // MARK: - 预览
-#Preview {
+private struct MainTabPreview: View {
+    @Namespace private var characterNamespace
+
+    var body: some View {
     MainTabView(
         environment: .fromBundle(),
         startCall: {},
+        characterNamespace: characterNamespace,
         voiceController: AppCoordinator().voiceController,
         chatService: MockChatService(),
         smallThingsStore: SmallThingsStore()
     )
     .environmentObject(CompanionModeStore())
+    }
+}
+
+#Preview {
+    MainTabPreview()
 }

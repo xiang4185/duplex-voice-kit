@@ -9,6 +9,7 @@ struct ChatComposerView: View {
     let send: () -> Void
 
     @FocusState.Binding var inputFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
@@ -36,8 +37,20 @@ struct ChatComposerView: View {
                             cornerRadius: 20,
                             style: .continuous
                         )
-                        .stroke(Theme.v2Line.opacity(0.8), lineWidth: 0.7)
+                        .stroke(
+                            inputFocused ? Theme.v2Coral.opacity(0.72) : Theme.v2Line.opacity(0.8),
+                            lineWidth: inputFocused ? 1.2 : 0.7
+                        )
                     }
+                    .shadow(
+                        color: inputFocused ? Theme.v2Coral.opacity(0.12) : .clear,
+                        radius: 10,
+                        y: 3
+                    )
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: Theme.Motion.quick),
+                        value: inputFocused
+                    )
                     .contentShape(
                         RoundedRectangle(
                             cornerRadius: 20,
@@ -62,6 +75,7 @@ struct ChatComposerView: View {
                         } else {
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 17, weight: .bold))
+                                .symbolEffect(.bounce, value: canSend)
                         }
                     }
                     .frame(
@@ -71,8 +85,13 @@ struct ChatComposerView: View {
                     .foregroundStyle(canSend ? Color.white : visual.textSecondary.opacity(0.78))
                     .background(canSend ? Theme.v2Coral : visual.textSecondary.opacity(0.13))
                     .clipShape(Circle())
+                    .scaleEffect(canSend && !reduceMotion ? 1 : 0.92)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.68),
+                        value: canSend
+                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(V2ComposerSendButtonStyle())
                 .disabled(!canSend)
                 .accessibilityLabel(isSending ? "正在发送" : "发送")
                 .accessibilityIdentifier("chat.send")
@@ -101,5 +120,18 @@ struct ChatComposerView: View {
 
     private var isOverLimit: Bool {
         draft.count > characterLimit
+    }
+}
+
+private struct V2ComposerSendButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(reduceMotion || !configuration.isPressed ? 1 : 0.88)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.62),
+                value: configuration.isPressed
+            )
     }
 }

@@ -266,6 +266,66 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(settings.contains("settingsBackdrop"), "我的页必须进入同一套 V2 视觉语言")
     }
 
+    func testV22MotionHierarchyKeepsNativeStructureAndReduceMotionFallbacks() throws {
+        let tabs = try source("XiaomaoApp/App/MainTabView.swift")
+        let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let composer = try source("XiaomaoApp/Chat/ChatComposerView.swift")
+
+        XCTAssertTrue(tabs.contains("V2TabSceneMotion"))
+        XCTAssertTrue(tabs.contains("accessibilityReduceMotion"))
+        XCTAssertTrue(tabs.contains(".bounce,"))
+        XCTAssertTrue(tabs.contains("value: !reduceMotion && selectedTab"))
+        XCTAssertFalse(tabs.contains("main.v2TabBar"), "动效增强不得重新引入自绘 Dock")
+
+        for token in ["livePulse", "callPulse", "repeatForever", "accessibilityReduceMotion"] {
+            XCTAssertTrue(home.contains(token), "首页缺少动态生命感：\(token)")
+        }
+        for token in ["ambientMotion", "onlinePulse", "repeatForever", "allowsHitTesting(false)"] {
+            XCTAssertTrue(chat.contains(token), "聊天页缺少环境动效：\(token)")
+        }
+        XCTAssertTrue(composer.contains("V2ComposerSendButtonStyle"))
+        XCTAssertTrue(composer.contains("value: inputFocused"))
+        XCTAssertTrue(composer.contains("accessibilityReduceMotion"))
+    }
+
+    func testV23CharacterPresenceUsesRealStateAndContinuousTransitions() throws {
+        let presence = try source("XiaomaoApp/Design/Components/CharacterPresenceMotion.swift")
+        let root = try source("XiaomaoApp/App/XiaomaoApp.swift")
+        let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let typing = try source("XiaomaoApp/Chat/ChatTypingIndicator.swift")
+        let call = try source("XiaomaoApp/Call/VoiceCallView.swift")
+
+        for token in [
+            "case idle", "case connecting", "case listening", "case thinking",
+            "case speaking", "case reconnecting", "init(voiceState: VoiceSessionState"
+        ] {
+            XCTAssertTrue(presence.contains(token), "角色存在状态缺少：\(token)")
+        }
+        XCTAssertTrue(presence.contains("case .ready, .listening, .endpointing:"))
+        XCTAssertTrue(presence.contains("case .processing:"))
+        XCTAssertTrue(presence.contains("case .speaking, .interrupting:"))
+        XCTAssertTrue(presence.contains("accessibilityReduceMotion"))
+        XCTAssertTrue(presence.contains("guard !reduceMotion"))
+        XCTAssertTrue(presence.contains("matchedTransitionSource"))
+        XCTAssertFalse(presence.contains("Timer"), "角色生命感不得依赖常驻 Timer")
+
+        XCTAssertTrue(root.contains(".navigationTransition("))
+        XCTAssertTrue(root.contains(".zoom(sourceID: CharacterTransitionID.call"))
+        XCTAssertTrue(root.contains(".navigationTransition(.crossFade)"))
+        XCTAssertTrue(home.contains("CharacterPresencePhase("))
+        XCTAssertTrue(home.contains("characterCallTransitionSource"))
+        XCTAssertTrue(chat.contains("viewModel.isSending ? .thinking : .idle"))
+        XCTAssertTrue(try source("XiaomaoApp/App/MainTabView.swift").contains("characterRelayOverlay"))
+        XCTAssertTrue(try source("XiaomaoApp/App/MainTabView.swift").contains("beginCharacterRelay"))
+        XCTAssertTrue(try source("XiaomaoApp/App/MainTabView.swift").contains("selectWithReducedMotion"))
+        XCTAssertTrue(try source("XiaomaoApp/App/MainTabView.swift").contains("reducedTabFade"))
+        XCTAssertTrue(typing.contains(".characterAlive(phase: .thinking"))
+        XCTAssertTrue(call.contains("CharacterPresencePhase(voiceState: viewModel.controller.state)"))
+        XCTAssertTrue(call.contains("vadNormalizedRMS"), "讲话/聆听光感必须继续复用真实音量")
+    }
+
     private func source(_ relativePath: String) throws -> String {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

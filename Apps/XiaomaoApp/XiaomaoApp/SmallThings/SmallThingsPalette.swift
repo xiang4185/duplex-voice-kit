@@ -25,4 +25,15 @@ extension View {
             self.contentTransition(.symbolEffect(.replace))
         }
     }
+
+    @ViewBuilder
+    func smallThingsReactionTransition(reduceMotion: Bool, value: Bool) -> some View {
+        if reduceMotion {
+            self
+        } else {
+            self
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: value)
+        }
+    }
 }
