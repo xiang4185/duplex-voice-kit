@@ -75,6 +75,8 @@ private struct RootView: View {
     @ObservedObject private var companionStore: CompanionModeStore
     let reload: () -> Void
     @State private var activeCall = false
+    @Namespace private var characterNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 #if DEBUG
     @State private var showingDiagnostics = false
 #endif
@@ -118,6 +120,7 @@ private struct RootView: View {
                 MainTabView(
                     environment: coordinator.environment,
                     startCall: { requestCall() },
+                    characterNamespace: characterNamespace,
                     voiceController: coordinator.voiceController,
                     chatService: coordinator.chatService,
                     smallThingsStore: coordinator.smallThingsStore,
@@ -126,13 +129,7 @@ private struct RootView: View {
                     }
                 )
                 .fullScreenCover(isPresented: $activeCall) {
-                    VoiceCallView(
-                        viewModel: VoiceCallViewModel(
-                            controller: coordinator.voiceController,
-                            companionStore: companionStore
-                        ),
-                        close: { activeCall = false }
-                    )
+                    callPresentation
                 }
             }
 #if DEBUG
@@ -234,6 +231,28 @@ private struct RootView: View {
             coordinator.voiceController.markPresentationRequested()
         }
         activeCall = true
+    }
+
+    @ViewBuilder
+    private var callPresentation: some View {
+        if reduceMotion {
+            voiceCallView
+        } else {
+            voiceCallView
+                .navigationTransition(
+                    .zoom(sourceID: CharacterTransitionID.call, in: characterNamespace)
+                )
+        }
+    }
+
+    private var voiceCallView: some View {
+        VoiceCallView(
+            viewModel: VoiceCallViewModel(
+                controller: coordinator.voiceController,
+                companionStore: companionStore
+            ),
+            close: { activeCall = false }
+        )
     }
 
     private func reconfigureConnection() {

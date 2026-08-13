@@ -14,6 +14,7 @@ struct ChatTypingIndicator: View {
                 .background(Theme.v2PaperMuted, in: Circle())
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Theme.v2Line, lineWidth: 0.7))
+                .characterAlive(phase: .thinking, style: .compact)
                 .accessibilityHidden(true)
 
             HStack(spacing: Theme.Spacing.xSmall) {

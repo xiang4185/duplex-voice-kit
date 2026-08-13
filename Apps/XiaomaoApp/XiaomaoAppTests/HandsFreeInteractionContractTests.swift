@@ -1150,7 +1150,11 @@ final class HandsFreeInteractionContractTests: XCTestCase {
 
         // ===== 3b. 首页主体层级 (全文件) =====
         XCTAssertTrue(home.contains("LIVE COMPANION"), "V2 首页主体必须保留陪伴状态层级")
-        XCTAssertTrue(home.contains("AVAILABLE NOW"), "V2 首页 CTA 必须明确当前陪伴可用状态")
+        let presence = try source("XiaomaoApp/Design/Components/CharacterPresenceMotion.swift")
+        XCTAssertTrue(home.contains("Text(characterPhase.eyebrow)"),
+                      "V2 首页 CTA 必须由真实角色状态驱动")
+        XCTAssertTrue(presence.contains("case .idle: return \"AVAILABLE NOW\""),
+                      "空闲状态必须明确当前陪伴可用")
         XCTAssertFalse(home.contains("greetings"), "极简首页不得恢复轮换问候数组")
         XCTAssertTrue(home.contains("OrganicMeshBackground(mode: .home)"), "温柔陪伴必须保留 OrganicMeshBackground 回退")
         XCTAssertTrue(home.contains("sceneBackgroundAssetName"), "其他陪伴必须使用完整场景背景")

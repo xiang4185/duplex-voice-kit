@@ -49,6 +49,12 @@ struct SmallThingsLedgerCard: View {
                 Label("待确认 \(store.pendingApprovals.count)", systemImage: "clock.fill")
                     .font(.caption.bold())
                     .foregroundStyle(Theme.v2Coral)
+                    .contentTransition(.numericText())
+                    .symbolEffect(.bounce, value: store.pendingApprovals.count)
+                    .animation(
+                        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.72),
+                        value: store.pendingApprovals.count
+                    )
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(Theme.v2CoralSoft, in: Capsule())
@@ -84,6 +90,10 @@ struct SmallThingsLedgerCard: View {
                     .font(.system(size: 38, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.v2Ink)
                     .contentTransition(.numericText())
+                    .animation(
+                        reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.82),
+                        value: store.remainingAmount
+                    )
                 Spacer(minLength: Theme.Spacing.small)
                 progressRing
             }
@@ -276,6 +286,11 @@ struct SmallThingsLedgerCard: View {
             Text(value, format: .number.precision(.fractionLength(2)))
                 .font(Theme.headlineFont)
                 .foregroundStyle(Theme.v2Ink)
+                .contentTransition(.numericText())
+                .animation(
+                    reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82),
+                    value: value
+                )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .font(Theme.captionFont)

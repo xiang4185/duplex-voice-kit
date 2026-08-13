@@ -3,6 +3,9 @@ import SwiftUI
 struct SmallThingsRootView: View {
     @ObservedObject var store: SmallThingsStore
     @State private var path: [SmallThingsRoute] = []
+    @State private var appeared = false
+    @State private var ambientMotion = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
@@ -43,8 +46,25 @@ struct SmallThingsRootView: View {
                         openApprovals: { path.append(.approval) },
                         openBinding: { path.append(.binding) }
                     )
+                    .opacity(reduceMotion || appeared ? 1 : 0)
+                    .offset(y: reduceMotion || appeared ? 0 : 18)
+                    .scaleEffect(reduceMotion || appeared ? 1 : 0.975)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .spring(response: 0.52, dampingFraction: 0.84).delay(0.04),
+                        value: appeared
+                    )
 
                     flowHeader
+                        .opacity(reduceMotion || appeared ? 1 : 0)
+                        .offset(y: reduceMotion || appeared ? 0 : 12)
+                        .animation(
+                            reduceMotion
+                                ? nil
+                                : .easeOut(duration: 0.42).delay(0.16),
+                            value: appeared
+                        )
 
                     if store.sortedEntries.isEmpty && !store.isLoading {
                         emptyTimeline
@@ -82,6 +102,10 @@ struct SmallThingsRootView: View {
             }
         }
         .accessibilityIdentifier("smallThings.root")
+        .onAppear {
+            appeared = true
+            ambientMotion = true
+        }
         .task {
             if store.isProduction {
                 await store.refreshFromBackend()
@@ -97,8 +121,39 @@ struct SmallThingsRootView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+
+            Circle()
+                .fill(Theme.v2CoralSoft.opacity(0.26))
+                .frame(width: 250, height: 250)
+                .blur(radius: 54)
+                .offset(
+                    x: ambientMotion && !reduceMotion ? -112 : -154,
+                    y: ambientMotion && !reduceMotion ? -230 : -170
+                )
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 13).repeatForever(autoreverses: true),
+                    value: ambientMotion
+                )
+
+            Circle()
+                .fill(Theme.v2Lavender.opacity(0.18))
+                .frame(width: 280, height: 280)
+                .blur(radius: 58)
+                .offset(
+                    x: ambientMotion && !reduceMotion ? 132 : 92,
+                    y: ambientMotion && !reduceMotion ? 300 : 360
+                )
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 16).repeatForever(autoreverses: true),
+                    value: ambientMotion
+                )
         }
         .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 
     private var flowHeader: some View {
@@ -130,6 +185,7 @@ struct SmallThingsRootView: View {
             Image(systemName: "heart.text.square")
                 .font(.system(size: 28, weight: .medium))
                 .foregroundStyle(visual.primary)
+                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
             Text("还没有记下小事")
                 .font(Theme.headlineFont)
                 .foregroundStyle(visual.textPrimary)

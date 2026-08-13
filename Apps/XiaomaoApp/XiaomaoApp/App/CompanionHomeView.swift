@@ -14,12 +14,14 @@ import UIKit
 struct CompanionHomeView: View {
     var startCall: () -> Void
     var openSettings: () -> Void
+    let characterNamespace: Namespace.ID
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
     @EnvironmentObject private var companionStore: CompanionModeStore
     @ObservedObject private var privacy = AvatarPrivacy.shared
     @ObservedObject private var roleStore = CompanionRoleStore.shared
+    @ObservedObject private var voiceController: VoiceSessionController
     @State private var appeared = false
     // P2.6D: 本地轻提示 (可取消 Task)
     @State private var toastMessage: String?
@@ -27,11 +29,32 @@ struct CompanionHomeView: View {
     @State private var showPrivacyConfirm = false
     @State private var showCompanionPicker = false
     @State private var sceneDrift = false
+    @State private var livePulse = false
+    @State private var callPulse = false
 
     // All companion portrait assets share the same 2:3 master template.
     private let heroSize: CGFloat = 200
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
+
+    init(
+        startCall: @escaping () -> Void,
+        openSettings: @escaping () -> Void,
+        voiceController: VoiceSessionController,
+        characterNamespace: Namespace.ID
+    ) {
+        self.startCall = startCall
+        self.openSettings = openSettings
+        self.characterNamespace = characterNamespace
+        _voiceController = ObservedObject(wrappedValue: voiceController)
+    }
+
+    private var characterPhase: CharacterPresencePhase {
+        CharacterPresencePhase(
+            voiceState: voiceController.state,
+            callIsActive: voiceController.callIsActive
+        )
+    }
     private var accent: Color {
         visualMode == .mystery ? visual.primary : roleStore.previewRole.themeColor
     }
@@ -95,6 +118,10 @@ struct CompanionHomeView: View {
 
                 homeHero
                     .frame(height: usesSceneBackground ? 398 : heroSize * 3.0 / 2.0 + 46)
+                    .characterCallTransitionSource(
+                        namespace: characterNamespace,
+                        reduceMotion: reduceMotion
+                    )
                     .opacity(appeared ? 1 : 0)
                     .scaleEffect(appeared ? 1 : 0.94)
                     .animation(.spring(response: Theme.entranceDuration, dampingFraction: 0.82).delay(0.15), value: appeared)
@@ -133,6 +160,8 @@ struct CompanionHomeView: View {
         .onAppear {
             appeared = true
             sceneDrift = true
+            livePulse = true
+            callPulse = true
         }
         // P2.6J: 角色切换时清除残留 Toast (切回小猫不再显示预览提示)
         .onChange(of: roleStore.previewRole) { _ in
@@ -153,9 +182,27 @@ struct CompanionHomeView: View {
                         Circle()
                             .fill(usesDarkSceneChrome ? Color.white.opacity(0.88) : Theme.online)
                             .frame(width: 6, height: 6)
-                        Text("AVAILABLE NOW")
+                            .overlay {
+                                Circle()
+                                    .stroke(
+                                        usesDarkSceneChrome
+                                            ? Color.white.opacity(0.54)
+                                            : Theme.online.opacity(0.54),
+                                        lineWidth: 1
+                                    )
+                                    .scaleEffect(livePulse && !reduceMotion ? 2.8 : 1)
+                                    .opacity(livePulse && !reduceMotion ? 0 : 0.7)
+                            }
+                            .animation(
+                                reduceMotion
+                                    ? nil
+                                    : .easeOut(duration: 4.6).repeatForever(autoreverses: false),
+                                value: livePulse
+                            )
+                        Text(characterPhase.eyebrow)
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .tracking(1.5)
+                            .contentTransition(.opacity)
                     }
                     .foregroundStyle(homeTextSecondary)
 
@@ -163,10 +210,12 @@ struct CompanionHomeView: View {
                         .font(.system(size: 30, weight: .semibold, design: .serif))
                         .tracking(0.3)
                         .foregroundStyle(homeTextPrimary)
+                        .contentTransition(.opacity)
 
                     Text(roleStore.previewRole.introCopy)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(homeTextSecondary)
+                        .contentTransition(.opacity)
                 }
 
                 Spacer(minLength: 8)
@@ -179,7 +228,18 @@ struct CompanionHomeView: View {
                         .foregroundStyle(usesDarkSceneChrome ? Theme.v2InkSurface : Color.white)
                 }
                 .frame(width: 60, height: 60)
-                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 6)
+                .scaleEffect(callPulse && !reduceMotion ? 1.02 : 0.99)
+                .shadow(
+                    color: visual.primary.opacity(callPulse && !reduceMotion ? 0.24 : 0.10),
+                    radius: callPulse && !reduceMotion ? 15 : 10,
+                    y: 6
+                )
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 4.8).repeatForever(autoreverses: true),
+                    value: callPulse
+                )
             }
             .padding(.horizontal, 20)
             .frame(maxWidth: .infinity, minHeight: 104)
@@ -221,6 +281,7 @@ struct CompanionHomeView: View {
             }
         }
         .accessibilityIdentifier("home.start")
+        .animation(.easeInOut(duration: Theme.Motion.standard), value: roleStore.previewRole)
     }
 
     private func beginConversation() {
@@ -277,14 +338,24 @@ struct CompanionHomeView: View {
     @ViewBuilder
     private var homeHero: some View {
         if usesSceneBackground {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !privacy.effectiveReveal() {
-                        showPrivacyConfirm = true
+            ZStack {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if !privacy.effectiveReveal() {
+                            showPrivacyConfirm = true
+                        }
                     }
-                }
-                .accessibilityIdentifier(privacy.effectiveReveal() ? "avatar.revealed" : "avatar.locked")
+                    .accessibilityIdentifier(privacy.effectiveReveal() ? "avatar.revealed" : "avatar.locked")
+
+                // Scene portraits are already embedded in the full-screen artwork.
+                // This transparent presence lens keeps their light/state alive and
+                // provides the same geometry source used by the standalone portrait.
+                Color.clear
+                    .frame(width: heroSize, height: heroSize * 3.0 / 2.0)
+                    .characterAlive(phase: characterPhase, style: .hero)
+                    .allowsHitTesting(false)
+            }
         } else {
             ZStack {
                 Circle()
@@ -306,10 +377,7 @@ struct CompanionHomeView: View {
                 ) {
                     showPrivacyConfirm = true
                 }
-                .scaleEffect(avatarBreath ? 1.012 : 0.988)
-                .offset(y: avatarBreath ? -3 : 0)
-                .animation(reduceMotion ? nil : .easeInOut(duration: Theme.avatarBreathDuration).repeatForever(autoreverses: true), value: avatarBreath)
-                .onAppear { avatarBreath = true }
+                .characterAlive(phase: characterPhase, style: .hero)
             }
         }
     }
@@ -376,7 +444,6 @@ struct CompanionHomeView: View {
         .accessibilityHidden(true)
     }
 
-    @State private var avatarBreath = false
 }
 
 // MARK: - 按压弹簧按钮样式 (v6.1 cubic-bezier(.34,1.56,.64,1))
@@ -471,7 +538,20 @@ struct MiniVoiceWave: View {
 }
 
 // MARK: - 预览
+private struct CompanionHomePreview: View {
+    @Namespace private var characterNamespace
+
+    var body: some View {
+        CompanionHomeView(
+            startCall: {},
+            openSettings: {},
+            voiceController: AppCoordinator().voiceController,
+            characterNamespace: characterNamespace
+        )
+    }
+}
+
 #Preview {
-    CompanionHomeView(startCall: {}, openSettings: {})
+    CompanionHomePreview()
         .environmentObject(CompanionModeStore())
 }

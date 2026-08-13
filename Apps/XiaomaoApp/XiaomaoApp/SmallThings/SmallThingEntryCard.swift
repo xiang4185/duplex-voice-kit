@@ -222,7 +222,10 @@ struct SmallThingEntryCard: View {
                 entry.reacted ? "已回应" : "回应",
                 systemImage: entry.reacted ? "heart.fill" : "heart"
             )
-            .smallThingsSymbolTransition(reduceMotion: reduceMotion)
+            .smallThingsReactionTransition(
+                reduceMotion: reduceMotion,
+                value: entry.reacted
+            )
         }
         .buttonStyle(.plain)
         .foregroundStyle(entry.reacted ? visual.primary : visual.textSecondary)
@@ -418,11 +421,17 @@ struct SmallThingEntryCard: View {
 private struct SmallThingStatusBadge: View {
     let status: SmallThingExpenseStatus
     let displayName: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Label(displayName, systemImage: status.systemImage)
             .font(.caption2.bold())
             .foregroundStyle(statusColor)
+            .smallThingsSymbolTransition(reduceMotion: reduceMotion)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76),
+                value: status
+            )
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(statusColor.opacity(0.11), in: Capsule())

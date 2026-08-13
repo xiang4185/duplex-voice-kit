@@ -187,6 +187,21 @@ final class SmallThingsUIContractTests: XCTestCase {
         }
     }
 
+    func testV22SmallThingsMotionUsesStateChangesAndReduceMotion() throws {
+        let root = try source("XiaomaoApp/SmallThings/SmallThingsRootView.swift")
+        let ledger = try source("XiaomaoApp/SmallThings/SmallThingsLedgerCard.swift")
+        let entry = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+        let palette = try source("XiaomaoApp/SmallThings/SmallThingsPalette.swift")
+
+        for token in ["appeared", "ambientMotion", "repeatForever", "accessibilityReduceMotion"] {
+            XCTAssertTrue(root.contains(token), "小事首页缺少层级动效：\(token)")
+        }
+        XCTAssertTrue(ledger.contains(".contentTransition(.numericText())"))
+        XCTAssertTrue(ledger.contains("value: store.remainingAmount"))
+        XCTAssertTrue(entry.contains("smallThingsReactionTransition"))
+        XCTAssertTrue(palette.contains(".symbolEffect(.bounce, value: value)"))
+    }
+
     private func source(_ relativePath: String) throws -> String {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

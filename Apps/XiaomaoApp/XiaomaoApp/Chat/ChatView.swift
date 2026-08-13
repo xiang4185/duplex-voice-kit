@@ -6,6 +6,8 @@ struct ChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
     @State private var keyboardVisible = false
+    @State private var ambientMotion = false
+    @State private var onlinePulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
     @EnvironmentObject private var companionStore: CompanionModeStore
@@ -147,12 +149,20 @@ struct ChatView: View {
                     PrivacyAvatar(size: 30, tappable: false, style: .thumbnail)
                         .frame(width: 30, height: 30)
                         .clipShape(Circle())
+                        .characterAlive(
+                            phase: viewModel.isSending ? .thinking : .idle,
+                            style: .compact
+                        )
                         .accessibilityHidden(true)
                     chatOptionsMenu
                 }
             }
         }
         .accessibilityIdentifier("chat.root")
+        .onAppear {
+            ambientMotion = true
+            onlinePulse = true
+        }
         .task {
             await viewModel.loadHistoryIfNeeded()
             while !Task.isCancelled {
@@ -183,6 +193,20 @@ struct ChatView: View {
                 Circle()
                     .fill(isMockMode ? visual.textTertiary : Theme.online)
                     .frame(width: 5, height: 5)
+                    .overlay {
+                        if !isMockMode {
+                            Circle()
+                                .stroke(Theme.online.opacity(0.50), lineWidth: 1)
+                                .scaleEffect(onlinePulse && !reduceMotion ? 2.5 : 1)
+                                .opacity(onlinePulse && !reduceMotion ? 0 : 0.7)
+                        }
+                    }
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeOut(duration: 2).repeatForever(autoreverses: false),
+                        value: onlinePulse
+                    )
                 Text(companionStore.current.displayName)
                 if isMockMode {
                     Text("· 离线")
@@ -253,8 +277,40 @@ struct ChatView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+
+            Circle()
+                .fill(Theme.v2Lavender.opacity(0.18))
+                .frame(width: 260, height: 260)
+                .blur(radius: 48)
+                .offset(
+                    x: ambientMotion && !reduceMotion ? -92 : -142,
+                    y: ambientMotion && !reduceMotion ? -210 : -150
+                )
+                .scaleEffect(ambientMotion && !reduceMotion ? 1.10 : 0.92)
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 11).repeatForever(autoreverses: true),
+                    value: ambientMotion
+                )
+
+            Circle()
+                .fill(Theme.v2CoralSoft.opacity(0.24))
+                .frame(width: 230, height: 230)
+                .blur(radius: 52)
+                .offset(
+                    x: ambientMotion && !reduceMotion ? 130 : 92,
+                    y: ambientMotion && !reduceMotion ? 250 : 310
+                )
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 14).repeatForever(autoreverses: true),
+                    value: ambientMotion
+                )
         }
         .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
