@@ -3,18 +3,21 @@ import XCTest
 @testable import XiaomaoApp
 
 final class SmallThingsUIContractTests: XCTestCase {
-    func testRootStartsWithLedgerAndHasNoPageTitleOrTrailingPlus() throws {
+    func testRootUsesCompactNativeNavigationAndStartsWithLedger() throws {
         let root = try source("XiaomaoApp/SmallThings/SmallThingsRootView.swift")
 
-        XCTAssertFalse(root.contains(".navigationTitle(\"小事\")"))
+        XCTAssertTrue(root.contains(".navigationTitle(\"小事本\")"))
+        XCTAssertTrue(root.contains(".navigationBarTitleDisplayMode(.inline)"))
         XCTAssertFalse(root.contains("systemName: \"plus\""))
         XCTAssertFalse(root.contains("private var header"))
         XCTAssertFalse(root.contains("和图图的小日子"))
+        XCTAssertFalse(root.contains("SHARED ARCHIVE"), "高频工具页不得再用无信息的大型编辑式 masthead")
+        XCTAssertFalse(root.contains("v2Masthead"), "小事页首屏应直接进入账本内容")
 
         let ledger = try XCTUnwrap(root.range(of: "SmallThingsLedgerCard("))
         let flow = try XCTUnwrap(root.range(of: "flowHeader"))
         XCTAssertLessThan(ledger.lowerBound, flow.lowerBound, "账本卡必须早于时间流标题")
-        XCTAssertTrue(root.contains(".padding(.top, Theme.Spacing.small)"))
+        XCTAssertTrue(root.contains(".padding(.top, 10)"))
     }
 
     func testLedgerHasOnlyFrozenEntryPointsAndExpenseDefault() throws {
@@ -37,21 +40,25 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(ledger.contains("amountRow(\"已点头\""), "小事页必须恢复原有金额明细")
     }
 
-    func testComposerIsCustomWarmLayoutWithOneSaveAction() throws {
+    func testComposerUsesNativeTaskLayoutWithOneSaveAction() throws {
         let composer = try source("XiaomaoApp/SmallThings/SmallThingComposerView.swift")
 
         XCTAssertFalse(composer.contains("Form"))
         XCTAssertFalse(composer.contains("cancellationAction"))
         XCTAssertFalse(composer.contains("confirmationAction"))
-        XCTAssertEqual(composer.components(separatedBy: "Text(\"保存\")").count - 1, 1)
+        XCTAssertEqual(composer.components(separatedBy: "Text(\"记下来\")").count - 1, 1)
         XCTAssertTrue(composer.contains("smallThings.form.type.note"))
         XCTAssertTrue(composer.contains("smallThings.form.type.expense"))
-        XCTAssertFalse(composer.contains(".pickerStyle(.segmented)"),
-                       "顶部类型选择不得回退为系统 segmented picker")
-        XCTAssertTrue(composer.contains("typeSelectorButton("))
+        XCTAssertTrue(composer.contains(".pickerStyle(.segmented)"),
+                      "记录类型应优先使用 iOS 原生 segmented control")
+        XCTAssertFalse(composer.contains("typeSelectorButton("), "不得再维护第二套自绘分段按钮")
         XCTAssertTrue(composer.contains(".buttonStyle(.borderedProminent)"))
         XCTAssertTrue(composer.contains(".buttonStyle(.bordered)"))
-        XCTAssertTrue(composer.contains("Theme.buttonMinimumHeight + 8"))
+        XCTAssertTrue(composer.contains(".buttonBorderShape(.capsule)"))
+        XCTAssertTrue(composer.contains(".toolbar(.hidden, for: .tabBar)"), "二级记录页必须隐藏主 Tab Bar")
+        XCTAssertTrue(composer.contains(".safeAreaInset(edge: .bottom"), "保存操作必须独占底部安全区")
+        XCTAssertTrue(composer.contains("showsDetails"), "补充说明应按需展开，避免表单化占位")
+        XCTAssertTrue(composer.contains("font(.system(size: 46"), "账目页必须把金额提升为视觉主体")
         XCTAssertTrue(composer.contains("smallThings.form.imagePicker"))
         XCTAssertTrue(composer.contains("smallThings.form.save"))
         XCTAssertTrue(composer.contains("PhotosPicker"))

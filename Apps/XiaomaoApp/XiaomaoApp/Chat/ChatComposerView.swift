@@ -24,7 +24,7 @@ struct ChatComposerView: View {
                     .padding(.vertical, 11)
                     .frame(maxWidth: .infinity, minHeight: Theme.controlMinimumSize)
                     .foregroundStyle(Theme.v2Ink)
-                    .background(Theme.v2Paper)
+                    .background(Theme.v2Paper.opacity(0.86))
                     .clipShape(
                         RoundedRectangle(
                             cornerRadius: 20,
@@ -36,7 +36,7 @@ struct ChatComposerView: View {
                             cornerRadius: 20,
                             style: .continuous
                         )
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
+                        .stroke(Theme.v2Line.opacity(0.8), lineWidth: 0.7)
                     }
                     .contentShape(
                         RoundedRectangle(
@@ -82,19 +82,14 @@ struct ChatComposerView: View {
                     Text("\(draft.count)/\(characterLimit)")
                 }
                 .font(Theme.captionFont)
-                .foregroundStyle(isOverLimit ? Theme.v2Coral : Color.white.opacity(0.58))
+                .foregroundStyle(isOverLimit ? Theme.v2Coral : visual.textSecondary)
                 .accessibilityElement(children: .combine)
             }
         }
-        .padding(7)
-        .background(Theme.v2InkSurface, in: RoundedRectangle(cornerRadius: 27, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 27, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-        }
-        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 9)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(8)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private var shouldShowCharacterCount: Bool {

@@ -29,117 +29,129 @@ struct ChatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .onTapGesture { inputFocused = false }
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            stateContent
+                            ForEach(viewModel.messages) { message in
+                                ChatMessageBubble(
+                                    message: message,
+                                    localParticipant: localParticipant,
+                                    groupedWithPrevious: isGrouped(message: message, direction: -1),
+                                    groupedWithNext: isGrouped(message: message, direction: 1)
+                                )
+                                .id(message.id)
+                                .transition(messageTransition)
+                                .padding(.top, messageSpacingBefore(message))
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        stateContent
-                        ForEach(viewModel.messages) { message in
-                            ChatMessageBubble(
-                                message: message,
-                                localParticipant: localParticipant,
-                                groupedWithPrevious: isGrouped(message: message, direction: -1),
-                                groupedWithNext: isGrouped(message: message, direction: 1)
-                            )
-                            .id(message.id)
-                            .transition(messageTransition)
-                            .padding(.top, messageSpacingBefore(message))
-
-                            if isLastMessageInTurn(message),
-                               viewModel.failedXiaomaoTurns.contains(message.turnID) {
-                                xiaomaoRetryCard(turnID: message.turnID)
+                                if isLastMessageInTurn(message),
+                                   viewModel.failedXiaomaoTurns.contains(message.turnID) {
+                                    xiaomaoRetryCard(turnID: message.turnID)
+                                }
                             }
+
+                            if viewModel.isSending {
+                                ChatTypingIndicator()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            if viewModel.lastReplyWasDegraded {
+                                degradedNotice
+                            }
+
+                            Color.clear.frame(height: 1).id("chat.bottom")
                         }
-
-                        if viewModel.isSending {
-                            ChatTypingIndicator()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        if viewModel.lastReplyWasDegraded {
-                            degradedNotice
-                        }
-
-                        Color.clear.frame(height: 1).id("chat.bottom")
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 12)
-                    .padding(.bottom, 20)
-                    .animation(
-                        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
-                        value: viewModel.messages.map(\.id)
-                    )
-                }
-                .defaultScrollAnchor(.bottom)
-                .defaultScrollAnchor(.top, for: .alignment)
-                .scrollDismissesKeyboard(.immediately)
-                .simultaneousGesture(
-                    TapGesture().onEnded { _ in inputFocused = false }
-                )
-                .refreshable {
-                    await viewModel.refreshHistorySilently()
-                }
-                .accessibilityIdentifier("chat.messages")
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: viewModel.isSending) { _, _ in
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo("chat.bottom", anchor: .bottom)
-                    }
-                }
-                .onReceive(
-                    NotificationCenter.default.publisher(
-                        for: UIResponder.keyboardDidShowNotification
-                    )
-                ) { _ in
-                    guard !keyboardVisible else { return }
-                    keyboardVisible = true
-                    // keyboardDidShow 与 SwiftUI safe-area 的最终布局提交不完全同步。
-                    // 下一轮主线程再锚底，避免按过渡期高度计算出多余底部空白。
-                    DispatchQueue.main.async {
-                        scrollToBottomWithoutAnimation(proxy)
-                    }
-                }
-                .onReceive(
-                    NotificationCenter.default.publisher(
-                        for: UIResponder.keyboardDidHideNotification
-                    )
-                ) { _ in
-                    guard keyboardVisible else { return }
-                    keyboardVisible = false
-                    // 键盘完全收起、Tab Bar 恢复最终高度后只锚一次，避免还要手动再滑一下。
-                    DispatchQueue.main.async {
-                        scrollToBottomWithoutAnimation(proxy)
-                    }
-                }
-            }
-
-            ChatComposerView(
-                draft: $viewModel.draft,
-                canSend: viewModel.canSend,
-                isBusy: viewModel.isBusy,
-                isSending: viewModel.isSending,
-                characterLimit: ChatViewModel.maximumMessageLength,
-                send: {
-                    inputFocused = false
-                    Task {
-                        await Task.yield()
-                        await viewModel.send(
-                            companionTypeID: companionStore.current.rawValue,
-                            senderParticipant: localParticipant
+                        .padding(.horizontal, 18)
+                        .padding(.top, 10)
+                        .padding(.bottom, 16)
+                        .animation(
+                            reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82),
+                            value: viewModel.messages.map(\.id)
                         )
                     }
-                },
-                inputFocused: $inputFocused
-            )
+                    .defaultScrollAnchor(.bottom)
+                    .defaultScrollAnchor(.top, for: .alignment)
+                    .scrollDismissesKeyboard(.immediately)
+                    .simultaneousGesture(
+                        TapGesture().onEnded { _ in inputFocused = false }
+                    )
+                    .refreshable {
+                        await viewModel.refreshHistorySilently()
+                    }
+                    .accessibilityIdentifier("chat.messages")
+                    .onChange(of: viewModel.messages.count) { _, _ in
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
+                    }
+                    .onChange(of: viewModel.isSending) { _, _ in
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo("chat.bottom", anchor: .bottom)
+                        }
+                    }
+                    .onReceive(
+                        NotificationCenter.default.publisher(
+                            for: UIResponder.keyboardDidShowNotification
+                        )
+                    ) { _ in
+                        guard !keyboardVisible else { return }
+                        keyboardVisible = true
+                        // keyboardDidShow 与 SwiftUI safe-area 的最终布局提交不完全同步。
+                        // 下一轮主线程再锚底，避免按过渡期高度计算出多余底部空白。
+                        DispatchQueue.main.async {
+                            scrollToBottomWithoutAnimation(proxy)
+                        }
+                    }
+                    .onReceive(
+                        NotificationCenter.default.publisher(
+                            for: UIResponder.keyboardDidHideNotification
+                        )
+                    ) { _ in
+                        guard keyboardVisible else { return }
+                        keyboardVisible = false
+                        // 键盘完全收起、Tab Bar 恢复最终高度后只锚一次，避免还要手动再滑一下。
+                        DispatchQueue.main.async {
+                            scrollToBottomWithoutAnimation(proxy)
+                        }
+                    }
+                }
+
+                ChatComposerView(
+                    draft: $viewModel.draft,
+                    canSend: viewModel.canSend,
+                    isBusy: viewModel.isBusy,
+                    isSending: viewModel.isSending,
+                    characterLimit: ChatViewModel.maximumMessageLength,
+                    send: {
+                        inputFocused = false
+                        Task {
+                            await Task.yield()
+                            await viewModel.send(
+                                companionTypeID: companionStore.current.rawValue,
+                                senderParticipant: localParticipant
+                            )
+                        }
+                    },
+                    inputFocused: $inputFocused
+                )
+            }
+            .background(chatBackdrop)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    chatNavigationTitle
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    PrivacyAvatar(size: 30, tappable: false, style: .thumbnail)
+                        .frame(width: 30, height: 30)
+                        .clipShape(Circle())
+                        .accessibilityHidden(true)
+                    chatOptionsMenu
+                }
+            }
         }
-        .background(chatBackdrop)
         .accessibilityIdentifier("chat.root")
         .task {
             await viewModel.loadHistoryIfNeeded()
@@ -162,6 +174,59 @@ struct ChatView: View {
         }
     }
 
+    private var chatNavigationTitle: some View {
+        VStack(spacing: 1) {
+            Text("小猫")
+                .font(.headline)
+                .foregroundStyle(Theme.v2Ink)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(isMockMode ? visual.textTertiary : Theme.online)
+                    .frame(width: 5, height: 5)
+                Text(companionStore.current.displayName)
+                if isMockMode {
+                    Text("· 离线")
+                        .accessibilityIdentifier("chat.mode.mock")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(visual.textSecondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("小猫，\(companionStore.current.displayName)\(isMockMode ? "，离线" : "")")
+        .accessibilityIdentifier("chat.header")
+        .onTapGesture { inputFocused = false }
+    }
+
+    private var chatOptionsMenu: some View {
+        Menu {
+            Section("小猫参与方式") {
+                ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
+                    Button {
+                        viewModel.xiaomaoMode = mode
+                    } label: {
+                        Label(
+                            mode.title,
+                            systemImage: viewModel.xiaomaoMode == mode
+                                ? "checkmark.circle.fill"
+                                : "circle"
+                        )
+                    }
+                }
+            }
+            if viewModel.canClear {
+                Button("清空聊天记录", role: .destructive) {
+                    showsClearConfirmation = true
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+        }
+        .accessibilityLabel("聊天选项")
+        .accessibilityIdentifier("chat.clear")
+    }
+
     private func scrollToBottomWithoutAnimation(_ proxy: ScrollViewProxy) {
         var transaction = Transaction()
         transaction.disablesAnimations = true
@@ -178,77 +243,6 @@ struct ChatView: View {
                 .combined(with: .scale(scale: 0.97, anchor: .bottom)),
             removal: .opacity
         )
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("CONVERSATION")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(1.6)
-                    .foregroundStyle(Theme.v2Coral)
-                Text("对话")
-                    .font(.system(size: 31, weight: .semibold, design: .serif))
-                    .foregroundStyle(Theme.v2Ink)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(isMockMode ? visual.textTertiary : Theme.online)
-                        .frame(width: 6, height: 6)
-                    Text("\(companionStore.current.displayName) 正在这里")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(visual.textSecondary)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            if isMockMode {
-                StatusPill(text: "离线", systemImage: "wifi.slash")
-                    .accessibilityIdentifier("chat.mode.mock")
-            }
-
-            PrivacyAvatar(size: 42, tappable: false, style: .thumbnail)
-                .frame(width: 42, height: 42)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Theme.v2Line, lineWidth: 1))
-
-            Menu {
-                    Section("小猫参与方式") {
-                        ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
-                            Button {
-                                viewModel.xiaomaoMode = mode
-                            } label: {
-                                Label(
-                                    mode.title,
-                                    systemImage: viewModel.xiaomaoMode == mode
-                                        ? "checkmark.circle.fill"
-                                        : "circle"
-                                )
-                            }
-                        }
-                    }
-                    if viewModel.canClear {
-                        Button("清空聊天记录", role: .destructive) {
-                            showsClearConfirmation = true
-                        }
-                    }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Theme.v2Ink)
-                    .frame(width: 40, height: 40)
-                    .background(Theme.v2PaperMuted, in: Circle())
-            }
-            .accessibilityLabel("聊天选项")
-            .accessibilityIdentifier("chat.clear")
-        }
-        .frame(minHeight: 86)
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(Theme.v2Paper.opacity(0.92))
-        .overlay(alignment: .bottom) { Divider().overlay(Theme.v2Line.opacity(0.75)) }
-        .accessibilityIdentifier("chat.header")
     }
 
     private var chatBackdrop: some View {
