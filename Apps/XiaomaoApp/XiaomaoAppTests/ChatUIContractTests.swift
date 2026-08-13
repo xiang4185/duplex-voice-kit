@@ -85,10 +85,13 @@ final class ChatUIContractTests: XCTestCase {
 
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
-        XCTAssertTrue(chat.contains("header"))
+        XCTAssertTrue(chat.contains("chatNavigationTitle"))
         XCTAssertFalse(chat.contains("modeFooter"), "底部参与模式条会抢占聊天主内容，不应回归")
-        XCTAssertTrue(chat.contains("\\(companionStore.current.displayName) 正在这里"),
-                      "聊天头部必须保留当前陪伴身份和在线感")
+        XCTAssertTrue(chat.contains("Text(companionStore.current.displayName)"),
+                      "紧凑导航仍必须保留当前陪伴身份")
+        XCTAssertFalse(chat.contains("CONVERSATION"), "聊天页不得再使用占据首屏的大型编辑式标题")
+        XCTAssertTrue(chat.contains(".navigationBarTitleDisplayMode(.inline)"),
+                      "聊天页应使用紧凑的系统导航栏")
         XCTAssertGreaterThanOrEqual(
             chat.components(separatedBy: ".onTapGesture { inputFocused = false }").count - 1,
             1,
@@ -204,14 +207,16 @@ final class ChatUIContractTests: XCTestCase {
         let model = try source("XiaomaoApp/Models/ChatMessage.swift")
 
         XCTAssertFalse(chat.contains("开发者和小猫都在"), "极简头部不得重复说明参与者")
-        XCTAssertTrue(chat.contains("\\(companionStore.current.displayName) 正在这里"))
+        XCTAssertTrue(chat.contains("private var chatNavigationTitle"))
+        XCTAssertTrue(chat.contains("Text(\"小猫\")"))
+        XCTAssertTrue(chat.contains("Text(companionStore.current.displayName)"))
         XCTAssertTrue(model.contains("case developer"))
         XCTAssertTrue(model.contains("case xiaomao"))
         XCTAssertFalse(model.contains("case companion"))
         XCTAssertTrue(model.contains("case .developer: \"开发者\""))
     }
 
-    func testV2VisualRefreshHasOneSharedEditorialLanguage() throws {
+    func testV21RestoresNativeIOSHierarchyWithoutLosingBrandTokens() throws {
         let theme = try source("XiaomaoApp/Design/Theme.swift")
         let tabs = try source("XiaomaoApp/App/MainTabView.swift")
         let home = try source("XiaomaoApp/App/CompanionHomeView.swift")
@@ -223,18 +228,25 @@ final class ChatUIContractTests: XCTestCase {
         for token in ["v2InkSurface", "v2Paper", "v2Coral", "v2Lavender"] {
             XCTAssertTrue(theme.contains(token), "V2 缺少共享视觉令牌：\(token)")
         }
-        XCTAssertTrue(tabs.contains("main.v2TabBar"))
-        XCTAssertTrue(tabs.contains("matchedGeometryEffect"))
+        XCTAssertTrue(tabs.contains("TabView(selection:"))
+        XCTAssertTrue(tabs.contains(".tabItem"))
+        XCTAssertFalse(tabs.contains("main.v2TabBar"), "不得再叠加第二层自绘 Dock")
+        XCTAssertFalse(tabs.contains("matchedGeometryEffect"), "系统 Tab Bar 不需要复制选中滑块")
+        XCTAssertFalse(tabs.contains(".toolbar(.hidden, for: .tabBar)"), "根 Tab 必须交回 iOS 26 原生 Tab Bar")
+        XCTAssertTrue(tabs.contains("WarmHaptics.action()"), "恢复系统 Tab 后仍保留用户认可的触感反馈")
         XCTAssertTrue(home.contains("LIVE COMPANION"))
         XCTAssertFalse(home.contains("LIVE COMPANION  /"), "正式界面不得保留设计稿序号")
         XCTAssertTrue(home.contains("homeControlDeck"))
-        XCTAssertTrue(chat.contains("CONVERSATION"))
-        XCTAssertFalse(chat.contains("CONVERSATION  /"), "正式界面不得保留设计稿序号")
+        XCTAssertTrue(home.contains("visual.primarySoft.opacity(0.28)"), "首页主控应恢复轻量玻璃而非整块实色")
+        XCTAssertFalse(chat.contains("CONVERSATION"))
+        XCTAssertTrue(chat.contains("chatNavigationTitle"))
+        XCTAssertTrue(chat.contains("NavigationStack"))
         XCTAssertTrue(chat.contains("chatBackdrop"))
-        XCTAssertTrue(smallThings.contains("SHARED ARCHIVE"))
-        XCTAssertFalse(smallThings.contains("SHARED ARCHIVE  /"), "正式界面不得保留设计稿序号")
-        XCTAssertTrue(smallThings.contains("v2Masthead"))
-        XCTAssertTrue(ledger.contains("Theme.v2InkSurface"))
+        XCTAssertFalse(smallThings.contains("SHARED ARCHIVE"))
+        XCTAssertFalse(smallThings.contains("v2Masthead"))
+        XCTAssertTrue(smallThings.contains(".navigationTitle(\"小事本\")"))
+        XCTAssertFalse(ledger.contains("Theme.v2InkSurface"), "账本内容卡不得继续铺大面积深色")
+        XCTAssertTrue(ledger.contains("Theme.v2PaperMuted"))
         XCTAssertTrue(settings.contains("PERSONAL SPACE"))
         XCTAssertTrue(settings.contains("settingsBackdrop"), "我的页必须进入同一套 V2 视觉语言")
     }

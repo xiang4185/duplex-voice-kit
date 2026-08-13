@@ -73,10 +73,12 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("dateFormat = \"yyyy/MM/dd HH:mm\""),
                       "小事应显示纯数字固定记录时间并精确到分钟")
 
-        XCTAssertFalse(composer.contains("pickerStyle(.segmented)"),
-                       "记一笔顶部类型选择不得退回过小的系统 segmented control")
-        XCTAssertTrue(composer.contains("Theme.buttonMinimumHeight + 8"),
-                      "两个记录类型入口必须保持足够点击高度并复用统一按钮体系")
+        XCTAssertTrue(composer.contains("pickerStyle(.segmented)"),
+                      "V2.1 记录类型应优先使用 iOS 原生 segmented control")
+        XCTAssertTrue(composer.contains(".toolbar(.hidden, for: .tabBar)"),
+                      "进入记录任务后必须隐藏主 Tab Bar，避免遮挡底部保存操作")
+        XCTAssertTrue(composer.contains(".safeAreaInset(edge: .bottom"),
+                      "保存操作必须由系统安全区承载")
         XCTAssertTrue(composer.contains(".buttonStyle(.borderedProminent)"))
         XCTAssertTrue(composer.contains(".buttonStyle(.bordered)"))
         XCTAssertTrue(coordinator.contains("voiceActivityConfiguration: .xiaomaoRealtime"),
@@ -720,9 +722,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         XCTAssertTrue(home.contains(".glassEffect("), "首页 CTA 必须使用 glassEffect")
         XCTAssertTrue(home.contains(".interactive()"), "首页 CTA 必须交互玻璃")
         XCTAssertTrue(
-            home.contains(".tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)"),
-            "首页 CTA 必须跟随完整场景明暗与全局视觉 Token 驱动 tint"
+            home.contains("visual.primarySoft.opacity(0.28)"),
+            "暖色首页 CTA 必须使用轻量品牌 tint，保留 iOS 26 玻璃层次"
         )
+        XCTAssertTrue(home.contains(".black.opacity(0.24)"), "深色场景仍需使用克制的暗色玻璃 tint")
         XCTAssertTrue(home.contains("if usesSceneBackground"), "完整场景首页 CTA 必须有独立玻璃边界")
         XCTAssertFalse(home.contains(".background(Theme.primary, in: Capsule())"), "首页 CTA 不得叠加实体胶囊背景")
         XCTAssertFalse(home.contains("1.015"), "不得保留 1.015 强缩放")

@@ -151,42 +151,46 @@ struct CompanionHomeView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 7) {
                         Circle()
-                            .fill(Color.white.opacity(0.88))
+                            .fill(usesDarkSceneChrome ? Color.white.opacity(0.88) : Theme.online)
                             .frame(width: 6, height: 6)
                         Text("AVAILABLE NOW")
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .tracking(1.5)
                     }
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .foregroundStyle(homeTextSecondary)
 
                     Text(roleStore.previewRole.displayName)
                         .font(.system(size: 30, weight: .semibold, design: .serif))
                         .tracking(0.3)
+                        .foregroundStyle(homeTextPrimary)
 
                     Text(roleStore.previewRole.introCopy)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.72))
+                        .foregroundStyle(homeTextSecondary)
                 }
 
                 Spacer(minLength: 8)
 
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(usesDarkSceneChrome ? Color.white : visual.primary)
                     Image(systemName: "waveform.and.mic")
                         .font(.system(size: 21, weight: .bold))
-                        .foregroundStyle(Theme.v2InkSurface)
+                        .foregroundStyle(usesDarkSceneChrome ? Theme.v2InkSurface : Color.white)
                 }
                 .frame(width: 60, height: 60)
-                .shadow(color: Color.black.opacity(0.16), radius: 14, y: 7)
+                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 6)
             }
-            .foregroundStyle(Color.white)
             .padding(.horizontal, 20)
-            .frame(maxWidth: .infinity, minHeight: 118)
+            .frame(maxWidth: .infinity, minHeight: 104)
             .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             .glassEffect(
                 .regular
-                    .tint(usesDarkSceneChrome ? .black.opacity(0.28) : visual.primary)
+                    .tint(
+                        usesDarkSceneChrome
+                            ? .black.opacity(0.24)
+                            : visual.primarySoft.opacity(0.28)
+                    )
                     .interactive(),
                 in: .rect(cornerRadius: 30)
             )

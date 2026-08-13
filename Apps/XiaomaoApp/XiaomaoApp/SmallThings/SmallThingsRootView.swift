@@ -37,8 +37,6 @@ struct SmallThingsRootView: View {
                         .warmCard()
                     }
 
-                    v2Masthead
-
                     SmallThingsLedgerCard(
                         store: store,
                         addExpense: { path.append(.composer(.expense)) },
@@ -57,12 +55,21 @@ struct SmallThingsRootView: View {
                     }
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, Theme.Spacing.small)
+                .padding(.top, 10)
                 .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
             .background(smallThingsBackdrop)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("小事本")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Text("共 \(store.entries.count) 件")
+                        .font(.caption)
+                        .foregroundStyle(visual.textSecondary)
+                        .accessibilityLabel("共 \(store.entries.count) 件小事")
+                }
+            }
             .navigationDestination(for: SmallThingsRoute.self) { route in
                 switch route {
                 case .composer(let initialType):
@@ -82,37 +89,6 @@ struct SmallThingsRootView: View {
         }
     }
 
-    private var v2Masthead: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("SHARED ARCHIVE")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.7)
-                .foregroundStyle(Theme.v2Coral)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("小事本")
-                    .font(.system(size: 35, weight: .semibold, design: .serif))
-                    .foregroundStyle(Theme.v2Ink)
-                Spacer()
-                Text("\(store.entries.count) MOMENTS")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(1.1)
-                    .foregroundStyle(Color.white.opacity(0.78))
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(Theme.v2InkSurface, in: Capsule())
-            }
-
-            Text("把一起生活的证据，慢慢收进这里。")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(visual.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 10)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("小事本，共 \(store.entries.count) 件")
-    }
-
     private var smallThingsBackdrop: some View {
         ZStack {
             Theme.v2Paper
@@ -126,36 +102,22 @@ struct SmallThingsRootView: View {
     }
 
     private var flowHeader: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("最近记下")
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
-                    .foregroundStyle(Theme.v2Ink)
-                Spacer(minLength: Theme.Spacing.small)
-                Text("共 \(store.entries.count) 件")
-                    .font(Theme.captionFont)
-                    .foregroundStyle(visual.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Theme.v2PaperMuted, in: Capsule())
-            }
-            HStack(spacing: Theme.Spacing.xSmall) {
-                Text("THE LIVING TIMELINE")
-                    .font(Theme.captionFont)
-                    .tracking(1.2)
-                    .foregroundStyle(Theme.v2Coral)
-                Spacer(minLength: Theme.Spacing.small)
-                if !store.pendingApprovals.isEmpty {
-                    Button {
-                        path.append(.approval)
-                    } label: {
-                        Label("待我确认 \(store.pendingApprovals.count)", systemImage: "clock")
-                            .font(Theme.captionFont.weight(.semibold))
-                            .foregroundStyle(visual.primary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("smallThings.timeline.pending")
+        HStack(alignment: .center, spacing: Theme.Spacing.small) {
+            Text("最近记下")
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.v2Ink)
+            Spacer(minLength: Theme.Spacing.small)
+            if !store.pendingApprovals.isEmpty {
+                Button {
+                    path.append(.approval)
+                } label: {
+                    Label("待我确认 \(store.pendingApprovals.count)", systemImage: "clock")
+                        .font(Theme.captionFont.weight(.semibold))
                 }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .tint(visual.primary)
+                .accessibilityIdentifier("smallThings.timeline.pending")
             }
         }
         .padding(.top, Theme.Spacing.xSmall)

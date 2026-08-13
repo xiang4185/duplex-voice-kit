@@ -14,6 +14,7 @@ struct SmallThingComposerView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var imageData: Data?
     @State private var imageLoadFailed = false
+    @State private var showsDetails = false
     @State private var saveFeedback = 0
     @FocusState private var focusedField: Field?
 
@@ -29,14 +30,11 @@ struct SmallThingComposerView: View {
                     typeSelector
 
                     if type == .note {
-                        noteFields
+                        noteCanvas
                         imageSection
                     } else {
-                        expenseFields
+                        expenseCanvas
                     }
-
-                    detailsField
-                    guidance
 
                     if let validationMessage = store.validationMessage {
                         Label(validationMessage, systemImage: "exclamationmark.circle.fill")
@@ -46,6 +44,7 @@ struct SmallThingComposerView: View {
                             .accessibilityLabel("无法保存：\(validationMessage)")
                     }
 
+                    guidance
                 }
                 .padding(.horizontal, Theme.Spacing.medium)
                 .padding(.top, Theme.Spacing.medium)
@@ -79,8 +78,10 @@ struct SmallThingComposerView: View {
         }
         .sensoryFeedback(.success, trigger: saveFeedback)
         .onChange(of: type) { _, _ in
+            WarmHaptics.action()
             store.clearValidation()
             focusedField = nil
+            showsDetails = !details.isEmpty
         }
         .onChange(of: photoItem) { _, newItem in
             loadPhoto(newItem)
@@ -91,31 +92,20 @@ struct SmallThingComposerView: View {
     }
 
     private var typeSelector: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
-            Text("想记什么")
-                .font(Theme.captionFont)
-                .foregroundStyle(Theme.textSecondary)
-
-            HStack(spacing: Theme.Spacing.small) {
-                typeSelectorButton(
-                    type: .note,
-                    title: "记个小记",
-                    subtitle: "文字 / 图片",
-                    systemImage: "note.text"
-                )
-                typeSelectorButton(
-                    type: .expense,
-                    title: "记一笔账",
-                    subtitle: "金额 / 审批",
-                    systemImage: "creditcard"
-                )
-            }
+        Picker("记录类型", selection: $type) {
+            Text("小记")
+                .tag(SmallThingEntryType.note)
+                .accessibilityIdentifier("smallThings.form.type.note")
+            Text("账目")
+                .tag(SmallThingEntryType.expense)
+                .accessibilityIdentifier("smallThings.form.type.expense")
         }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("记录类型")
     }
 
     private var saveBar: some View {
         VStack(spacing: 0) {
-            Divider().overlay(Theme.border)
             Button {
                 focusedField = nil
                 Task { await save() }
@@ -125,130 +115,133 @@ struct SmallThingComposerView: View {
                         ProgressView()
                             .tint(Theme.onPrimary)
                     }
-                    Text("保存")
+                    Text("记下来")
                         .font(Theme.headlineFont)
                 }
-                .foregroundStyle(Theme.onPrimary)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .background(
-                    canSave ? Theme.primary : Theme.textTertiary.opacity(0.42),
-                    in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                )
-                .shadow(color: canSave ? Theme.ctaShadow.opacity(0.7) : .clear, radius: 12, y: 5)
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(PressableButtonStyle())
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(Theme.primary)
             .disabled(!canSave || store.isLoading)
             .accessibilityIdentifier("smallThings.form.save")
             .accessibilityHint(type == .note ? "保存小记并返回时间流" : "保存待审批账目并返回时间流")
             .id(Field.save)
             .padding(.horizontal, Theme.Spacing.medium)
-            .padding(.top, Theme.Spacing.small)
-            .padding(.bottom, Theme.Spacing.xSmall)
+            .padding(.vertical, Theme.Spacing.small)
         }
         .background(.ultraThinMaterial)
     }
 
-    @ViewBuilder
-    private func typeSelectorButton(
-        type candidate: SmallThingEntryType,
-        title: String,
-        subtitle: String,
-        systemImage: String
-    ) -> some View {
-        if type == candidate {
-            typeSelectionButton(
-                candidate: candidate,
-                title: title,
-                subtitle: subtitle,
-                systemImage: systemImage
-            )
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.primary)
-        } else {
-            typeSelectionButton(
-                candidate: candidate,
-                title: title,
-                subtitle: subtitle,
-                systemImage: systemImage
-            )
-            .buttonStyle(.bordered)
-            .tint(Theme.primary)
-        }
-    }
-
-    private func typeSelectionButton(
-        candidate: SmallThingEntryType,
-        title: String,
-        subtitle: String,
-        systemImage: String
-    ) -> some View {
-        Button {
-            type = candidate
-        } label: {
-            VStack(spacing: 2) {
-                Label(title, systemImage: systemImage)
-                    .font(Theme.headlineFont)
-                Text(subtitle)
-                    .font(.caption2)
-                    .opacity(0.78)
-            }
-            .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight + 8)
-        }
-        .accessibilityValue(type == candidate ? "已选择" : "未选择")
-        .accessibilityIdentifier(
-            candidate == .note ? "smallThings.form.type.note" : "smallThings.form.type.expense"
-        )
-    }
-
-    private var noteFields: some View {
-        inputGroup(title: "标题或内容", hint: "标题和正文至少填写一项") {
+    private var noteCanvas: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
             TextField("给这件小事起个名字（可选）", text: $title)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.textPrimary)
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
                 .onSubmit { focusedField = .details }
                 .id(Field.title)
+
+            Divider().overlay(Theme.border)
+
+            TextEditor(text: $details)
+                .frame(minHeight: 150)
+                .scrollContentBackground(.hidden)
+                .font(Theme.bodyFont)
+                .foregroundStyle(Theme.textPrimary)
+                .focused($focusedField, equals: .details)
+                .accessibilityLabel("小记正文")
+                .id(Field.details)
+                .overlay(alignment: .topLeading) {
+                    if details.isEmpty {
+                        Text("写点什么…")
+                            .font(Theme.bodyFont)
+                            .foregroundStyle(Theme.textTertiary)
+                            .padding(.top, 8)
+                            .padding(.leading, 5)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
+        .padding(18)
+        .background(Theme.v2PaperMuted.opacity(0.7), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private var expenseFields: some View {
-        VStack(spacing: Theme.Spacing.medium) {
-            inputGroup(title: "用途", hint: "写清楚这笔钱花在哪里") {
-                TextField("例如：奶茶", text: $title)
-                    .focused($focusedField, equals: .title)
-                    .submitLabel(.next)
-                    .onSubmit { focusedField = .amount }
-                    .id(Field.title)
-            }
-
-            inputGroup(
-                title: "金额",
-                hint: "当前可用 \(store.remainingAmount.formatted(.number.precision(.fractionLength(2)))) 元"
-            ) {
-                HStack(spacing: Theme.Spacing.xSmall) {
+    private var expenseCanvas: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("金额")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textSecondary)
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Text("¥")
-                        .font(Theme.title3Font)
+                        .font(.system(size: 28, weight: .medium, design: .rounded))
                         .foregroundStyle(Theme.primary)
                     TextField("0.00", text: $amount)
                         .keyboardType(.decimalPad)
+                        .font(.system(size: 46, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.textPrimary)
                         .focused($focusedField, equals: .amount)
                         .accessibilityLabel("金额，最多两位小数")
+                        .id(Field.amount)
                 }
-                .id(Field.amount)
+                Text("还可以一起记 \(store.remainingAmount.formatted(.number.precision(.fractionLength(2)))) 元")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
             }
+
+            Divider().overlay(Theme.border)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("花在什么上")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textSecondary)
+                TextField("例如：奶茶", text: $title)
+                    .font(.system(size: 21, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .focused($focusedField, equals: .title)
+                    .submitLabel(.done)
+                    .id(Field.title)
+            }
+
+            optionalDetails
         }
+        .padding(18)
+        .background(Theme.v2PaperMuted.opacity(0.7), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private var detailsField: some View {
-        inputGroup(
-            title: type == .note ? "多说一句" : "补充说明",
-            hint: type == .note ? "正文也可以写在这里" : "可以告诉对方为什么记这笔账"
-        ) {
-            TextEditor(text: $details)
-                .frame(minHeight: 112)
+    @ViewBuilder
+    private var optionalDetails: some View {
+        if showsDetails || !details.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("补充一句（可选）")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(Theme.textSecondary)
+                TextEditor(text: $details)
+                .frame(minHeight: 86)
                 .scrollContentBackground(.hidden)
+                .font(Theme.bodyFont)
+                .foregroundStyle(Theme.textPrimary)
                 .focused($focusedField, equals: .details)
-                .accessibilityLabel(type == .note ? "小记正文" : "账目补充说明")
+                .accessibilityLabel("账目补充说明")
                 .id(Field.details)
+                .padding(8)
+                .background(Theme.v2Paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+        } else {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showsDetails = true
+                }
+                focusedField = .details
+            } label: {
+                Label("补充一句（可选）", systemImage: "plus.bubble")
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(Theme.primary)
         }
     }
 
@@ -316,34 +309,6 @@ struct SmallThingComposerView: View {
         }
         .font(Theme.footnoteFont)
         .foregroundStyle(Theme.textSecondary)
-    }
-
-    private func inputGroup<Content: View>(
-        title: String,
-        hint: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xSmall) {
-            Text(title)
-                .font(Theme.captionFont)
-                .foregroundStyle(Theme.textSecondary)
-
-            content()
-                .font(Theme.bodyFont)
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, 11)
-                .background(Theme.bgElevated)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                        .stroke(Theme.border, lineWidth: 1)
-                }
-
-            Text(hint)
-                .font(.caption2)
-                .foregroundStyle(Theme.textTertiary)
-        }
     }
 
     private var canSave: Bool {
