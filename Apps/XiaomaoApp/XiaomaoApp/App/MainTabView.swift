@@ -103,10 +103,7 @@ struct MainTabView: View {
                 currentCallBar
             }
         }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            guard oldValue != newValue else { return }
-            WarmHaptics.action()
-        }
+        .sensoryFeedback(.selection, trigger: selectedTab)
     }
 
     private var currentCallBar: some View {

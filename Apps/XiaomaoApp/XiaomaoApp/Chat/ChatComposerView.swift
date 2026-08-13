@@ -52,7 +52,10 @@ struct ChatComposerView: View {
                     .accessibilityLabel("聊天输入框")
                     .accessibilityIdentifier("chat.input")
 
-                Button(action: send) {
+                Button {
+                    WarmHaptics.action()
+                    send()
+                } label: {
                     Group {
                         if isSending {
                             ProgressView()
@@ -65,8 +68,8 @@ struct ChatComposerView: View {
                         minWidth: Theme.controlMinimumSize,
                         minHeight: Theme.controlMinimumSize
                     )
-                    .foregroundStyle(canSend ? Color.white : Color.white.opacity(0.40))
-                    .background(canSend ? Theme.v2Coral : Color.white.opacity(0.10))
+                    .foregroundStyle(canSend ? Color.white : visual.textSecondary.opacity(0.78))
+                    .background(canSend ? Theme.v2Coral : visual.textSecondary.opacity(0.13))
                     .clipShape(Circle())
                 }
                 .buttonStyle(.plain)

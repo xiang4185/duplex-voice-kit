@@ -138,7 +138,8 @@ final class CompanionModeTests: XCTestCase {
         XCTAssertTrue(root.contains(".preferredColorScheme(companionStore.visualMode == .mystery ? .dark : .light)"))
         XCTAssertTrue(tabs.contains("toolbarColorScheme(visualMode == .mystery ? .dark : .light"))
         XCTAssertTrue(theme.contains("let dangerSoft: Color"))
-        XCTAssertTrue(call.contains("visual.dangerSoft"))
+        XCTAssertTrue(call.contains("Color(uiColor: .systemRed)"),
+                      "挂断按钮必须保持与 iOS 电话一致的系统危险红色")
         XCTAssertTrue(call.contains("visual.glassTint"))
         XCTAssertTrue(home.contains("sceneBackgroundAssetName"))
         XCTAssertTrue(call.contains("sceneBackgroundAssetName"))

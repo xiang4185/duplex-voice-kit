@@ -77,6 +77,12 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(composer.contains("inputFocused = true"))
         XCTAssertTrue(composer.contains("minWidth: Theme.controlMinimumSize"))
         XCTAssertTrue(composer.contains("minHeight: Theme.controlMinimumSize"))
+        XCTAssertTrue(composer.contains("visual.textSecondary.opacity(0.78)"),
+                      "空输入时发送箭头仍必须在浅色玻璃上清晰可见")
+        XCTAssertTrue(composer.contains("visual.textSecondary.opacity(0.13)"),
+                      "禁用发送按钮必须保留可辨认的圆形底座")
+        XCTAssertTrue(composer.contains("WarmHaptics.action()"),
+                      "发送动作必须保留真机触感反馈")
         XCTAssertTrue(theme.contains("static let controlMinimumSize: CGFloat = 44"))
     }
 
@@ -233,7 +239,8 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertFalse(tabs.contains("main.v2TabBar"), "不得再叠加第二层自绘 Dock")
         XCTAssertFalse(tabs.contains("matchedGeometryEffect"), "系统 Tab Bar 不需要复制选中滑块")
         XCTAssertFalse(tabs.contains(".toolbar(.hidden, for: .tabBar)"), "根 Tab 必须交回 iOS 26 原生 Tab Bar")
-        XCTAssertTrue(tabs.contains("WarmHaptics.action()"), "恢复系统 Tab 后仍保留用户认可的触感反馈")
+        XCTAssertTrue(tabs.contains(".sensoryFeedback(.selection, trigger: selectedTab)"),
+                      "恢复系统 Tab 后仍必须使用原生 selection 触感反馈")
         XCTAssertTrue(home.contains("LIVE COMPANION"))
         XCTAssertFalse(home.contains("LIVE COMPANION  /"), "正式界面不得保留设计稿序号")
         XCTAssertTrue(home.contains("homeControlDeck"))

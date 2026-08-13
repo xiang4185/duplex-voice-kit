@@ -634,7 +634,6 @@ struct VoiceCallView: View {
                         style: .danger,
                         identifier: "call.hangup"
                     ) {
-                        WarmHaptics.action()
                         withAnimation(.easeOut(duration: 0.28)) { showHangupConfirm = true }
                     }
 
@@ -645,7 +644,6 @@ struct VoiceCallView: View {
                         identifier: "call.companion",
                         accessibilityHint: "选择陪伴方式并重新建立通话"
                     ) {
-                        WarmHaptics.action()
                         showCompanionPicker = true
                     }
                 }
@@ -678,7 +676,10 @@ struct VoiceCallView: View {
                                accessibilityHint: String? = nil,
                                action: @escaping () -> Void) -> some View {
         VStack(spacing: 6) {
-            Button(action: action) {
+            Button {
+                WarmHaptics.action()
+                action()
+            } label: {
                 Image(systemName: icon)
                     .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(iconColor(style))
@@ -707,7 +708,7 @@ struct VoiceCallView: View {
         case .active:
             return usesDarkSceneChrome ? .regular.tint(.white.opacity(0.12)) : .regular.tint(visual.primarySoft)
         case .danger:
-            return .regular.tint(visual.dangerSoft).interactive()
+            return .regular.tint(Color(uiColor: .systemRed)).interactive()
         }
     }
 
