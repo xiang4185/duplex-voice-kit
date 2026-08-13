@@ -313,7 +313,10 @@ final class ChatUIContractTests: XCTestCase {
 
         XCTAssertTrue(root.contains(".navigationTransition("))
         XCTAssertTrue(root.contains(".zoom(sourceID: CharacterTransitionID.call"))
-        XCTAssertTrue(root.contains(".navigationTransition(.crossFade)"))
+        XCTAssertTrue(root.contains("if reduceMotion"),
+                      "Reduce Motion 必须绕过角色 zoom 转场")
+        XCTAssertFalse(root.contains(".navigationTransition(.crossFade)"),
+                       "Xcode 26 NavigationTransition 不提供 crossFade 成员")
         XCTAssertTrue(home.contains("CharacterPresencePhase("))
         XCTAssertTrue(home.contains("characterCallTransitionSource"))
         XCTAssertTrue(chat.contains("viewModel.isSending ? .thinking : .idle"))

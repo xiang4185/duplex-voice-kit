@@ -237,7 +237,6 @@ private struct RootView: View {
     private var callPresentation: some View {
         if reduceMotion {
             voiceCallView
-                .navigationTransition(.crossFade)
         } else {
             voiceCallView
                 .navigationTransition(
