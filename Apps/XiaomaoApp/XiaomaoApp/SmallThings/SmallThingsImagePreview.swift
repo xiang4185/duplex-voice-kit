@@ -68,6 +68,7 @@ struct SmallThingsImagePreview: View {
         }
         .overlay(alignment: .topTrailing) {
             Button {
+                WarmHaptics.action()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")

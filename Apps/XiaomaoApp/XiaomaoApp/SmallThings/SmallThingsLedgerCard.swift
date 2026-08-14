@@ -61,6 +61,7 @@ struct SmallThingsLedgerCard: View {
                     .accessibilityLabel("待审批 \(store.pendingApprovals.count) 笔")
 
                 Button {
+                    WarmHaptics.action()
                     limitDraft = store.ledgerLimit.formatted(.number.precision(.fractionLength(0...2)))
                     store.clearValidation()
                     showLimitEditor = true
@@ -173,7 +174,10 @@ struct SmallThingsLedgerCard: View {
     }
 
     private var addExpenseButton: some View {
-        Button(action: addExpense) {
+        Button {
+            WarmHaptics.action()
+            addExpense()
+        } label: {
             Label("记一笔", systemImage: "square.and.pencil")
                 .font(Theme.headlineFont)
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
@@ -185,7 +189,10 @@ struct SmallThingsLedgerCard: View {
     }
 
     private var approvalsButton: some View {
-        Button(action: openApprovals) {
+        Button {
+            WarmHaptics.action()
+            openApprovals()
+        } label: {
             Label("待确认", systemImage: "checkmark.seal")
                 .font(Theme.subheadFont.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonMinimumHeight)
@@ -208,7 +215,10 @@ struct SmallThingsLedgerCard: View {
     }
 
     private var bindingButton: some View {
-        Button(action: openBinding) {
+        Button {
+            WarmHaptics.action()
+            openBinding()
+        } label: {
             Label(
                 store.isDemoBound
                     ? (store.isProduction ? "已绑定" : "已离线绑定")
@@ -256,6 +266,7 @@ struct SmallThingsLedgerCard: View {
             }
 
             Button("保存") {
+                WarmHaptics.action()
                 let normalized = limitDraft.replacingOccurrences(of: ",", with: "")
                 guard let value = Double(normalized) else {
                     store.validationMessage = "请输入有效额度"

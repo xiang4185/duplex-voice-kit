@@ -157,9 +157,12 @@ struct ChatView: View {
             titleVisibility: .visible
         ) {
             Button("清空聊天记录", role: .destructive) {
+                WarmHaptics.action()
                 Task { await viewModel.clear() }
             }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) {
+                WarmHaptics.action()
+            }
         } message: {
             Text("服务器中的聊天历史也会被清空，此操作无法撤销。")
         }
@@ -208,6 +211,7 @@ struct ChatView: View {
             Section("小猫参与方式") {
                 ForEach(XiaomaoParticipationMode.allCases, id: \.self) { mode in
                     Button {
+                        WarmHaptics.action()
                         viewModel.xiaomaoMode = mode
                     } label: {
                         Label(
@@ -221,6 +225,7 @@ struct ChatView: View {
             }
             if viewModel.canClear {
                 Button("清空聊天记录", role: .destructive) {
+                    WarmHaptics.action()
                     showsClearConfirmation = true
                 }
             }
@@ -363,6 +368,7 @@ struct ChatView: View {
             HStack(spacing: Theme.Spacing.small) {
                 if viewModel.canRetryHistory {
                     Button("重试") {
+                        WarmHaptics.action()
                         Task { await viewModel.loadHistory() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -370,11 +376,17 @@ struct ChatView: View {
                     .accessibilityIdentifier("chat.retry")
                 }
                 if viewModel.requiresReconfiguration {
-                    Button("重新配置连接", action: onReconfigure)
+                    Button("重新配置连接") {
+                        WarmHaptics.action()
+                        onReconfigure()
+                    }
                         .buttonStyle(.bordered)
                 }
                 if !viewModel.canRetryHistory && !viewModel.requiresReconfiguration {
-                    Button("关闭") { viewModel.clearError() }
+                    Button("关闭") {
+                        WarmHaptics.action()
+                        viewModel.clearError()
+                    }
                         .buttonStyle(.bordered)
                 }
             }
@@ -403,6 +415,7 @@ struct ChatView: View {
             }
             Spacer()
             Button {
+                WarmHaptics.action()
                 Task { await viewModel.retryXiaomao(turnID: turnID) }
             } label: {
                 if viewModel.retryingXiaomaoTurnID == turnID {

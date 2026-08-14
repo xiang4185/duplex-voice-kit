@@ -176,6 +176,7 @@ struct SmallThingsApprovalView: View {
 
     private func rejectButton(_ entry: SmallThingEntry) -> some View {
         Button {
+            WarmHaptics.action()
             Task { await review(entry, status: .rejected) }
         } label: {
             Label("再想想", systemImage: "arrow.uturn.backward")
@@ -190,6 +191,7 @@ struct SmallThingsApprovalView: View {
 
     private func approveButton(_ entry: SmallThingEntry) -> some View {
         Button {
+            WarmHaptics.action()
             Task { await review(entry, status: .approved) }
         } label: {
             Label("点头", systemImage: "checkmark")
@@ -219,6 +221,7 @@ struct SmallThingsApprovalView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button("返回小事") {
+                WarmHaptics.action()
                 dismiss()
             }
             .buttonStyle(.borderedProminent)
@@ -236,6 +239,7 @@ struct SmallThingsApprovalView: View {
             Label(decision.toastText, systemImage: decision.systemImage)
                 .font(Theme.subheadFont.weight(.semibold))
             Button("撤销") {
+                WarmHaptics.action()
                 Task { await undoReview() }
             }
             .font(Theme.subheadFont.weight(.bold))
@@ -290,7 +294,6 @@ struct SmallThingsApprovalView: View {
         guard await store.undoLastReviewPersisted() else { return }
         approvalMessage = decision.previousMessage
         self.decision = nil
-        WarmHaptics.action()
     }
 
     private func finalizeDecision() {

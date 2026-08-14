@@ -134,7 +134,10 @@ struct PrimaryButton: View {
 
     var body: some View {
         let tokens = Theme.visual(visualMode)
-        Button(action: action) {
+        Button {
+            WarmHaptics.action()
+            action()
+        } label: {
             HStack(spacing: 9) {
                 if let systemImage {
                     Image(systemName: systemImage)
@@ -203,7 +206,10 @@ struct GlassIconButton: View {
 
     var body: some View {
         let tokens = Theme.visual(visualMode)
-        Button(action: action) {
+        Button {
+            WarmHaptics.action()
+            action()
+        } label: {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(tokens.textPrimary)

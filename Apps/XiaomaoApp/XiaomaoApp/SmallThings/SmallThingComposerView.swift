@@ -72,6 +72,7 @@ struct SmallThingComposerView: View {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("完成") {
+                    WarmHaptics.action()
                     focusedField = nil
                 }
             }
@@ -107,6 +108,7 @@ struct SmallThingComposerView: View {
     private var saveBar: some View {
         VStack(spacing: 0) {
             Button {
+                WarmHaptics.action()
                 focusedField = nil
                 Task { await save() }
             } label: {
@@ -232,6 +234,7 @@ struct SmallThingComposerView: View {
             }
         } else {
             Button {
+                WarmHaptics.action()
                 withAnimation(.easeOut(duration: 0.2)) {
                     showsDetails = true
                 }
@@ -269,6 +272,7 @@ struct SmallThingComposerView: View {
                         .accessibilityLabel("所选图片预览")
 
                     Button(role: .destructive) {
+                        WarmHaptics.action()
                         self.imageData = nil
                         photoItem = nil
                         imageLoadFailed = false

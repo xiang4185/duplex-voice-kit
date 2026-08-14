@@ -92,6 +92,7 @@ struct SmallThingsBindingView: View {
             }
 
             Button(store.generatedBindingCode == nil ? "生成绑定码" : "重新生成绑定码") {
+                WarmHaptics.action()
                 Task {
                     copied = false
                     if await store.createBindingCodePersisted() {
@@ -115,6 +116,7 @@ struct SmallThingsBindingView: View {
 
     private var copyButton: some View {
         Button {
+            WarmHaptics.action()
             guard let localCode else { return }
             UIPasteboard.general.string = localCode
             copied = true
@@ -178,6 +180,7 @@ struct SmallThingsBindingView: View {
 
                 if !code.isEmpty {
                     Button {
+                        WarmHaptics.action()
                         code = ""
                         store.resetBindingFeedback()
                         codeFocused = true
@@ -192,6 +195,7 @@ struct SmallThingsBindingView: View {
             }
 
             Button(store.isProduction ? "提交绑定" : "提交离线绑定") {
+                WarmHaptics.action()
                 codeFocused = false
                 Task {
                     if await store.bindPersisted(code: code) {
@@ -263,6 +267,7 @@ struct SmallThingsBindingView: View {
                 .background(Theme.success.opacity(0.12), in: Capsule())
 
             Button(role: .destructive) {
+                WarmHaptics.action()
                 Task {
                     await store.unbindPersisted()
                     code = ""

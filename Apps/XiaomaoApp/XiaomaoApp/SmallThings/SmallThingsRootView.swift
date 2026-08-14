@@ -30,6 +30,7 @@ struct SmallThingsRootView: View {
                                 .font(Theme.subheadFont)
                                 .foregroundStyle(Theme.textPrimary)
                             Button("重试") {
+                                WarmHaptics.action()
                                 Task { await store.refreshFromBackend() }
                             }
                             .buttonStyle(.borderedProminent)
@@ -164,6 +165,7 @@ struct SmallThingsRootView: View {
             Spacer(minLength: Theme.Spacing.small)
             if !store.pendingApprovals.isEmpty {
                 Button {
+                    WarmHaptics.action()
                     path.append(.approval)
                 } label: {
                     Label("待我确认 \(store.pendingApprovals.count)", systemImage: "clock")
