@@ -105,26 +105,26 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
-        XCTAssertTrue(chat.contains(".defaultScrollAnchor(keyboardVisible ? .bottom : .top, for: .alignment)"),
-                      "短消息在键盘关闭时顶部对齐，键盘打开时必须贴近输入框底部对齐")
-        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
-                      "键盘最终布局完成后只能做一次锚底")
-        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
-                      "键盘完全收回、Tab Bar 恢复后必须再次锚定最新消息")
-        XCTAssertTrue(chat.contains("scrollToBottomWithoutAnimation(proxy)"),
-                      "键盘稳定后的锚底不得再叠加第二套滚动动画")
-        XCTAssertTrue(chat.contains("transaction.disablesAnimations = true"),
-                      "键盘锚底必须禁用额外 SwiftUI 动画")
-        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
-                       "不得监听输入法 frame 连续变化，否则候选栏会反复推动页面")
-        XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
-                       "不得复制系统键盘动画驱动 ScrollView")
-        XCTAssertTrue(chat.contains("DispatchQueue.main.async"),
-                      "键盘显示/收回后的滚动必须等最终 safe-area 布局落定")
-        let keyboardShowBlock = chat.components(separatedBy: "keyboardDidShowNotification")[1]
-            .components(separatedBy: "keyboardDidHideNotification")[0]
-        XCTAssertTrue(keyboardShowBlock.contains("DispatchQueue.main.async"),
-                      "键盘显示路径必须延后一轮主线程再锚底，避免使用过渡期 viewport 产生底部空白")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
+                      "短消息必须始终顶部对齐，键盘出现不得把整组消息切到底部")
+        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
+                      "消息区必须从键盘 frame 变化开始时同步让位")
+        XCTAssertTrue(chat.contains("followKeyboardTransition(notification, proxy: proxy)"),
+                      "键盘变化必须走统一同步滚动路径")
+        XCTAssertTrue(chat.contains("keyboardAnimationDurationUserInfoKey"),
+                      "消息滚动必须复用系统键盘动画时长")
+        XCTAssertTrue(chat.contains("keyboardAnimationCurveUserInfoKey"),
+                      "消息滚动必须复用系统键盘动画曲线")
+        XCTAssertTrue(chat.contains("guard inputFocused else { return }"),
+                      "收起键盘或浏览历史时不得强制把聊天拉回底部")
+        XCTAssertFalse(chat.contains("keyboardDidShowNotification"),
+                       "不得等键盘完全出现后再补一次跳跃式锚底")
+        XCTAssertFalse(chat.contains("keyboardDidHideNotification"),
+                       "不得等键盘完全收回后再补一次跳跃式锚底")
+        XCTAssertFalse(chat.contains("keyboardVisible ? .bottom : .top"),
+                       "键盘状态不得切换短消息整体 alignment")
+        XCTAssertFalse(chat.contains("scrollToBottomWithoutAnimation"),
+                       "不得保留键盘结束后的无动画纠偏滚动")
         XCTAssertFalse(chat.contains(".ignoresSafeArea(.keyboard"),
                        "聊天页必须交回系统键盘 safe-area，不能让 Tab Bar 留在键盘下方形成空白")
         XCTAssertFalse(chat.contains("keyboardOverlap"),

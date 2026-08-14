@@ -55,18 +55,18 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                        "聊天页不得再维护手工键盘高度")
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须停在最新消息")
-        XCTAssertTrue(chat.contains(".defaultScrollAnchor(keyboardVisible ? .bottom : .top, for: .alignment)"),
-                      "短消息仅在键盘关闭时顶部对齐，键盘打开后必须贴近输入框")
-        XCTAssertTrue(chat.contains("keyboardDidShowNotification"),
-                      "键盘稳定后必须只做一次最终锚底")
-        XCTAssertTrue(chat.contains("keyboardDidHideNotification"),
-                      "键盘收回完成后必须锚定最新消息")
-        XCTAssertTrue(chat.contains("transaction.disablesAnimations = true"),
-                      "键盘锚底不得叠加额外页面动画")
-        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
-                       "不得跟随输入法 frame 连续变化反复滚动")
-        XCTAssertFalse(chat.contains("keyboardAnimation(from:"),
-                       "不得复制键盘动画驱动消息区")
+        XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
+                      "短消息必须始终顶部对齐，不能因键盘出现整体跳到底部")
+        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
+                      "消息区必须与键盘 frame 变化从同一阶段开始")
+        XCTAssertTrue(chat.contains("keyboardAnimationDurationUserInfoKey"),
+                      "同步滚动必须沿用键盘动画时长")
+        XCTAssertTrue(chat.contains("keyboardAnimationCurveUserInfoKey"),
+                      "同步滚动必须沿用键盘动画曲线")
+        XCTAssertFalse(chat.contains("keyboardDidShowNotification"),
+                       "不得在键盘完成后再跳跃式纠偏")
+        XCTAssertFalse(chat.contains("keyboardDidHideNotification"),
+                       "不得在键盘收回后再跳跃式纠偏")
         XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
