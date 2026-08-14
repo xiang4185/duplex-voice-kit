@@ -65,6 +65,9 @@ public final class DVKAudioSessionController {
             mode: .voiceChat,
             options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
         )
+        // AVAudioSession suppresses system haptics while recording by default.
+        // Keep tactile UI controls available during a full-duplex voice session.
+        try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try session.setPreferredSampleRate(configuration.captureSampleRate)
         // Match the capture packet clock to the realtime upload clock. AVAudioEngine's
         // tap bufferSize is only a request; without an IO-buffer preference some real
