@@ -137,6 +137,7 @@ private struct RootView: View {
                 HStack {
                     Spacer()
                     Button {
+                        WarmHaptics.action()
                         showingDiagnostics = true
                     } label: {
                         Image(systemName: "wrench.and.screwdriver")

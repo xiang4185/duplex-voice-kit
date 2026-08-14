@@ -265,7 +265,10 @@ struct SettingsView: View {
     // MARK: 隐私与权限
     private var privacyGroup: some View {
         VStack(spacing: 0) {
-            Button(action: openSystemSettings) {
+            Button {
+                WarmHaptics.action()
+                openSystemSettings()
+            } label: {
                 settingsRow(
                     icon: microphonePermissionIcon,
                     title: "麦克风权限",
@@ -289,6 +292,7 @@ struct SettingsView: View {
     // MARK: 高级设置
     private var advancedGroup: some View {
         Button {
+            WarmHaptics.action()
             NotificationCenter.default.post(name: .reconfigureConnection, object: nil)
         } label: {
             settingsRow(

@@ -32,6 +32,7 @@ struct SmallThingEntryCard: View {
 
             if let imageData = entry.imageData {
                 Button {
+                    hapticTrigger += 1
                     showingImagePreview = true
                 } label: {
                     SmallThingsImageContent(imageData: imageData, height: 190)
@@ -115,9 +116,12 @@ struct SmallThingEntryCard: View {
             titleVisibility: .visible
         ) {
             Button("删除", role: .destructive) {
+                hapticTrigger += 1
                 Task { await store.deleteEntryPersisted(entryID: entry.id) }
             }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) {
+                hapticTrigger += 1
+            }
         } message: {
             Text("删除后，这件小事及其评论、回应会从双方时间流中移除，且无法撤销。")
         }
@@ -168,6 +172,7 @@ struct SmallThingEntryCard: View {
 
             Menu {
                 Button("删除这件小事", role: .destructive) {
+                    hapticTrigger += 1
                     showsDeleteConfirmation = true
                 }
             } label: {
@@ -274,6 +279,7 @@ struct SmallThingEntryCard: View {
                         .foregroundStyle(Theme.textSecondary)
                     Spacer()
                     Button("取消回复") {
+                        hapticTrigger += 1
                         self.replyTarget = nil
                     }
                     .font(Theme.captionFont)
@@ -302,6 +308,7 @@ struct SmallThingEntryCard: View {
                 .accessibilityLabel(replyTarget == nil ? "评论内容" : "回复内容")
 
                 Button("发送") {
+                    hapticTrigger += 1
                     Task { await sendComment() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -414,7 +421,6 @@ struct SmallThingEntryCard: View {
         replyTarget = nil
         commentsOpen = true
         commentFocused = false
-        hapticTrigger += 1
     }
 }
 

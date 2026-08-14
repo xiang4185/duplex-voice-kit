@@ -30,6 +30,7 @@ struct DeviceBindingView: View {
                 .textContentType(.password)
                 .textFieldStyle(.roundedBorder)
             Button("导入并继续") {
+                WarmHaptics.action()
                 importBundleAndSave()
             }
             .buttonStyle(.borderedProminent)
@@ -62,6 +63,7 @@ struct DeviceBindingView: View {
                     .foregroundStyle(.red)
             }
             Button("保存并继续") {
+                WarmHaptics.action()
                 saveConfiguration()
             }
             .buttonStyle(.borderedProminent)

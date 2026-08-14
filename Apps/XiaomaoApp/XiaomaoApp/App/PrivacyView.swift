@@ -135,7 +135,10 @@ struct PrivacyView: View {
                 .animation(.easeOut(duration: 0.4).delay(0.55), value: appeared)
 
                 // 暂不同意
-                Button(action: declined) {
+                Button {
+                    WarmHaptics.action()
+                    declined()
+                } label: {
                     Text("暂不同意")
                         .font(Theme.bodyFont)
                         .foregroundStyle(Theme.textSecondary)

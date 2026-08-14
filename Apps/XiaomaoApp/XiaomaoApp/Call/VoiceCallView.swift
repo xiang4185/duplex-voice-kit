@@ -595,6 +595,7 @@ struct VoiceCallView: View {
                         .background(visual.primarySoft, in: Capsule())
                     Spacer(minLength: 0)
                     Button {
+                        WarmHaptics.action()
                         withAnimation(.easeIn(duration: 0.2)) { emotionBubbleVisible = false }
                     } label: {
                         Text("继续聊聊")
@@ -685,7 +686,10 @@ struct VoiceCallView: View {
             }
 
             if viewModel.showReconnect {
-                Button("重新连接") { viewModel.reconnect() }
+                Button("重新连接") {
+                    WarmHaptics.action()
+                    viewModel.reconnect()
+                }
                     .font(Theme.subheadFont)
                     .foregroundStyle(visualMode == .mystery ? visual.textPrimary : .white)
                     .padding(.horizontal, 20)
@@ -786,6 +790,7 @@ struct VoiceCallView: View {
 
                 HStack(spacing: 12) {
                     Button {
+                        WarmHaptics.action()
                         withAnimation(.easeIn(duration: 0.2)) { dismissIdleWarning() }
                     } label: {
                         Text("继续聊")
@@ -919,6 +924,7 @@ struct VoiceCallView: View {
                     .foregroundStyle(visual.textSecondary)
                 HStack(spacing: 12) {
                     Button {
+                        WarmHaptics.action()
                         withAnimation(.easeIn(duration: 0.2)) { showHangupConfirm = false }
                     } label: {
                         Text("再聊一会儿")
@@ -1097,6 +1103,7 @@ struct VoiceCallView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(copiedDiagnostics ? "已复制" : "复制诊断信息") {
+                        WarmHaptics.action()
                         UIPasteboard.general.string = [
                             viewModel.controller.latencyDiagnosticText,
                             viewModel.controller.diagnosticText
@@ -1105,7 +1112,10 @@ struct VoiceCallView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { showDiagnostics = false }
+                    Button("完成") {
+                        WarmHaptics.action()
+                        showDiagnostics = false
+                    }
                 }
             }
             .task {
@@ -1131,6 +1141,7 @@ struct CompanionSelectionSheet: View {
                 VStack(spacing: 10) {
                     ForEach(CompanionType.allCases) { type in
                         Button {
+                            WarmHaptics.action()
                             if type == store.current {
                                 dismiss()
                             } else {

@@ -86,6 +86,40 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(theme.contains("static let controlMinimumSize: CGFloat = 44"))
     }
 
+    func testPrimaryButtonSurfacesKeepImmediateHapticFeedback() throws {
+        let expectedActionCounts: [String: Int] = [
+            "XiaomaoApp/Chat/ChatView.swift": 8,
+            "XiaomaoApp/Call/VoiceCallView.swift": 13,
+            "XiaomaoApp/Settings/SettingsView.swift": 5,
+            "XiaomaoApp/App/DeviceBindingView.swift": 2,
+            "XiaomaoApp/SmallThings/SmallThingsRootView.swift": 2,
+            "XiaomaoApp/SmallThings/SmallThingsLedgerCard.swift": 5,
+            "XiaomaoApp/SmallThings/SmallThingsBindingView.swift": 5,
+            "XiaomaoApp/SmallThings/SmallThingsApprovalView.swift": 4,
+            "XiaomaoApp/SmallThings/SmallThingComposerView.swift": 5,
+            "XiaomaoApp/SmallThings/SmallThingsImagePreview.swift": 1,
+            "XiaomaoApp/Design/Components/VisualComponents.swift": 2
+        ]
+
+        for (path, minimumCount) in expectedActionCounts {
+            let contents = try source(path)
+            let count = contents.components(separatedBy: "WarmHaptics.action()").count - 1
+            XCTAssertGreaterThanOrEqual(
+                count,
+                minimumCount,
+                "\(path) 的点击触感入口被删除或绕过"
+            )
+        }
+
+        let entryCard = try source("XiaomaoApp/SmallThings/SmallThingEntryCard.swift")
+        XCTAssertTrue(entryCard.contains(".sensoryFeedback(.impact(weight: .light), trigger: hapticTrigger)"))
+        XCTAssertGreaterThanOrEqual(
+            entryCard.components(separatedBy: "hapticTrigger += 1").count - 1,
+            9,
+            "小事卡片的点击触感入口被删除或延后到异步结果"
+        )
+    }
+
     func testTappingOrScrollingConversationDismissesKeyboard() throws {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
 
