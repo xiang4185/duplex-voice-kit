@@ -120,6 +120,15 @@ final class ChatUIContractTests: XCTestCase {
         )
     }
 
+    func testVoiceAudioSessionAllowsHapticsWhileRecording() throws {
+        let audioSession = try source("../../Sources/DuplexVoiceKit/DVKAudioSession.swift")
+
+        XCTAssertTrue(
+            audioSession.contains("setAllowHapticsAndSystemSoundsDuringRecording(true)"),
+            "全双工录音会话必须显式允许系统触觉，否则所有 UIImpactFeedbackGenerator 会在录音期间被系统压制"
+        )
+    }
+
     func testTappingOrScrollingConversationDismissesKeyboard() throws {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
 
