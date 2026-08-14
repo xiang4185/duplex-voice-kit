@@ -5,7 +5,6 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @FocusState private var inputFocused: Bool
     @State private var showsClearConfirmation = false
-    @State private var keyboardVisible = false
     @State private var ambientMotion = false
     @State private var onlinePulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -74,7 +73,7 @@ struct ChatView: View {
                         )
                     }
                     .defaultScrollAnchor(.bottom)
-                    .defaultScrollAnchor(keyboardVisible ? .bottom : .top, for: .alignment)
+                    .defaultScrollAnchor(.top, for: .alignment)
                     .scrollDismissesKeyboard(.immediately)
                     .simultaneousGesture(
                         TapGesture().onEnded { _ in inputFocused = false }
@@ -95,28 +94,10 @@ struct ChatView: View {
                     }
                     .onReceive(
                         NotificationCenter.default.publisher(
-                            for: UIResponder.keyboardDidShowNotification
+                            for: UIResponder.keyboardWillChangeFrameNotification
                         )
-                    ) { _ in
-                        guard !keyboardVisible else { return }
-                        keyboardVisible = true
-                        // keyboardDidShow 与 SwiftUI safe-area 的最终布局提交不完全同步。
-                        // 下一轮主线程再锚底，避免按过渡期高度计算出多余底部空白。
-                        DispatchQueue.main.async {
-                            scrollToBottomWithoutAnimation(proxy)
-                        }
-                    }
-                    .onReceive(
-                        NotificationCenter.default.publisher(
-                            for: UIResponder.keyboardDidHideNotification
-                        )
-                    ) { _ in
-                        guard keyboardVisible else { return }
-                        keyboardVisible = false
-                        // 键盘完全收起、Tab Bar 恢复最终高度后只锚一次，避免还要手动再滑一下。
-                        DispatchQueue.main.async {
-                            scrollToBottomWithoutAnimation(proxy)
-                        }
+                    ) { notification in
+                        followKeyboardTransition(notification, proxy: proxy)
                     }
                 }
 
@@ -251,11 +232,47 @@ struct ChatView: View {
         .accessibilityIdentifier("chat.clear")
     }
 
-    private func scrollToBottomWithoutAnimation(_ proxy: ScrollViewProxy) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
+    private func followKeyboardTransition(
+        _ notification: Notification,
+        proxy: ScrollViewProxy
+    ) {
+        // 短聊天始终保持顶部对齐。只有输入框仍处于焦点时，才让最新消息
+        // 跟随键盘 frame 变化一起让位；收起键盘或浏览历史时不强制锚底。
+        guard inputFocused else { return }
+
+        let duration = (
+            notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber
+        )?.doubleValue ?? 0.25
+        let curveRawValue = (
+            notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber
+        )?.intValue ?? UIView.AnimationCurve.easeInOut.rawValue
+
+        let scroll = {
             proxy.scrollTo("chat.bottom", anchor: .bottom)
+        }
+
+        guard !reduceMotion, duration > 0 else {
+            scroll()
+            return
+        }
+
+        withAnimation(keyboardAnimation(duration: duration, curveRawValue: curveRawValue)) {
+            scroll()
+        }
+    }
+
+    private func keyboardAnimation(duration: Double, curveRawValue: Int) -> Animation {
+        switch curveRawValue {
+        case UIView.AnimationCurve.easeIn.rawValue:
+            return .easeIn(duration: duration)
+        case UIView.AnimationCurve.easeOut.rawValue:
+            return .easeOut(duration: duration)
+        case UIView.AnimationCurve.linear.rawValue:
+            return .linear(duration: duration)
+        default:
+            // iOS 键盘有时返回私有 curve 值；退回系统常用的 easeInOut，
+            // 但仍严格复用同一 duration，避免消息区晚于键盘结束。
+            return .easeInOut(duration: duration)
         }
     }
 
