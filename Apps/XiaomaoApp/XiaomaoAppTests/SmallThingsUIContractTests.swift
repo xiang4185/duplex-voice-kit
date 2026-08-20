@@ -33,7 +33,8 @@ final class SmallThingsUIContractTests: XCTestCase {
         XCTAssertTrue(ledger.contains("smallThings.ledger.pendingApproval"))
         XCTAssertTrue(ledger.contains("smallThings.ledger.adjustLimit"), "账本卡必须提供轻量调额入口")
         XCTAssertTrue(ledger.contains("Label(\"调额\", systemImage: \"slider.horizontal.3\")"))
-        XCTAssertTrue(ledger.contains("store.adjustLedgerLimit(to: value)"))
+        XCTAssertTrue(ledger.contains("await store.adjustLedgerLimitPersisted(to: value)"),
+                      "调额必须经服务端持久化，重新进入后不得恢复旧值")
         XCTAssertTrue(ledger.contains("smallThings.binding"))
         XCTAssertFalse(ledger.contains("glassEffect"), "暖色账本卡不得使用玻璃")
         XCTAssertTrue(ledger.contains("progressRing"), "小事页必须恢复原有环形进度结构")

@@ -407,8 +407,8 @@ final class HandsFreeInteractionContractTests: XCTestCase {
         }
 
         // 新文案存在 (P2.6J: 不再承诺"完成一次后会显示")
-        XCTAssertTrue(settings.contains("小猫在呢"))
-        XCTAssertTrue(settings.contains("随时回来和小猫说说话"))
+        XCTAssertTrue(settings.contains("我的聊天头像"))
+        XCTAssertTrue(settings.contains("点头像从照片中更换，双方聊天都会更新"))
         XCTAssertTrue(settings.contains("关于小猫"))
         XCTAssertTrue(home.contains("切换陪伴"))
         XCTAssertTrue(review.contains("陪伴记录尚未开放"))

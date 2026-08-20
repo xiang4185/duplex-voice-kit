@@ -241,13 +241,16 @@ final class ChatUIContractTests: XCTestCase {
         let mainTab = try source("XiaomaoApp/App/MainTabView.swift")
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
         let bubble = try source("XiaomaoApp/Chat/ChatMessageBubble.swift")
+        let avatars = try source("XiaomaoApp/Chat/ChatAvatarStore.swift")
 
         XCTAssertTrue(mainTab.contains("environment.chatTargetDeviceID == nil ? .user : .developer"))
         XCTAssertTrue(chat.contains("localParticipant: localParticipant"))
         XCTAssertTrue(bubble.contains("private var isLocalMessage: Bool { message.participant == localParticipant }"))
         XCTAssertTrue(bubble.contains("case .user: return \"客户\""),
                       "开发者视角中的客户消息不得仍显示成‘你’")
-        XCTAssertTrue(bubble.contains("Image(systemName: \"person.fill\")"),
+        XCTAssertTrue(bubble.contains("ChatParticipantAvatar("),
+                      "聊天气泡应统一读取可同步的参与者头像")
+        XCTAssertTrue(avatars.contains("Image(systemName: \"person.fill\")"),
                       "远端真人参与者应使用克制的人物剪影头像")
         XCTAssertFalse(bubble.contains("Text(\"客\")"),
                        "聊天头像不得使用破坏陪伴氛围的后台身份缩写")
@@ -324,7 +327,7 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(smallThings.contains(".navigationTitle(\"小事本\")"))
         XCTAssertFalse(ledger.contains("Theme.v2InkSurface"), "账本内容卡不得继续铺大面积深色")
         XCTAssertTrue(ledger.contains("Theme.v2PaperMuted"))
-        XCTAssertTrue(settings.contains("PERSONAL SPACE"))
+        XCTAssertTrue(settings.contains("CHAT PROFILE"))
         XCTAssertTrue(settings.contains("settingsBackdrop"), "我的页必须进入同一套 V2 视觉语言")
     }
 
