@@ -2,6 +2,9 @@ name: Xiaomao Private Three-Party IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/chat-participant-avatar
 
 permissions:
   contents: read
