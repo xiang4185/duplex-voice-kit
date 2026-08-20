@@ -65,7 +65,10 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                        "不得在键盘完成后再跳跃式纠偏")
         XCTAssertFalse(chat.contains("keyboardDidHideNotification"),
                        "不得在键盘收回后再跳跃式纠偏")
-        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: Bool.self)"))
+        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: ChatScrollGeometry.self)"))
+        XCTAssertTrue(chat.contains("followsLatestMessage ? .bottom : nil"))
+        XCTAssertTrue(chat.contains("for: .sizeChanges"),
+                      "最新消息必须跟随原生键盘 viewport 的尺寸动画上移")
         XCTAssertTrue(chat.contains("guard followsLatestMessage else { return }"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
