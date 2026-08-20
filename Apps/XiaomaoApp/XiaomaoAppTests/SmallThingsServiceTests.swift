@@ -139,6 +139,24 @@ final class SmallThingsServiceTests: XCTestCase {
         )
     }
 
+    func testLedgerLimitUpdateUsesBackendAndAppliesAuthoritativeValue() async throws {
+        let backend = SmallThingsBackendSpy()
+        let service = ProductionSmallThingsService(backend: backend)
+
+        let result = try await service.updateLedgerLimit(
+            limitCents: 12_345,
+            requestID: "limit-update"
+        )
+
+        XCTAssertEqual(result.ledgerLimit, 123.45)
+        let requests = await backend.requests()
+        let request = try XCTUnwrap(requests.last)
+        XCTAssertEqual(request.route, "/v1/small-things/ledger/limit")
+        let body = try Self.jsonBody(request)
+        XCTAssertEqual(body["limit_cents"] as? Int, 12_345)
+        XCTAssertEqual(body["request_id"] as? String, "limit-update")
+    }
+
     func testProductionStoreReloadsAuthoritativeStateAfterWrite() async {
         let service = SmallThingsServiceSpy()
         let store = SmallThingsStore(service: service)
@@ -225,6 +243,16 @@ private actor SmallThingsBackendSpy: BackendAdapter {
             payload = try JSONSerialization.data(withJSONObject: [
                 "media": ["media_id": Self.mediaID]
             ])
+        case "/v1/small-things/ledger/limit":
+            payload = try JSONSerialization.data(withJSONObject: [
+                "ledger": [
+                    "limit_cents": 12_345,
+                    "approved_cents": 1_200,
+                    "pending_cents": 800,
+                    "remaining_cents": 10_345,
+                    "approved_ratio": 1_200.0 / 12_345.0
+                ]
+            ])
         case "/v1/small-things/media/read":
             payload = try JSONSerialization.data(withJSONObject: [
                 "data_base64": Self.mediaBytes.base64EncodedString()
@@ -305,6 +333,14 @@ private actor SmallThingsServiceSpy: SmallThingsServicing {
             approvedRatio: 0,
             entries: entries
         )
+    }
+
+    func updateLedgerLimit(
+        limitCents: Int,
+        requestID: String
+    ) async throws -> SmallThingsLedgerLimitResult {
+        _ = requestID
+        return SmallThingsLedgerLimitResult(ledgerLimit: Double(limitCents) / 100)
     }
 
     func createNote(

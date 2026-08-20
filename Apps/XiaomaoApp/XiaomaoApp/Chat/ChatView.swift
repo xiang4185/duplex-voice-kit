@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
@@ -7,6 +6,7 @@ struct ChatView: View {
     @State private var showsClearConfirmation = false
     @State private var ambientMotion = false
     @State private var onlinePulse = false
+    @State private var followsLatestMessage = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appVisualMode) private var visualMode
     @EnvironmentObject private var companionStore: CompanionModeStore
@@ -78,7 +78,7 @@ struct ChatView: View {
                     }
                     .defaultScrollAnchor(.bottom)
                     .defaultScrollAnchor(.top, for: .alignment)
-                    .scrollDismissesKeyboard(.immediately)
+                    .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
                         TapGesture().onEnded { _ in inputFocused = false }
                     )
@@ -87,22 +87,24 @@ struct ChatView: View {
                         await avatarStore.load()
                     }
                     .accessibilityIdentifier("chat.messages")
+                    .onScrollGeometryChange(for: Bool.self) { geometry in
+                        let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
+                        let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
+                        return contentBottom - visibleBottom < 72
+                    } action: { _, isNearBottom in
+                        followsLatestMessage = isNearBottom
+                    }
                     .onChange(of: viewModel.messages.count) { _, _ in
+                        guard followsLatestMessage else { return }
                         withAnimation(.easeOut(duration: 0.22)) {
                             proxy.scrollTo("chat.bottom", anchor: .bottom)
                         }
                     }
                     .onChange(of: viewModel.isSending) { _, _ in
+                        guard followsLatestMessage else { return }
                         withAnimation(.easeOut(duration: 0.22)) {
                             proxy.scrollTo("chat.bottom", anchor: .bottom)
                         }
-                    }
-                    .onReceive(
-                        NotificationCenter.default.publisher(
-                            for: UIResponder.keyboardWillChangeFrameNotification
-                        )
-                    ) { notification in
-                        followKeyboardTransition(notification, proxy: proxy)
                     }
                 }
 
@@ -241,50 +243,6 @@ struct ChatView: View {
         }
         .accessibilityLabel("聊天选项")
         .accessibilityIdentifier("chat.clear")
-    }
-
-    private func followKeyboardTransition(
-        _ notification: Notification,
-        proxy: ScrollViewProxy
-    ) {
-        // 短聊天始终保持顶部对齐。只有输入框仍处于焦点时，才让最新消息
-        // 跟随键盘 frame 变化一起让位；收起键盘或浏览历史时不强制锚底。
-        guard inputFocused else { return }
-
-        let duration = (
-            notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber
-        )?.doubleValue ?? 0.25
-        let curveRawValue = (
-            notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber
-        )?.intValue ?? UIView.AnimationCurve.easeInOut.rawValue
-
-        let scroll = {
-            proxy.scrollTo("chat.bottom", anchor: .bottom)
-        }
-
-        guard !reduceMotion, duration > 0 else {
-            scroll()
-            return
-        }
-
-        withAnimation(keyboardAnimation(duration: duration, curveRawValue: curveRawValue)) {
-            scroll()
-        }
-    }
-
-    private func keyboardAnimation(duration: Double, curveRawValue: Int) -> Animation {
-        switch curveRawValue {
-        case UIView.AnimationCurve.easeIn.rawValue:
-            return .easeIn(duration: duration)
-        case UIView.AnimationCurve.easeOut.rawValue:
-            return .easeOut(duration: duration)
-        case UIView.AnimationCurve.linear.rawValue:
-            return .linear(duration: duration)
-        default:
-            // iOS 键盘有时返回私有 curve 值；退回系统常用的 easeInOut，
-            // 但仍严格复用同一 duration，避免消息区晚于键盘结束。
-            return .easeInOut(duration: duration)
-        }
     }
 
     private var messageTransition: AnyTransition {

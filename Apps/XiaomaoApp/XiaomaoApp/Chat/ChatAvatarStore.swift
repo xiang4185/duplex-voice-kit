@@ -126,15 +126,20 @@ final class ChatAvatarStore: ObservableObject {
     }
 
     func load() async {
+        let pending = defaults.data(forKey: Self.pendingKey(localParticipant))
         do {
             let profiles = try await service.load()
             for profile in profiles where profile.participant != .xiaomao {
+                if profile.participant == localParticipant, pending != nil { continue }
                 cache(profile.imageData, for: profile.participant)
             }
             errorMessage = nil
         } catch {
             // Keep the last local copy available when the network is temporarily offline.
         }
+        guard let pending else { return }
+        cache(pending, for: localParticipant)
+        await synchronizePending(pending)
     }
 
     func update(with sourceData: Data) async {
@@ -145,6 +150,12 @@ final class ChatAvatarStore: ObservableObject {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
+        cache(prepared, for: localParticipant)
+        defaults.set(prepared, forKey: Self.pendingKey(localParticipant))
+        await synchronizePending(prepared)
+    }
+
+    private func synchronizePending(_ prepared: Data) async {
         do {
             let profile = try await service.update(
                 imageData: prepared,
@@ -154,8 +165,10 @@ final class ChatAvatarStore: ObservableObject {
                 throw AppError.protocolError("avatar_participant_mismatch")
             }
             cache(profile.imageData, for: profile.participant)
+            defaults.removeObject(forKey: Self.pendingKey(localParticipant))
+            errorMessage = nil
         } catch {
-            errorMessage = "头像保存失败，请检查网络后重试。"
+            errorMessage = "头像已保存在本机，服务器同步失败，将自动重试。"
         }
     }
 
@@ -166,6 +179,10 @@ final class ChatAvatarStore: ObservableObject {
 
     private static func cacheKey(_ participant: ChatParticipant) -> String {
         "xiaomao.chat.avatar.\(participant.rawValue).v1"
+    }
+
+    private static func pendingKey(_ participant: ChatParticipant) -> String {
+        "xiaomao.chat.avatar.pending.\(participant.rawValue).v1"
     }
 
     private static func preparedJPEG(from data: Data) -> Data? {

@@ -272,13 +272,16 @@ struct SmallThingsLedgerCard: View {
                     store.validationMessage = "请输入有效额度"
                     return
                 }
-                if store.adjustLedgerLimit(to: value) {
-                    showLimitEditor = false
+                Task {
+                    if await store.adjustLedgerLimitPersisted(to: value) {
+                        showLimitEditor = false
+                    }
                 }
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.primary)
             .frame(maxWidth: .infinity, alignment: .trailing)
+            .disabled(store.isLoading)
             .accessibilityIdentifier("smallThings.ledger.adjustLimit.save")
         }
         .padding(20)

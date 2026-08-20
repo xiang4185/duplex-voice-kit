@@ -57,17 +57,16 @@ final class HandsFreeInteractionContractTests: XCTestCase {
                       "聊天记录默认必须停在最新消息")
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
                       "短消息必须始终顶部对齐，不能因键盘出现整体跳到底部")
-        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
-                      "消息区必须与键盘 frame 变化从同一阶段开始")
-        XCTAssertTrue(chat.contains("keyboardAnimationDurationUserInfoKey"),
-                      "同步滚动必须沿用键盘动画时长")
-        XCTAssertTrue(chat.contains("keyboardAnimationCurveUserInfoKey"),
-                      "同步滚动必须沿用键盘动画曲线")
+        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
+                       "消息区不得监听键盘事件驱动第二套滚动")
+        XCTAssertFalse(chat.contains("keyboardAnimationDurationUserInfoKey"))
+        XCTAssertFalse(chat.contains("keyboardAnimationCurveUserInfoKey"))
         XCTAssertFalse(chat.contains("keyboardDidShowNotification"),
                        "不得在键盘完成后再跳跃式纠偏")
         XCTAssertFalse(chat.contains("keyboardDidHideNotification"),
                        "不得在键盘收回后再跳跃式纠偏")
-        XCTAssertTrue(chat.contains("proxy.scrollTo(\"chat.bottom\", anchor: .bottom)"))
+        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: Bool.self)"))
+        XCTAssertTrue(chat.contains("guard followsLatestMessage else { return }"))
 
         XCTAssertFalse(entry.contains("style: .relative"), "小事时间不得使用持续变化的相对时间")
         XCTAssertTrue(entry.contains("dateFormat = \"yyyy/MM/dd HH:mm\""),

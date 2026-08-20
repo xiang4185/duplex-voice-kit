@@ -132,7 +132,7 @@ final class ChatUIContractTests: XCTestCase {
     func testTappingOrScrollingConversationDismissesKeyboard() throws {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
 
-        XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.immediately)"))
+        XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.interactively)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
         XCTAssertTrue(chat.contains("chatNavigationTitle"))
         XCTAssertFalse(chat.contains("modeFooter"), "底部参与模式条会抢占聊天主内容，不应回归")
@@ -150,16 +150,14 @@ final class ChatUIContractTests: XCTestCase {
                       "聊天记录默认必须锚定最新消息")
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
                       "短消息必须始终顶部对齐，键盘出现不得把整组消息切到底部")
-        XCTAssertTrue(chat.contains("keyboardWillChangeFrameNotification"),
-                      "消息区必须从键盘 frame 变化开始时同步让位")
-        XCTAssertTrue(chat.contains("followKeyboardTransition(notification, proxy: proxy)"),
-                      "键盘变化必须走统一同步滚动路径")
-        XCTAssertTrue(chat.contains("keyboardAnimationDurationUserInfoKey"),
-                      "消息滚动必须复用系统键盘动画时长")
-        XCTAssertTrue(chat.contains("keyboardAnimationCurveUserInfoKey"),
-                      "消息滚动必须复用系统键盘动画曲线")
-        XCTAssertTrue(chat.contains("guard inputFocused else { return }"),
-                      "收起键盘或浏览历史时不得强制把聊天拉回底部")
+        XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
+                       "聊天不得再监听键盘事件驱动第二套滚动")
+        XCTAssertFalse(chat.contains("keyboardAnimationDurationUserInfoKey"))
+        XCTAssertFalse(chat.contains("keyboardAnimationCurveUserInfoKey"))
+        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: Bool.self)"),
+                      "阅读位置只能由消息滚动容器自身的几何变化驱动")
+        XCTAssertTrue(chat.contains("guard followsLatestMessage else { return }"),
+                      "浏览历史时新消息和轮询不得强制锚底")
         XCTAssertFalse(chat.contains("keyboardDidShowNotification"),
                        "不得等键盘完全出现后再补一次跳跃式锚底")
         XCTAssertFalse(chat.contains("keyboardDidHideNotification"),
@@ -178,6 +176,11 @@ final class ChatUIContractTests: XCTestCase {
                        "不得按整屏高度计算键盘覆盖")
         XCTAssertFalse(chat.contains("Task.sleep(for: .milliseconds(120))"),
                        "不得再延迟等待键盘后补滚动")
+
+        let viewport = try source("XiaomaoApp/App/KeyboardViewportContainer.swift")
+        XCTAssertTrue(viewport.contains("view.keyboardLayoutGuide"))
+        XCTAssertTrue(viewport.contains("keyboardGuide.usesBottomSafeArea = false"))
+        XCTAssertTrue(viewport.contains("contentView.bottomAnchor.constraint(equalTo: keyboardGuide.topAnchor)"))
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {

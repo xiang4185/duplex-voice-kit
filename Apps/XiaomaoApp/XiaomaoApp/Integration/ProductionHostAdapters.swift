@@ -49,6 +49,8 @@ actor ProductionBackendAdapter: BackendAdapter {
         "forbidden",
         "not_bound",
         "ledger_limit_exceeded",
+        "invalid_ledger_limit",
+        "ledger_limit_below_committed",
         "invalid_entry_type",
         "invalid_amount",
         "invalid_status",

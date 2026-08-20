@@ -5,7 +5,12 @@ import SwiftUI
 struct XiaomaoApp: App {
     var body: some Scene {
         WindowGroup {
-            AppBootstrapView()
+            KeyboardViewportContainer {
+                AppBootstrapView()
+            }
+            // The UIKit keyboardLayoutGuide above is the sole viewport driver.
+            // Prevent the outer SwiftUI window from applying a second inset.
+            .ignoresSafeArea(.keyboard)
         }
     }
 

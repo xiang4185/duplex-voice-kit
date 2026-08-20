@@ -100,6 +100,41 @@ final class SmallThingsStore: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func adjustLedgerLimitPersisted(to newLimit: Double) async -> Bool {
+        let used = approvedAmount + pendingAmount
+        guard newLimit.isFinite, newLimit > 0 else {
+            validationMessage = "额度需大于 0"
+            return false
+        }
+        guard newLimit >= used else {
+            validationMessage = "额度不能低于已使用和待确认金额"
+            return false
+        }
+        let roundedCents = Int((newLimit * 100).rounded())
+        guard let service else {
+            return adjustLedgerLimit(to: Double(roundedCents) / 100)
+        }
+        guard !isLoading else { return false }
+        isLoading = true
+        operationError = nil
+        validationMessage = nil
+        defer { isLoading = false }
+        do {
+            let result = try await service.updateLedgerLimit(
+                limitCents: roundedCents,
+                requestID: UUID().uuidString.lowercased()
+            )
+            ledgerLimit = result.ledgerLimit
+            return true
+        } catch {
+            let message = handleServiceError(error)
+            operationError = message
+            validationMessage = message
+            return false
+        }
+    }
+
     func resetBindingFeedback() {
         guard bindingState == .unbound else { return }
         bindingFeedback = .idle
@@ -662,6 +697,8 @@ final class SmallThingsStore: ObservableObject {
             switch code {
             case "not_bound": return "请先完成关系绑定。"
             case "ledger_limit_exceeded": return "金额超过当前可用额度。"
+            case "invalid_ledger_limit": return "请输入有效额度。"
+            case "ledger_limit_below_committed": return "额度不能低于已使用和待确认金额。"
             case "invalid_code", "expired_code", "code_already_used":
                 return "绑定码无效或已过期。"
             case "already_bound": return "当前已经处于绑定状态。"

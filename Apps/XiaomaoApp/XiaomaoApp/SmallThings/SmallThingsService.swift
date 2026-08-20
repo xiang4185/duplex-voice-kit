@@ -33,8 +33,13 @@ struct SmallThingsReplyResult: Equatable, Sendable {
     let reply: SmallThingReply
 }
 
+struct SmallThingsLedgerLimitResult: Equatable, Sendable {
+    let ledgerLimit: Double
+}
+
 protocol SmallThingsServicing: Sendable {
     func loadState() async throws -> SmallThingsRemoteState
+    func updateLedgerLimit(limitCents: Int, requestID: String) async throws -> SmallThingsLedgerLimitResult
     func createNote(
         title: String,
         body: String,
@@ -227,6 +232,7 @@ actor ProductionSmallThingsService: SmallThingsServicing {
     }
 
     private struct EmptyResponse: Decodable {}
+    private struct LedgerUpdateResponse: Decodable { let ledger: LedgerDTO }
 
     private let backend: any BackendAdapter
     private let decoder = JSONDecoder()
@@ -300,6 +306,19 @@ actor ProductionSmallThingsService: SmallThingsServicing {
                     ["media_id": $0] as Any
                 } ?? NSNull()
             ]
+        )
+    }
+
+    func updateLedgerLimit(
+        limitCents: Int,
+        requestID: String
+    ) async throws -> SmallThingsLedgerLimitResult {
+        let response: LedgerUpdateResponse = try await execute(
+            route: "/v1/small-things/ledger/limit",
+            body: ["request_id": requestID, "limit_cents": limitCents]
+        )
+        return SmallThingsLedgerLimitResult(
+            ledgerLimit: Double(response.ledger.limitCents) / 100
         )
     }
 
