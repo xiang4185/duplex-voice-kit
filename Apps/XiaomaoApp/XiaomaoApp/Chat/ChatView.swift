@@ -77,6 +77,10 @@ struct ChatView: View {
                         )
                     }
                     .defaultScrollAnchor(.bottom)
+                    .defaultScrollAnchor(
+                        followsLatestMessage ? .bottom : nil,
+                        for: .sizeChanges
+                    )
                     .defaultScrollAnchor(.top, for: .alignment)
                     .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
@@ -87,12 +91,21 @@ struct ChatView: View {
                         await avatarStore.load()
                     }
                     .accessibilityIdentifier("chat.messages")
-                    .onScrollGeometryChange(for: Bool.self) { geometry in
+                    .onScrollGeometryChange(for: ChatScrollGeometry.self) { geometry in
                         let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
                         let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
-                        return contentBottom - visibleBottom < 72
-                    } action: { _, isNearBottom in
-                        followsLatestMessage = isNearBottom
+                        return ChatScrollGeometry(
+                            isNearBottom: contentBottom - visibleBottom < 72,
+                            viewportHeight: geometry.containerSize.height
+                        )
+                    } action: { oldGeometry, newGeometry in
+                        // A viewport resize is not a reading-position change.
+                        // Keep the existing intent while keyboardLayoutGuide animates;
+                        // the sizeChanges anchor then follows UIKit in the same frame.
+                        guard abs(oldGeometry.viewportHeight - newGeometry.viewportHeight) < 0.5 else {
+                            return
+                        }
+                        followsLatestMessage = newGeometry.isNearBottom
                     }
                     .onChange(of: viewModel.messages.count) { _, _ in
                         guard followsLatestMessage else { return }
@@ -435,6 +448,11 @@ struct ChatView: View {
         let previous = viewModel.messages[index - 1]
         return previous.participant == message.participant ? 2 : 10
     }
+}
+
+private struct ChatScrollGeometry: Equatable {
+    let isNearBottom: Bool
+    let viewportHeight: CGFloat
 }
 
 #Preview {

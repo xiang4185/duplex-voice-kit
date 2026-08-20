@@ -131,6 +131,7 @@ final class ChatUIContractTests: XCTestCase {
 
     func testTappingOrScrollingConversationDismissesKeyboard() throws {
         let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+        let app = try source("XiaomaoApp/App/XiaomaoApp.swift")
 
         XCTAssertTrue(chat.contains(".scrollDismissesKeyboard(.interactively)"))
         XCTAssertTrue(chat.contains("TapGesture().onEnded { _ in inputFocused = false }"))
@@ -148,14 +149,19 @@ final class ChatUIContractTests: XCTestCase {
         )
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.bottom)"),
                       "聊天记录默认必须锚定最新消息")
+        XCTAssertTrue(chat.contains("followsLatestMessage ? .bottom : nil"))
+        XCTAssertTrue(chat.contains("for: .sizeChanges"),
+                      "原生 viewport 改变消息容器高度时，最新消息必须随键盘同步上移")
         XCTAssertTrue(chat.contains(".defaultScrollAnchor(.top, for: .alignment)"),
                       "短消息必须始终顶部对齐，键盘出现不得把整组消息切到底部")
         XCTAssertFalse(chat.contains("keyboardWillChangeFrameNotification"),
                        "聊天不得再监听键盘事件驱动第二套滚动")
         XCTAssertFalse(chat.contains("keyboardAnimationDurationUserInfoKey"))
         XCTAssertFalse(chat.contains("keyboardAnimationCurveUserInfoKey"))
-        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: Bool.self)"),
+        XCTAssertTrue(chat.contains(".onScrollGeometryChange(for: ChatScrollGeometry.self)"),
                       "阅读位置只能由消息滚动容器自身的几何变化驱动")
+        XCTAssertTrue(chat.contains("oldGeometry.viewportHeight - newGeometry.viewportHeight"),
+                      "viewport 尺寸变化不得被误判为用户离开最新消息")
         XCTAssertTrue(chat.contains("guard followsLatestMessage else { return }"),
                       "浏览历史时新消息和轮询不得强制锚底")
         XCTAssertFalse(chat.contains("keyboardDidShowNotification"),
@@ -181,6 +187,10 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(viewport.contains("view.keyboardLayoutGuide"))
         XCTAssertTrue(viewport.contains("keyboardGuide.usesBottomSafeArea = false"))
         XCTAssertTrue(viewport.contains("contentView.bottomAnchor.constraint(equalTo: keyboardGuide.topAnchor)"))
+        XCTAssertTrue(app.contains(".ignoresSafeArea(.container, edges: .all)"),
+                      "原生 viewport 必须铺满窗口，不能在状态栏和 Home Indicator 外露白底")
+        XCTAssertTrue(app.contains(".ignoresSafeArea(.keyboard)"),
+                      "SwiftUI 不得叠加第二套键盘 safe-area resize")
     }
 
     func testMessageBubbleUsesServerIdentityAndVoiceOverSpeakerLabels() throws {

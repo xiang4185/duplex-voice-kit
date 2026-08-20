@@ -8,6 +8,12 @@ struct XiaomaoApp: App {
             KeyboardViewportContainer {
                 AppBootstrapView()
             }
+            // UIViewControllerRepresentable otherwise inherits the SwiftUI
+            // container safe-area frame, exposing the UIKit root background
+            // above the status bar and below the home indicator. Let the native
+            // controller own the full screen; its hosted SwiftUI hierarchy still
+            // receives the real window safe-area insets for navigation and tabs.
+            .ignoresSafeArea(.container, edges: .all)
             // The UIKit keyboardLayoutGuide above is the sole viewport driver.
             // Prevent the outer SwiftUI window from applying a second inset.
             .ignoresSafeArea(.keyboard)
