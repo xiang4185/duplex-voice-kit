@@ -65,7 +65,10 @@ actor ProductionBackendAdapter: BackendAdapter {
         "media_too_large",
         "unsupported_media_type",
         "media_type_mismatch",
-        "invalid_media_dimensions"
+        "invalid_media_dimensions",
+        "invalid_avatar",
+        "avatar_too_large",
+        "avatar_type_mismatch"
     ]
 
     private struct ServerErrorResponse: Decodable {

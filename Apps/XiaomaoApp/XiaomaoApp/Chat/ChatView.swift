@@ -13,6 +13,7 @@ struct ChatView: View {
 
     private let isMockMode: Bool
     private let localParticipant: ChatParticipant
+    @ObservedObject private var avatarStore: ChatAvatarStore
     private let onReconfigure: () -> Void
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
@@ -21,11 +22,13 @@ struct ChatView: View {
         viewModel: @autoclosure @escaping () -> ChatViewModel,
         isMockMode: Bool,
         localParticipant: ChatParticipant = .user,
+        avatarStore: ChatAvatarStore,
         onReconfigure: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.isMockMode = isMockMode
         self.localParticipant = localParticipant
+        self.avatarStore = avatarStore
         self.onReconfigure = onReconfigure
     }
 
@@ -40,6 +43,7 @@ struct ChatView: View {
                                 ChatMessageBubble(
                                     message: message,
                                     localParticipant: localParticipant,
+                                    avatarStore: avatarStore,
                                     groupedWithPrevious: isGrouped(message: message, direction: -1),
                                     groupedWithNext: isGrouped(message: message, direction: 1)
                                 )
@@ -80,6 +84,7 @@ struct ChatView: View {
                     )
                     .refreshable {
                         await viewModel.refreshHistorySilently()
+                        await avatarStore.load()
                     }
                     .accessibilityIdentifier("chat.messages")
                     .onChange(of: viewModel.messages.count) { _, _ in
@@ -145,6 +150,7 @@ struct ChatView: View {
             onlinePulse = true
         }
         .task {
+            await avatarStore.load()
             await viewModel.loadHistoryIfNeeded()
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(4)) } catch { return }
@@ -476,7 +482,11 @@ struct ChatView: View {
 #Preview {
     ChatView(
         viewModel: ChatViewModel(service: MockChatService(delays: .zero)),
-        isMockMode: true
+        isMockMode: true,
+        avatarStore: ChatAvatarStore(
+            service: ChatAvatarService(backend: MockBackendAdapter(), targetDeviceID: nil),
+            localParticipant: .user
+        )
     )
     .environmentObject(CompanionModeStore())
 }

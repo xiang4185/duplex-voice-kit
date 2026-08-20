@@ -3,10 +3,10 @@ import SwiftUI
 struct ChatMessageBubble: View {
     let message: ChatMessage
     var localParticipant: ChatParticipant = .user
+    @ObservedObject var avatarStore: ChatAvatarStore
     var groupedWithPrevious: Bool = false
     var groupedWithNext: Bool = false
     @Environment(\.appVisualMode) private var visualMode
-    @State private var showsTimestamp = false
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
     private var isLocalMessage: Bool { message.participant == localParticipant }
@@ -64,60 +64,22 @@ struct ChatMessageBubble: View {
                     .tint(visual.textTertiary)
                     .padding(.horizontal, 4)
                     .accessibilityLabel("正在发送")
-            } else if !groupedWithNext && showsTimestamp {
+            } else if !groupedWithNext {
                 Text(message.createdAt, style: .time)
                     .font(.system(size: 10, weight: .regular, design: .rounded))
                     .foregroundStyle(visual.textTertiary)
                     .padding(.horizontal, 4)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard !groupedWithNext else { return }
-            withAnimation(.easeOut(duration: Theme.Motion.quick)) {
-                showsTimestamp.toggle()
-            }
-        }
-        .accessibilityHint(groupedWithNext ? "" : "轻点显示或隐藏发送时间")
     }
 
     @ViewBuilder
     private var avatar: some View {
-        switch message.participant {
-        case .developer:
-            humanAvatar(
-                foreground: Theme.v2InkSurface,
-                background: Theme.v2Lavender.opacity(0.72)
-            )
-        case .xiaomao:
-            PrivacyAvatar(
-                size: 32,
-                tappable: false,
-                style: .thumbnail
-            )
-                .frame(width: 32, height: 32)
-                .background(Theme.v2PaperMuted, in: Circle())
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Theme.v2Line, lineWidth: 0.7))
-                .accessibilityHidden(true)
-        case .user:
-            humanAvatar(
-                foreground: Theme.v2Ink.opacity(0.66),
-                background: Theme.v2CoralSoft
-            )
-        }
-    }
-
-    private func humanAvatar(foreground: Color, background: Color) -> some View {
-        Image(systemName: "person.fill")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(foreground)
-            .frame(width: 32, height: 32)
-            .background(background)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Theme.v2Line, lineWidth: 0.7))
-            .accessibilityHidden(true)
+        ChatParticipantAvatar(
+            participant: message.participant,
+            imageData: avatarStore.imageData(for: message.participant),
+            size: 32
+        )
     }
 
     private var bubbleSurface: Color {

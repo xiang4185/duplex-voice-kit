@@ -191,15 +191,16 @@ final class ChatUIContractTests: XCTestCase {
                        "聊天区不得显示客户/开发者/小猫姓名，身份只用头像和左右位置区分")
         XCTAssertTrue(bubble.contains("switch message.participant"))
         XCTAssertTrue(bubble.contains("case .xiaomao:"))
-        XCTAssertTrue(bubble.contains("PrivacyAvatar("), "小猫消息头像必须跟随当前陪伴角色")
-        XCTAssertTrue(bubble.contains("style: .thumbnail"), "聊天头像必须使用缩略图构图")
+        XCTAssertTrue(bubble.contains("ChatParticipantAvatar("), "聊天消息必须使用统一参与者头像组件")
         XCTAssertFalse(bubble.contains("Text(\"🐱\")"), "小猫消息不得继续使用固定 emoji 头像")
         XCTAssertTrue(bubble.contains("message.participant == localParticipant"))
         XCTAssertTrue(bubble.contains("Text(message.createdAt, style: .time)"))
-        XCTAssertTrue(bubble.contains("showsTimestamp"), "时间应按需显示，避免长对话产生重复视觉噪声")
+        XCTAssertFalse(bubble.contains("showsTimestamp"), "重新进入聊天后时间不得恢复为隐藏")
+        XCTAssertTrue(bubble.contains("else if !groupedWithNext"), "每组连续消息末尾必须稳定显示时间")
+        XCTAssertTrue(bubble.contains("ChatParticipantAvatar("), "聊天气泡必须读取共享参与者头像")
         XCTAssertTrue(bubble.contains("每条远端消息都保留头像"), "聊天身份识别应遵循微信式逐条头像")
         XCTAssertFalse(bubble.contains("Color.clear.frame(width: 34"), "连续消息不得再用空白头像占位")
-        XCTAssertTrue(bubble.contains(".frame(width: 32, height: 32)"), "三方头像应使用统一尺寸和轨道")
+        XCTAssertTrue(bubble.contains("size: 32"), "三方头像应使用统一尺寸和轨道")
         XCTAssertTrue(bubble.contains("HStack(alignment: .top, spacing: 10)"),
                       "长消息头像必须从气泡顶部开始对齐，不得掉到消息末尾")
         XCTAssertTrue(bubble.contains("bubble\n                avatar"), "本地消息也必须保留右侧头像")
@@ -207,6 +208,21 @@ final class ChatUIContractTests: XCTestCase {
         XCTAssertTrue(bubble.contains("isLocalMessage { return Theme.v2InkSurface }"), "自己的消息必须建立稳定的高识别度视觉锚点")
         XCTAssertFalse(bubble.contains(".shadow("), "聊天气泡不得堆叠卡片阴影制造视觉噪声")
         XCTAssertTrue(bubble.contains(".textSelection(.enabled)"))
+    }
+
+    func testChatParticipantsCanPersistAndShareTheirOwnAvatar() throws {
+        let avatars = try source("XiaomaoApp/Chat/ChatAvatarStore.swift")
+        let settings = try source("XiaomaoApp/Settings/SettingsView.swift")
+        let chat = try source("XiaomaoApp/Chat/ChatView.swift")
+
+        XCTAssertTrue(avatars.contains("/v1/chat/avatars"))
+        XCTAssertTrue(avatars.contains("/v1/chat/avatar/update"))
+        XCTAssertTrue(avatars.contains("preparedJPEG"), "头像上传前必须裁剪压缩")
+        XCTAssertTrue(avatars.contains("UserDefaults"), "网络波动时必须保留本地头像缓存")
+        XCTAssertTrue(avatars.contains("PrivacyAvatar(size: size, tappable: false, style: .thumbnail)"), "小猫消息头像必须继续跟随角色形象")
+        XCTAssertTrue(settings.contains("PhotosPicker"), "我的页面必须提供系统照片选择器")
+        XCTAssertTrue(settings.contains("settings.chatAvatar"))
+        XCTAssertTrue(chat.contains("await avatarStore.load()"), "进入聊天必须刷新双方头像")
     }
 
     func testConversationUsesSpeakerBasedVerticalRhythm() throws {

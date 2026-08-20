@@ -12,6 +12,7 @@ struct MainTabView: View {
     @ObservedObject private var voiceController: VoiceSessionController
 
     @StateObject private var chatViewModel: ChatViewModel
+    @StateObject private var chatAvatarStore: ChatAvatarStore
     @ObservedObject private var smallThingsStore: SmallThingsStore
     @State private var selectedTab: Tab = .companion
     @State private var characterRelayVisible = false
@@ -60,6 +61,16 @@ struct MainTabView: View {
         _chatViewModel = StateObject(
             wrappedValue: ChatViewModel(service: chatService)
         )
+        let localParticipant: ChatParticipant = environment.chatTargetDeviceID == nil ? .user : .developer
+        _chatAvatarStore = StateObject(
+            wrappedValue: ChatAvatarStore(
+                service: ChatAvatarService(
+                    backend: environment.hostAdapters.backend,
+                    targetDeviceID: environment.chatTargetDeviceID
+                ),
+                localParticipant: localParticipant
+            )
+        )
         _smallThingsStore = ObservedObject(wrappedValue: smallThingsStore)
     }
 
@@ -87,6 +98,7 @@ struct MainTabView: View {
                 viewModel: chatViewModel,
                 isMockMode: environment.hostAdapters.mode == .mock,
                 localParticipant: environment.chatTargetDeviceID == nil ? .user : .developer,
+                avatarStore: chatAvatarStore,
                 onReconfigure: onReconfigure
             )
                 .modifier(V2TabSceneMotion(isActive: selectedTab == .chat))
@@ -113,7 +125,11 @@ struct MainTabView: View {
                 .tag(Tab.smallThings)
                 .accessibilityIdentifier("smallThings.tab")
 
-            SettingsView(store: SettingsStore(environment: environment), close: {})
+            SettingsView(
+                store: SettingsStore(environment: environment),
+                avatarStore: chatAvatarStore,
+                close: {}
+            )
                 .modifier(V2TabSceneMotion(isActive: selectedTab == .settings))
                 .tabItem {
                     Label(Tab.settings.title, systemImage: Tab.settings.icon)

@@ -1,4 +1,5 @@
 import AVFoundation
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -8,6 +9,7 @@ import UIKit
 
 struct SettingsView: View {
     @StateObject var store: SettingsStore
+    @ObservedObject var avatarStore: ChatAvatarStore
     let close: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -19,6 +21,7 @@ struct SettingsView: View {
     @State private var showHelpSheet = false
     @State private var showPrivacySheet = false
     @State private var showAboutSheet = false
+    @State private var chatAvatarItem: PhotosPickerItem?
 
     private var visual: Theme.VisualTokens { Theme.visual(visualMode) }
 
@@ -31,17 +34,34 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // 用户行 (P2.6I: 中性小猫文案, 头像复用隐私头像, 不再显示旧品牌与假天数)
                     HStack(spacing: 14) {
-                        PrivacyAvatar(size: 58, tappable: false)
-                            .overlay(Circle().stroke(Theme.v2Line, lineWidth: 1))
+                        PhotosPicker(selection: $chatAvatarItem, matching: .images) {
+                            ChatParticipantAvatar(
+                                participant: avatarStore.localParticipant,
+                                imageData: avatarStore.imageData(for: avatarStore.localParticipant),
+                                size: 58
+                            )
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 22, height: 22)
+                                    .background(Theme.v2Coral, in: Circle())
+                                    .overlay(Circle().stroke(Theme.v2Paper, lineWidth: 2))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(avatarStore.isSaving)
+                        .accessibilityLabel("更换我的聊天头像")
+                        .accessibilityIdentifier("settings.chatAvatar")
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("PERSONAL SPACE")
+                            Text("CHAT PROFILE")
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .tracking(1.6)
                                 .foregroundStyle(Theme.v2Coral)
-                            Text("小猫在呢")
+                            Text("我的聊天头像")
                                 .font(.system(size: 28, weight: .semibold, design: .serif))
                                 .foregroundStyle(Theme.v2Ink)
-                            Text("随时回来和小猫说说话")
+                            Text(avatarStore.errorMessage ?? (avatarStore.isSaving ? "正在同步给另一位聊天者…" : "点头像从照片中更换，双方聊天都会更新"))
                                 .font(Theme.captionFont)
                                 .foregroundStyle(Theme.v2Ink.opacity(0.58))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -150,6 +170,18 @@ struct SettingsView: View {
         }
         .onAppear {
             appeared = true
+        }
+        .task {
+            await avatarStore.load()
+        }
+        .onChange(of: chatAvatarItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    await avatarStore.update(with: data)
+                }
+                chatAvatarItem = nil
+            }
         }
     }
 
@@ -483,5 +515,12 @@ struct SettingsView: View {
 
 // MARK: - 预览
 #Preview {
-    SettingsView(store: SettingsStore(environment: .fromBundle()), close: {})
+    SettingsView(
+        store: SettingsStore(environment: .fromBundle()),
+        avatarStore: ChatAvatarStore(
+            service: ChatAvatarService(backend: MockBackendAdapter(), targetDeviceID: nil),
+            localParticipant: .user
+        ),
+        close: {}
+    )
 }
