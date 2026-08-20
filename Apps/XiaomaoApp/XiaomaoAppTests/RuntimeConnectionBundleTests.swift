@@ -36,6 +36,17 @@ final class RuntimeConnectionBundleTests: XCTestCase {
         XCTAssertNil(decoded.configuration.chatTargetDeviceID)
     }
 
+    func testSelfTargetIsDropped() throws {
+        let configuration = RuntimeConfiguration(
+            apiBaseURL: try XCTUnwrap(URL(string: "https://api.example.test")),
+            voiceWebSocketURL: try XCTUnwrap(URL(string: "wss://voice.example.test/ws")),
+            deviceID: "user-device",
+            chatTargetDeviceID: "user-device"
+        )
+
+        XCTAssertNil(configuration.chatTargetDeviceID)
+    }
+
     @MainActor
     func testBundledTargetAndTokenSurviveStoreReload() throws {
         let configuration = RuntimeConfiguration(
@@ -67,10 +78,48 @@ final class RuntimeConnectionBundleTests: XCTestCase {
         )
         XCTAssertEqual(configurationStore.load(), configuration)
     }
+
+    @MainActor
+    func testBundledDeveloperTargetDoesNotLeakIntoDifferentExistingDevice() throws {
+        let developerConfiguration = RuntimeConfiguration(
+            apiBaseURL: try XCTUnwrap(URL(string: "https://api.example.test")),
+            voiceWebSocketURL: try XCTUnwrap(URL(string: "wss://voice.example.test/ws")),
+            deviceID: "developer-device",
+            chatTargetDeviceID: "user-device"
+        )
+        let rawBundle = try RuntimeConnectionBundle.encode(
+            configuration: developerConfiguration,
+            token: "developer-token"
+        )
+        let existingUserConfiguration = RuntimeConfiguration(
+            apiBaseURL: try XCTUnwrap(URL(string: "https://api.example.test")),
+            voiceWebSocketURL: try XCTUnwrap(URL(string: "wss://voice.example.test/ws")),
+            deviceID: "user-device"
+        )
+        let configurationStore = MemoryRuntimeConfigurationStore(
+            configuration: existingUserConfiguration
+        )
+        let tokenStore = MemoryAuthTokenStore()
+        try tokenStore.save("user-token")
+
+        AppCoordinator.installBundledRuntimeConfiguration(
+            rawBundle,
+            configurationStore: configurationStore,
+            tokenStore: tokenStore
+        )
+
+        XCTAssertEqual(configurationStore.load()?.deviceID, "user-device")
+        XCTAssertNil(configurationStore.load()?.chatTargetDeviceID)
+        XCTAssertEqual(tokenStore.load(), "user-token")
+    }
 }
 
 private final class MemoryRuntimeConfigurationStore: RuntimeConfigurationStoring, @unchecked Sendable {
     private var configuration: RuntimeConfiguration?
+
+    init(configuration: RuntimeConfiguration? = nil) {
+        self.configuration = configuration
+    }
 
     func load() -> RuntimeConfiguration? { configuration }
     func save(_ configuration: RuntimeConfiguration) throws { self.configuration = configuration }

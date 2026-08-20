@@ -134,12 +134,19 @@ final class AppCoordinator: ObservableObject {
         guard let imported = try? RuntimeConnectionBundle.decode(rawBundle) else { return }
 
         let existing = configurationStore.load()
+        let importedTargetForExistingDevice: String?
+        if let existing,
+           existing.deviceID != imported.configuration.deviceID {
+            importedTargetForExistingDevice = nil
+        } else {
+            importedTargetForExistingDevice = imported.configuration.chatTargetDeviceID
+        }
         let merged = RuntimeConfiguration(
             apiBaseURL: existing?.apiBaseURL ?? imported.configuration.apiBaseURL,
             voiceWebSocketURL: existing?.voiceWebSocketURL ?? imported.configuration.voiceWebSocketURL,
             deviceID: existing?.deviceID ?? imported.configuration.deviceID,
             chatTargetDeviceID: existing?.chatTargetDeviceID
-                ?? imported.configuration.chatTargetDeviceID
+                ?? importedTargetForExistingDevice
         )
         if existing != merged {
             try? configurationStore.save(merged)

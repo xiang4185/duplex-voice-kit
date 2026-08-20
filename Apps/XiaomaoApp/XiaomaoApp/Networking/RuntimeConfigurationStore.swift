@@ -16,7 +16,10 @@ struct RuntimeConfiguration: Codable, Equatable, Sendable {
         self.apiBaseURL = apiBaseURL
         self.voiceWebSocketURL = voiceWebSocketURL
         self.deviceID = deviceID
-        self.chatTargetDeviceID = chatTargetDeviceID
+        let normalizedTarget = RuntimeCredentialNormalizer.deviceID(chatTargetDeviceID ?? "")
+        self.chatTargetDeviceID = normalizedTarget.isEmpty || normalizedTarget == deviceID
+            ? nil
+            : normalizedTarget
     }
 }
 
