@@ -64,7 +64,7 @@ final class AppEnvironmentTests: XCTestCase {
         ).isRuntimeConfigurationReady)
     }
 
-    func testRuntimeConfigurationOwnsChatTargetInsteadOfBundleConfiguration() {
+    func testExplicitRuntimeChatTargetWins() {
         let runtime = RuntimeConfiguration(
             apiBaseURL: URL(string: "https://api.example.test")!,
             voiceWebSocketURL: URL(string: "wss://voice.example.test/v1/voice/ws")!,
@@ -80,18 +80,25 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertEqual(environment.chatTargetDeviceID, "user-device")
     }
 
-    func testRuntimeConfigurationWithoutTargetStaysOrdinaryUser() {
-        let runtime = RuntimeConfiguration(
-            apiBaseURL: URL(string: "https://api.example.test")!,
-            voiceWebSocketURL: URL(string: "wss://voice.example.test/v1/voice/ws")!,
-            deviceID: "user-device"
+    func testBundleTargetEqualToCurrentUserIsDropped() {
+        XCTAssertNil(
+            AppEnvironment.resolvedChatTargetDeviceID(
+                runtimeTarget: nil,
+                bundleTarget: "user-device",
+                deviceID: "user-device"
+            )
         )
-        let environment = AppEnvironment.fromBundle(
-            .main,
-            runtimeConfigurationStore: StubRuntimeConfigurationStore(configuration: runtime)
-        )
+    }
 
-        XCTAssertNil(environment.chatTargetDeviceID)
+    func testLegacyDeveloperCanStillUseBundleTarget() {
+        XCTAssertEqual(
+            AppEnvironment.resolvedChatTargetDeviceID(
+                runtimeTarget: nil,
+                bundleTarget: "user-device",
+                deviceID: "developer-device"
+            ),
+            "user-device"
+        )
     }
 
     private func makeEnvironment(

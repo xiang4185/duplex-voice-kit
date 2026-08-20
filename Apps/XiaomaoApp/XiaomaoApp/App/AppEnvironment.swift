@@ -99,12 +99,11 @@ struct AppEnvironment: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let usesRuntimeConfiguration = runtimeConfiguration != nil
         let effectiveDeviceID = runtimeConfiguration?.deviceID ?? bundleDeviceID
-        let configuredChatTargetDeviceID = usesRuntimeConfiguration
-            ? runtimeConfiguration?.chatTargetDeviceID
-            : (bundleChatTargetDeviceID.isEmpty ? nil : bundleChatTargetDeviceID)
-        let effectiveChatTargetDeviceID = configuredChatTargetDeviceID == effectiveDeviceID
-            ? nil
-            : configuredChatTargetDeviceID
+        let effectiveChatTargetDeviceID = resolvedChatTargetDeviceID(
+            runtimeTarget: runtimeConfiguration?.chatTargetDeviceID,
+            bundleTarget: bundleChatTargetDeviceID,
+            deviceID: effectiveDeviceID
+        )
         return AppEnvironment(
             apiBaseURL: runtimeConfiguration?.apiBaseURL ?? bundleAPIURL,
             voiceWebSocketURL: runtimeConfiguration?.voiceWebSocketURL ?? bundleVoiceURL,
@@ -121,6 +120,20 @@ struct AppEnvironment: Sendable {
                 : HostAdapterMode.requested(value("HOST_ADAPTER_MODE"), enableMock: enableMockVoice),
             hostAdapters: hostAdapters
         )
+    }
+
+    static func resolvedChatTargetDeviceID(
+        runtimeTarget: String?,
+        bundleTarget: String?,
+        deviceID: String
+    ) -> String? {
+        let normalizedRuntimeTarget = RuntimeCredentialNormalizer.deviceID(runtimeTarget ?? "")
+        let normalizedBundleTarget = RuntimeCredentialNormalizer.deviceID(bundleTarget ?? "")
+        let configuredTarget = normalizedRuntimeTarget.isEmpty
+            ? normalizedBundleTarget
+            : normalizedRuntimeTarget
+        guard !configuredTarget.isEmpty, configuredTarget != deviceID else { return nil }
+        return configuredTarget
     }
 
     func replacingHostAdapters(_ dependencies: HostAdapterDependencies) -> AppEnvironment {
