@@ -21,6 +21,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--backend", required=True, help="Backend HTTPS URL")
     result.add_argument("--voice", required=True, help="Voice WSS URL")
     result.add_argument("--device-id", required=True, help="Bound device ID")
+    result.add_argument("--chat-target-device-id", help="Target device ID for shared three-party chat")
     result.add_argument("--token-file", required=True, type=Path, help="File containing the access token")
     result.add_argument("--output", type=Path, help="Write bundle to an owner-only file instead of stdout")
     return result
@@ -34,7 +35,13 @@ def validate_url(value: str, scheme: str) -> str:
     return normalized
 
 
-def build_bundle(backend: str, voice: str, device_id: str, token: str) -> str:
+def build_bundle(
+    backend: str,
+    voice: str,
+    device_id: str,
+    token: str,
+    chat_target_device_id: str | None = None,
+) -> str:
     backend = validate_url(backend, "https")
     voice = validate_url(voice, "wss")
     device_id = device_id.strip()
@@ -43,13 +50,16 @@ def build_bundle(backend: str, voice: str, device_id: str, token: str) -> str:
         token = token[7:].strip()
     if not device_id or not token:
         raise ValueError("device ID and token must be non-empty")
-    payload = json.dumps(
-        {
+    payload_data = {
             "backend": backend,
             "voice": voice,
             "device": device_id,
             "token": token,
-        },
+        }
+    if chat_target_device_id and chat_target_device_id.strip():
+        payload_data["target"] = chat_target_device_id.strip()
+    payload = json.dumps(
+        payload_data,
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -70,7 +80,13 @@ def write_private(path: Path, value: str) -> None:
 def main() -> int:
     args = parser().parse_args()
     token = args.token_file.read_text(encoding="utf-8")
-    bundle = build_bundle(args.backend, args.voice, args.device_id, token)
+    bundle = build_bundle(
+        args.backend,
+        args.voice,
+        args.device_id,
+        token,
+        args.chat_target_device_id,
+    )
     if args.output:
         write_private(args.output, bundle)
         print(f"bundle written: {args.output} (mode 0600)")

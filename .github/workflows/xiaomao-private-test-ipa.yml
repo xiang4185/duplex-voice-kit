@@ -1,0 +1,128 @@
+name: Xiaomao Private Three-Party IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-private-ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      RUNTIME_CONNECTION_BUNDLE: ${{ secrets.XIAOMAO_RUNTIME_CONNECTION_BUNDLE }}
+      BUNDLE_ID: com.example.xiaomao.sideload
+    defaults:
+      run:
+        working-directory: Apps/XiaomaoApp
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_26_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | head -n 1)"
+          test -n "$XCODE_26_APP"
+          echo "DEVELOPER_DIR=$XCODE_26_APP/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Validate private configuration presence
+        run: |
+          set -euo pipefail
+          test -n "$RUNTIME_CONNECTION_BUNDLE"
+          [[ "$RUNTIME_CONNECTION_BUNDLE" == XM1.* ]]
+
+      - name: Static checks and project generation
+        run: |
+          set -euo pipefail
+          python3 ../../Scripts/static_check.py
+          python3 Scripts/static_check.py
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          xcodegen generate
+
+      - name: Select and boot iPhone simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          UDID="$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          data = json.load(sys.stdin)
+          choices = []
+          for runtime, devices in data.get("devices", {}).items():
+              match = re.search(r"\.iOS-(\d+)(?:-(\d+))?(?:-(\d+))?$", runtime)
+              if not match or int(match.group(1)) != 26:
+                  continue
+              version = tuple(int(value or 0) for value in match.groups())
+              for device in devices:
+                  if device.get("isAvailable") and device.get("name", "").startswith("iPhone"):
+                      choices.append((version, device["udid"]))
+          if not choices:
+              raise SystemExit("No iOS 26 iPhone simulator")
+          print(sorted(choices, reverse=True)[0][1])
+          ')"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Run only three-party configuration tests
+        run: |
+          set -uo pipefail
+          xcodebuild \
+            -project XiaomaoApp.xcodeproj \
+            -scheme XiaomaoApp \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/XiaomaoTargetedTests" \
+            CODE_SIGNING_ALLOWED=NO \
+            -only-testing:XiaomaoAppTests/RuntimeConnectionBundleTests \
+            -only-testing:XiaomaoAppTests/DeviceBindingUIContractTests \
+            -only-testing:XiaomaoAppTests/ChatParticipantMappingTests \
+            test
+
+      - name: Build device app with complete runtime configuration
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project XiaomaoApp.xcodeproj \
+            -scheme XiaomaoApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/XiaomaoPrivateDevice" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            BUNDLE_ID="$BUNDLE_ID" \
+            HOST_ADAPTER_MODE=production \
+            ENABLE_MOCK_VOICE=NO \
+            ENABLE_MEMORY=NO \
+            RUNTIME_CONNECTION_BUNDLE="$RUNTIME_CONNECTION_BUNDLE" \
+            APP_BUILD_SHA="${GITHUB_SHA:0:12}" \
+            APP_BUILD_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            build
+
+      - name: Package and verify private IPA
+        id: package
+        run: |
+          set -euo pipefail
+          APP="$(find "$RUNNER_TEMP/XiaomaoPrivateDevice/Build/Products" -type d -name XiaomaoApp.app -print -quit)"
+          test -d "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :RUNTIME_CONNECTION_BUNDLE' "$APP/Info.plist")" = "$RUNTIME_CONNECTION_BUNDLE"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = "$BUNDLE_ID"
+          ARTIFACT="$RUNNER_TEMP/xiaomao-private-artifact"
+          mkdir -p "$ARTIFACT/Payload"
+          ditto "$APP" "$ARTIFACT/Payload/XiaomaoApp.app"
+          (cd "$ARTIFACT" && zip -qry XiaomaoApp-three-party-private.ipa Payload)
+          shasum -a 256 "$ARTIFACT/XiaomaoApp-three-party-private.ipa" > "$ARTIFACT/XiaomaoApp-three-party-private.ipa.sha256"
+
+      - name: Upload private IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: xiaomao-three-party-private-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/xiaomao-private-artifact/XiaomaoApp-three-party-private.ipa
+            ${{ runner.temp }}/xiaomao-private-artifact/XiaomaoApp-three-party-private.ipa.sha256
+          if-no-files-found: error
+          retention-days: 1

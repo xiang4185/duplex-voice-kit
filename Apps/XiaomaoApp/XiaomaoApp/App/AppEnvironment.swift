@@ -102,7 +102,8 @@ struct AppEnvironment: Sendable {
             apiBaseURL: runtimeConfiguration?.apiBaseURL ?? bundleAPIURL,
             voiceWebSocketURL: runtimeConfiguration?.voiceWebSocketURL ?? bundleVoiceURL,
             deviceID: runtimeConfiguration?.deviceID ?? bundleDeviceID,
-            chatTargetDeviceID: bundleChatTargetDeviceID.isEmpty ? nil : bundleChatTargetDeviceID,
+            chatTargetDeviceID: runtimeConfiguration?.chatTargetDeviceID
+                ?? (bundleChatTargetDeviceID.isEmpty ? nil : bundleChatTargetDeviceID),
             appEnvironment: value("APP_ENVIRONMENT"),
             enableMockVoice: enableMockVoice,
             enableMemory: value("ENABLE_MEMORY").uppercased() == "YES",

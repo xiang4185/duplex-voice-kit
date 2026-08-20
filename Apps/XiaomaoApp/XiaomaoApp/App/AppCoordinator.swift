@@ -27,6 +27,9 @@ final class AppCoordinator: ObservableObject {
     ) {
         let companionStore = suppliedCompanionStore ?? CompanionModeStore()
         self.companionStore = companionStore
+        if suppliedEnvironment == nil {
+            Self.installBundledRuntimeConfigurationIfNeeded()
+        }
         let baseEnvironment = suppliedEnvironment ?? .fromBundle()
         let tokenStore = suppliedTokenStore ?? Self.makeTokenStore(
             for: baseEnvironment.requestedHostAdapterMode
@@ -107,6 +110,43 @@ final class AppCoordinator: ObservableObject {
             return KeychainAuthTokenStore()
         }
         return MemoryAuthTokenStore()
+    }
+
+    private static func installBundledRuntimeConfigurationIfNeeded(
+        bundle: Bundle = .main,
+        configurationStore: any RuntimeConfigurationStoring = KeychainRuntimeConfigurationStore(),
+        tokenStore: any AuthTokenStoring = KeychainAuthTokenStore()
+    ) {
+        guard let rawBundle = bundle.object(forInfoDictionaryKey: "RUNTIME_CONNECTION_BUNDLE") as? String,
+              !rawBundle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        installBundledRuntimeConfiguration(
+            rawBundle,
+            configurationStore: configurationStore,
+            tokenStore: tokenStore
+        )
+    }
+
+    static func installBundledRuntimeConfiguration(
+        _ rawBundle: String,
+        configurationStore: any RuntimeConfigurationStoring,
+        tokenStore: any AuthTokenStoring
+    ) {
+        guard let imported = try? RuntimeConnectionBundle.decode(rawBundle) else { return }
+
+        let existing = configurationStore.load()
+        let merged = RuntimeConfiguration(
+            apiBaseURL: existing?.apiBaseURL ?? imported.configuration.apiBaseURL,
+            voiceWebSocketURL: existing?.voiceWebSocketURL ?? imported.configuration.voiceWebSocketURL,
+            deviceID: existing?.deviceID ?? imported.configuration.deviceID,
+            chatTargetDeviceID: existing?.chatTargetDeviceID
+                ?? imported.configuration.chatTargetDeviceID
+        )
+        if existing != merged {
+            try? configurationStore.save(merged)
+        }
+        if RuntimeCredentialNormalizer.token(tokenStore.load() ?? "").isEmpty {
+            try? tokenStore.save(imported.token)
+        }
     }
 
     // MARK: 隐私授权持久化

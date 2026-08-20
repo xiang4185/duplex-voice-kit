@@ -5,6 +5,19 @@ struct RuntimeConfiguration: Codable, Equatable, Sendable {
     let apiBaseURL: URL
     let voiceWebSocketURL: URL
     let deviceID: String
+    let chatTargetDeviceID: String?
+
+    init(
+        apiBaseURL: URL,
+        voiceWebSocketURL: URL,
+        deviceID: String,
+        chatTargetDeviceID: String? = nil
+    ) {
+        self.apiBaseURL = apiBaseURL
+        self.voiceWebSocketURL = voiceWebSocketURL
+        self.deviceID = deviceID
+        self.chatTargetDeviceID = chatTargetDeviceID
+    }
 }
 
 enum RuntimeConnectionBundleError: Error, Equatable {
@@ -18,6 +31,7 @@ struct RuntimeConnectionBundle: Equatable, Sendable {
         let voice: String
         let device: String
         let token: String
+        let target: String?
     }
 
     static let prefix = "XM1."
@@ -41,6 +55,7 @@ struct RuntimeConnectionBundle: Equatable, Sendable {
         let voice = payload.voice.trimmingCharacters(in: .whitespacesAndNewlines)
         let device = RuntimeCredentialNormalizer.deviceID(payload.device)
         let token = RuntimeCredentialNormalizer.token(payload.token)
+        let target = payload.target.map(RuntimeCredentialNormalizer.deviceID)
         guard let backendURL = URL(string: backend),
               backendURL.scheme?.lowercased() == "https",
               backendURL.host?.isEmpty == false,
@@ -55,7 +70,8 @@ struct RuntimeConnectionBundle: Equatable, Sendable {
             configuration: RuntimeConfiguration(
                 apiBaseURL: backendURL,
                 voiceWebSocketURL: voiceURL,
-                deviceID: device
+                deviceID: device,
+                chatTargetDeviceID: target?.isEmpty == false ? target : nil
             ),
             token: token
         )
@@ -63,6 +79,8 @@ struct RuntimeConnectionBundle: Equatable, Sendable {
 
     static func encode(configuration: RuntimeConfiguration, token: String) throws -> String {
         let normalizedToken = RuntimeCredentialNormalizer.token(token)
+        let normalizedTarget = configuration.chatTargetDeviceID
+            .map(RuntimeCredentialNormalizer.deviceID)
         guard !normalizedToken.isEmpty else {
             throw RuntimeConnectionBundleError.invalidConfiguration
         }
@@ -70,7 +88,8 @@ struct RuntimeConnectionBundle: Equatable, Sendable {
             backend: configuration.apiBaseURL.absoluteString,
             voice: configuration.voiceWebSocketURL.absoluteString,
             device: RuntimeCredentialNormalizer.deviceID(configuration.deviceID),
-            token: normalizedToken
+            token: normalizedToken,
+            target: normalizedTarget?.isEmpty == false ? normalizedTarget : nil
         )
         let data = try JSONEncoder().encode(payload)
         return prefix + data.base64URLEncodedString()
