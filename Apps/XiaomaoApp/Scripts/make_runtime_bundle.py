@@ -21,6 +21,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--backend", required=True, help="Backend HTTPS URL")
     result.add_argument("--voice", required=True, help="Voice WSS URL")
     result.add_argument("--device-id", required=True, help="Bound device ID")
+    result.add_argument(
+        "--target-device-id",
+        help="Shared-chat target device ID (developer device only)",
+    )
     result.add_argument("--token-file", required=True, type=Path, help="File containing the access token")
     result.add_argument("--output", type=Path, help="Write bundle to an owner-only file instead of stdout")
     return result
@@ -34,22 +38,32 @@ def validate_url(value: str, scheme: str) -> str:
     return normalized
 
 
-def build_bundle(backend: str, voice: str, device_id: str, token: str) -> str:
+def build_bundle(
+    backend: str,
+    voice: str,
+    device_id: str,
+    token: str,
+    target_device_id: str | None = None,
+) -> str:
     backend = validate_url(backend, "https")
     voice = validate_url(voice, "wss")
     device_id = device_id.strip()
     token = token.strip()
+    target_device_id = (target_device_id or "").strip()
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
     if not device_id or not token:
         raise ValueError("device ID and token must be non-empty")
+    data = {
+        "backend": backend,
+        "voice": voice,
+        "device": device_id,
+        "token": token,
+    }
+    if target_device_id and target_device_id != device_id:
+        data["target"] = target_device_id
     payload = json.dumps(
-        {
-            "backend": backend,
-            "voice": voice,
-            "device": device_id,
-            "token": token,
-        },
+        data,
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -70,7 +84,13 @@ def write_private(path: Path, value: str) -> None:
 def main() -> int:
     args = parser().parse_args()
     token = args.token_file.read_text(encoding="utf-8")
-    bundle = build_bundle(args.backend, args.voice, args.device_id, token)
+    bundle = build_bundle(
+        args.backend,
+        args.voice,
+        args.device_id,
+        token,
+        args.target_device_id,
+    )
     if args.output:
         write_private(args.output, bundle)
         print(f"bundle written: {args.output} (mode 0600)")

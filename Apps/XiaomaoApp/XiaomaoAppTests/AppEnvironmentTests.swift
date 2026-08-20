@@ -64,6 +64,36 @@ final class AppEnvironmentTests: XCTestCase {
         ).isRuntimeConfigurationReady)
     }
 
+    func testRuntimeConfigurationOwnsChatTargetInsteadOfBundleConfiguration() {
+        let runtime = RuntimeConfiguration(
+            apiBaseURL: URL(string: "https://api.example.test")!,
+            voiceWebSocketURL: URL(string: "wss://voice.example.test/v1/voice/ws")!,
+            deviceID: "developer-device",
+            chatTargetDeviceID: "user-device"
+        )
+        let environment = AppEnvironment.fromBundle(
+            .main,
+            runtimeConfigurationStore: StubRuntimeConfigurationStore(configuration: runtime)
+        )
+
+        XCTAssertEqual(environment.deviceID, "developer-device")
+        XCTAssertEqual(environment.chatTargetDeviceID, "user-device")
+    }
+
+    func testRuntimeConfigurationWithoutTargetStaysOrdinaryUser() {
+        let runtime = RuntimeConfiguration(
+            apiBaseURL: URL(string: "https://api.example.test")!,
+            voiceWebSocketURL: URL(string: "wss://voice.example.test/v1/voice/ws")!,
+            deviceID: "user-device"
+        )
+        let environment = AppEnvironment.fromBundle(
+            .main,
+            runtimeConfigurationStore: StubRuntimeConfigurationStore(configuration: runtime)
+        )
+
+        XCTAssertNil(environment.chatTargetDeviceID)
+    }
+
     private func makeEnvironment(
         api: String?,
         voice: String?,
@@ -87,4 +117,12 @@ final class AppEnvironmentTests: XCTestCase {
                 : HostAdapterDependencies(mode: .production)
         )
     }
+}
+
+private struct StubRuntimeConfigurationStore: RuntimeConfigurationStoring {
+    let configuration: RuntimeConfiguration?
+
+    func load() -> RuntimeConfiguration? { configuration }
+    func save(_ configuration: RuntimeConfiguration) throws {}
+    func clear() throws {}
 }

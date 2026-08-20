@@ -6,6 +6,7 @@ struct DeviceBindingView: View {
     @State private var apiBaseURL = ""
     @State private var voiceWebSocketURL = ""
     @State private var deviceIDInput = ""
+    @State private var chatTargetDeviceIDInput = ""
     @State private var errorMessage = ""
     @State private var hasStoredToken = false
     let deviceID: String
@@ -35,7 +36,7 @@ struct DeviceBindingView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(connectionBundle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Text("一次粘贴即可导入 Backend、Voice、设备 ID 和 Token。配置串按密钥处理，不会显示其中内容。")
+            Text("一次粘贴即可导入 Backend、Voice、设备 ID、Token，以及开发者设备可选的共享聊天目标。配置串按密钥处理，不会显示其中内容。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -52,6 +53,9 @@ struct DeviceBindingView: View {
                 .keyboardType(.URL)
                 .textFieldStyle(.roundedBorder)
             SecureField("设备 ID", text: $deviceIDInput)
+                .textContentType(.none)
+                .textFieldStyle(.roundedBorder)
+            SecureField("共享聊天目标设备 ID（仅开发者需要）", text: $chatTargetDeviceIDInput)
                 .textContentType(.none)
                 .textFieldStyle(.roundedBorder)
             SecureField(hasStoredToken ? "访问 Token（留空则保留现有）" : "访问 Token", text: $token)
@@ -75,6 +79,7 @@ struct DeviceBindingView: View {
                 apiBaseURL = existing.apiBaseURL.absoluteString
                 voiceWebSocketURL = existing.voiceWebSocketURL.absoluteString
                 deviceIDInput = existing.deviceID
+                chatTargetDeviceIDInput = existing.chatTargetDeviceID ?? ""
             } else {
                 deviceIDInput = deviceID
             }
@@ -90,6 +95,7 @@ struct DeviceBindingView: View {
             apiBaseURL = bundle.configuration.apiBaseURL.absoluteString
             voiceWebSocketURL = bundle.configuration.voiceWebSocketURL.absoluteString
             deviceIDInput = bundle.configuration.deviceID
+            chatTargetDeviceIDInput = bundle.configuration.chatTargetDeviceID ?? ""
             token = bundle.token
             errorMessage = ""
             saveConfiguration()
@@ -104,6 +110,7 @@ struct DeviceBindingView: View {
         let trimmedAPI = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedVoice = voiceWebSocketURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDeviceID = RuntimeCredentialNormalizer.deviceID(deviceIDInput)
+        let trimmedChatTargetDeviceID = RuntimeCredentialNormalizer.deviceID(chatTargetDeviceIDInput)
         guard let apiURL = URL(string: trimmedAPI), apiURL.scheme?.lowercased() == "https",
               let voiceURL = URL(string: trimmedVoice), voiceURL.scheme?.lowercased() == "wss",
               !trimmedDeviceID.isEmpty else {
@@ -119,7 +126,8 @@ struct DeviceBindingView: View {
             try runtimeConfigurationStore.save(RuntimeConfiguration(
                 apiBaseURL: apiURL,
                 voiceWebSocketURL: voiceURL,
-                deviceID: trimmedDeviceID
+                deviceID: trimmedDeviceID,
+                chatTargetDeviceID: trimmedChatTargetDeviceID
             ))
             if !normalizedToken.isEmpty {
                 try tokenStore.save(normalizedToken)
